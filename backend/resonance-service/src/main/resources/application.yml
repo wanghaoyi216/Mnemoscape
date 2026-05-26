@@ -1,0 +1,64 @@
+server:
+  port: 8084
+  shutdown: graceful
+
+spring:
+  application:
+    name: resonance-service
+  lifecycle:
+    timeout-per-shutdown-phase: 30s
+  datasource:
+    url: jdbc:mysql://${MYSQL_HOST:100.66.166.46}:3306/mnemoscape_resonance?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true&characterEncoding=UTF-8
+    username: ${MYSQL_USER:root}
+    password: ${MYSQL_PASSWORD:root123}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    hikari:
+      maximum-pool-size: 15
+      minimum-idle: 3
+      pool-name: MnemoscapeResonancePool
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: false
+    open-in-view: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.MySQLDialect
+  cloud:
+    inetutils:
+      preferred-networks:
+        - 172.
+        - 100.
+    nacos:
+      discovery:
+        server-addr: ${NACOS_HOST:100.66.166.46}:8848
+        enabled: true
+        ip: ${SPRING_CLOUD_NACOS_DISCOVERY_IP:}
+      config:
+        enabled: false
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+  packages-to-scan: com.mnemoscape.resonance
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus,loggers
+  endpoint:
+    health:
+      show-details: when_authorized
+      probes:
+        enabled: true
+  metrics:
+    tags:
+      application: ${spring.application.name}
+
+logging:
+  level:
+    root: INFO
+    com.mnemoscape: INFO

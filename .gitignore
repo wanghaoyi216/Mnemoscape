@@ -1,0 +1,62 @@
+# =============================================================================
+# Mnemoscape · Repository ignore rules
+# 用户已说明：仓库为 PRIVATE，不需要排除 .env / 凭证文件，密码等可保留。
+# 这里只排除「真正不该进 git 的东西」：构建产物 / 缓存 / IDE 临时 / OS 噪音。
+# =============================================================================
+
+# ---- Node / 前端 ----
+**/node_modules/
+frontend/dist/
+frontend/dist.tar.gz
+**/.vite/
+**/.eslintcache
+**/.parcel-cache/
+**/*.tsbuildinfo
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
+# ---- Java / Maven ----
+**/target/
+*.jar
+!.mvn/wrapper/maven-wrapper.jar
+*.class
+hs_err_pid*
+replay_pid*
+
+# ---- Spring 本地缓存 ----
+**/.spring-boot-devtools.properties
+
+# ---- IDE / 编辑器 ----
+.idea/
+*.iml
+.vscode/
+*.code-workspace
+*.swp
+*.swo
+
+# ---- OS 噪音 ----
+.DS_Store
+Thumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# ---- 日志 ----
+*.log
+logs/
+**/logs/
+
+# ---- 测试覆盖率 ----
+coverage/
+.nyc_output/
+**/test-output/
+**/surefire-reports/
+**/jacoco.exec
+
+# ---- AI / 工具临时 ----
+.antigravitycli/
+backend/.antigravitycli/
+
+# ---- jqwik 随机种子缓存（属性测试用）----
+**/.jqwik-database

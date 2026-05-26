@@ -1,0 +1,412 @@
+{
+  "brand": {
+    "name": "Mnemoscape",
+    "tagline": "Memory Museum",
+    "subtitle": "AI-powered personal memory museum",
+    "footer": "Built with care · Reconstruction is suggestion, not truth",
+    "version": "v1.0"
+  },
+  "common": {
+    "loading": "Loading…",
+    "submit": "Submit",
+    "cancel": "Cancel",
+    "confirm": "Confirm",
+    "save": "Save",
+    "delete": "Delete",
+    "edit": "Edit",
+    "back": "Back",
+    "next": "Next",
+    "previous": "Previous",
+    "search": "Search",
+    "refresh": "Refresh",
+    "retry": "Retry",
+    "more": "More",
+    "less": "Less",
+    "yes": "Yes",
+    "no": "No",
+    "empty": "No data",
+    "comingSoon": "Coming soon"
+  },
+  "nav": {
+    "memories": "Memories",
+    "create": "New memory",
+    "graph": "Memory graph",
+    "timeline": "Timeline",
+    "atlas": "Atlas",
+    "resonance": "Resonance",
+    "chat": "Chat & Discovery",
+    "profile": "Profile",
+    "logout": "Sign out",
+    "locale": "Language"
+  },
+  "ai": {
+    "shortName": "Echo",
+    "title": "Echo Envoy",
+    "subtitle": "Intent · Plan & Execute · Multimodal",
+    "toggle": "Open AI assistant",
+    "close": "Close",
+    "minimize": "Minimize",
+    "send": "Send",
+    "sending": "Thinking…",
+    "greeting": "Hi — I live in the corner, on standby.",
+    "hintsTitle": "Try these openers ↓"
+  },
+  "atlas": {
+    "title": "Spatiotemporal Memory Trails",
+    "subtitle": "Retrace your memory routes on the globe · real data · five-level drill-down · dual trip layers",
+    "control": {
+      "title": "Controls",
+      "view": "View mode",
+      "view2d": "2D map",
+      "view3d": "3D tilt",
+      "orthographic": "Top-down",
+      "perspective": "Tilted",
+      "reset": "Reset view",
+      "flyHome": "Fly home",
+      "playback": "Playback",
+      "play": "Play",
+      "pause": "Pause",
+      "speed": "Speed",
+      "rotate": "Auto-rotate",
+      "rotateOn": "On",
+      "rotateOff": "Off",
+      "scale": "Zoom level",
+      "drill": "Drill chain",
+      "layers": "Layers",
+      "hint": "Drag · Wheel to zoom · Dbl-click to drill"
+    },
+    "scale": {
+      "global": "Global",
+      "continent": "Continent",
+      "country": "Country",
+      "province": "Province",
+      "city": "City",
+      "district": "Detail"
+    },
+    "layers": {
+      "title": "Layers",
+      "physical": "Base map",
+      "aura": "Personal aura",
+      "trips": "Personal trips",
+      "others": "Others' web",
+      "personalAura": "Personal aura",
+      "personalTrips": "Personal trips",
+      "othersWeb": "Others' web",
+      "extrusion": "Memory columns",
+      "marquee": "Marquee grid"
+    },
+    "signal": {
+      "title": "Telemetry",
+      "zoom": "Zoom",
+      "pitch": "Pitch",
+      "bearing": "Bearing",
+      "fps": "FPS",
+      "memories": "Memories",
+      "mapped": "Mapped",
+      "unmapped": "Unmapped",
+      "legendTitle": "Legend",
+      "untitled": "Untitled memory",
+      "noLocation": "No location",
+      "moreUnmapped": "{count} more unmapped"
+    },
+    "timeline": {
+      "title": "Timeline",
+      "all": "All time",
+      "from": "From",
+      "to": "To",
+      "play": "Play",
+      "pause": "Pause"
+    },
+    "detail": {
+      "title": "Memory detail",
+      "location": "Location",
+      "date": "Date",
+      "year": "Year",
+      "fade": "Fade",
+      "locked": "Locked",
+      "open": "Open detail",
+      "flyTo": "Fly here",
+      "untitled": "Untitled memory",
+      "empty": "Select a point on the map to view details"
+    },
+    "physical": {
+      "title": "Physical coordinates",
+      "lat": "Lat",
+      "lng": "Lng",
+      "now": "Current focus",
+      "note": "Coordinates resolved from location text via local gazetteer"
+    },
+    "others": {
+      "title": "Others' web",
+      "hint": "Awaiting community data — placeholder nodes shown",
+      "note": "Others' nodes are illustrative; awaiting community feed"
+    },
+    "legend": {
+      "title": "Legend",
+      "physical": "Base map",
+      "memory": "Personal",
+      "trip": "Trip line",
+      "others": "Others",
+      "personal": "Personal",
+      "locked": "Locked"
+    },
+    "unmapped": {
+      "title": "Unmapped memories",
+      "hint": "Location text didn't match the gazetteer — refine in the memory detail"
+    },
+    "loading": {
+      "title": "Calibrating spacetime…",
+      "hint": "MapLibre and deck.gl assets load on first entry"
+    },
+    "error": {
+      "title": "Atlas failed to load",
+      "hint": "Check network and retry"
+    }
+  },
+  "locale": {
+    "zh-CN": "简体中文",
+    "en-US": "English"
+  },
+  "login": {
+    "eyebrow": "Private memory studio",
+    "title": "Step into your<br/>memory museum.",
+    "lead": "Sign back in to revisit reconstructed scenes, lock fragile memories, and trace resonance between moments. Built for long-form work — one focused canvas at a time.",
+    "features": {
+      "jwt": { "title": "JWT-secured", "desc": "Stateless sessions, instant revocation." },
+      "scene": { "title": "Immersive 3D", "desc": "Three.js scenes with spatial audio." },
+      "drift": { "title": "Drift engine", "desc": "Ebbinghaus-modelled fade over time." },
+      "resonance": { "title": "Resonance match", "desc": "Emotion-vector + scene similarity." }
+    },
+    "quote": "Every life is a museum with rooms that never close. Mnemoscape reconstructs those rooms from words alone — and lets them age the way memory does.",
+    "card": {
+      "eyebrow": "Secure access",
+      "title": "Sign in",
+      "subtitle": "Return to the museum with your existing account."
+    },
+    "username": "Username",
+    "usernamePlaceholder": "your.username",
+    "password": "Password",
+    "passwordPlaceholder": "••••••••••",
+    "submit": "Sign in",
+    "submitting": "Signing in…",
+    "noAccount": "No account yet?",
+    "goRegister": "Create one →",
+    "error": {
+      "fallback": "Login failed. Verify your credentials."
+    }
+  },
+  "register": {
+    "eyebrow": "Create your studio",
+    "title": "Build a museum<br/>of your own memory.",
+    "lead": "Set up a secure workspace. Reconstruct moments into 3D scenes, track every revision, and discover memories that resonate emotionally with yours.",
+    "highlights": {
+      "private": "Private by default — share only when you choose",
+      "secure": "BCrypt-hashed credentials, JWT sessions",
+      "history": "Full version history with one-click restore",
+      "export": "Export anytime — your memories, your data"
+    },
+    "card": {
+      "eyebrow": "New account",
+      "title": "Create account",
+      "subtitle": "A few details and you're inside the museum."
+    },
+    "username": "Username",
+    "usernamePlaceholder": "your.username",
+    "email": "Email",
+    "emailPlaceholder": "name@company.com",
+    "password": "Password",
+    "passwordPlaceholder": "At least 8 characters",
+    "confirmPassword": "Confirm password",
+    "confirmPasswordPlaceholder": "Repeat password",
+    "submit": "Create account",
+    "submitting": "Creating account…",
+    "haveAccount": "Already have an account?",
+    "goLogin": "Sign in →",
+    "rules": {
+      "length": "8+ characters",
+      "upper": "Uppercase letter",
+      "lower": "Lowercase letter",
+      "digit": "Number",
+      "symbol": "Symbol"
+    },
+    "error": {
+      "mismatch": "Passwords do not match",
+      "weak": "Password must satisfy all the strength requirements below.",
+      "fallback": "Registration failed"
+    }
+  },
+  "memory": {
+    "list": {
+      "title": "My memories",
+      "subtitle": "Reconstructed scenes appear here.",
+      "empty": "No memories yet. Start with \"New memory\".",
+      "createButton": "New memory",
+      "openButton": "Open",
+      "fadeLevel": "Drift",
+      "error": {
+        "title": "Memory service temporarily unavailable",
+        "summary": "This is usually a backend or database failure, not a frontend mock.",
+        "backendHint": "Try again later; if it keeps happening, check memory-service, MySQL, and the deployed environment.",
+        "requestId": "Request ID: {id}",
+        "detailsToggle": "Show raw error",
+        "detailLabel": "Backend error details"
+      },
+      "privacy": {
+        "PRIVATE": "Private",
+        "FRIENDS": "Friends",
+        "PUBLIC": "Public"
+      }
+    },
+    "builder": {
+      "eyebrow": "Memory builder",
+      "title": "Compose a memory<br/>in cinematic detail.",
+      "lead": "Describe the scene with enough specificity for the reconstruction engine to shape lighting, audio, and the hidden fragments worth rediscovering.",
+      "metrics": {
+        "min": "Min description",
+        "minValue": "5 chars",
+        "coverage": "Sensory coverage",
+        "engine": "Engine",
+        "engineValue": "AI + Three.js"
+      },
+      "senses": {
+        "visual": "Visual",
+        "audio": "Audio",
+        "scent": "Scent",
+        "touch": "Touch",
+        "emotion": "Emotion"
+      },
+      "hint": "Mention what you saw, heard, smelled, touched, and felt — even one detail per sense raises reconstruction quality.",
+      "card": {
+        "eyebrow": "New memory",
+        "title": "Start with a strong title",
+        "subtitle": "Add the sensory detail that will make reconstruction feel deliberate."
+      },
+      "fields": {
+        "title": "Title",
+        "titlePlaceholder": "A warm summer evening on the terrace",
+        "description": "Description",
+        "descriptionPlaceholder": "Describe the place, the people, the light, the smells, the sounds, and the emotional atmosphere…",
+        "year": "Year",
+        "date": "Date",
+        "season": "Season",
+        "timeOfDay": "Time of day",
+        "location": "Location",
+        "locationPlaceholder": "Grandma's house, rooftop, station platform…",
+        "privacy": "Privacy"
+      },
+      "seasons": {
+        "placeholder": "Select season",
+        "SPRING": "Spring",
+        "SUMMER": "Summer",
+        "AUTUMN": "Autumn",
+        "WINTER": "Winter"
+      },
+      "times": {
+        "placeholder": "Select time",
+        "MORNING": "Morning",
+        "NOON": "Noon",
+        "AFTERNOON": "Afternoon",
+        "EVENING": "Evening",
+        "NIGHT": "Night"
+      },
+      "privacy": {
+        "PRIVATE": "Private — only you",
+        "FRIENDS": "Friends — your network",
+        "PUBLIC": "Public — anyone"
+      },
+      "submit": "Create memory",
+      "submitting": "Building scene…",
+      "ready": "✓ Ready for reconstruction",
+      "needMore": "Add {count} more sensory detail for a stronger scene",
+      "hints": {
+        "writeMore": "Sensory detail is sparse; recommended to write at least 150 characters",
+        "recommended": "✓ Character count is in recommended range (150-300 chars), outstanding detail!",
+        "sufficient": "✓ Descriptive length is sufficient (301-500 chars), perfect for deep reconstruction.",
+        "exceeded": "Exceeded 500 characters. Submitting is allowed, but AI works best under 500 characters."
+      },
+      "error": {
+        "tooShort": "Description must be at least 5 characters",
+        "fallback": "Creation failed"
+      }
+    },
+    "detail": {
+      "back": "Back",
+      "enterScene": "Enter 3D scene",
+      "lock": "Lock memory",
+      "unlock": "Unlock",
+      "drift": "Drift",
+      "fragments": "Fragments",
+      "versions": "Versions",
+      "createdAt": "Created",
+      "updatedAt": "Updated"
+    }
+  },
+  "resonance": {
+    "hub": {
+      "title": "Resonance hub",
+      "subtitle": "Find souls who echo your memories.",
+      "empty": "No resonances yet. Publish more public memories to attract matches."
+    },
+    "space": {
+      "title": "Shared resonance space",
+      "placeNote": "Place note"
+    }
+  },
+  "profile": {
+    "title": "Profile",
+    "stats": {
+      "memories": "Memories",
+      "fragments": "Fragments",
+      "resonances": "Resonances"
+    }
+  },
+  "chat": {
+    "tabs": {
+      "chats": "Chats",
+      "discover": "Discover",
+      "groups": "Groups",
+      "theme": "Theme"
+    },
+    "sidebar": {
+      "friendsTitle": "Approved Friends",
+      "noFriends": "No friends found. Use the Discover tab to search and add friends.",
+      "searchPlaceholder": "Search usernames...",
+      "searchBtn": "Go",
+      "matchesTitle": "Matches",
+      "noMatches": "Enter a username and search to discover new users.",
+      "addFriendBtn": "+ Add",
+      "createGroupTitle": "Create New Group",
+      "groupNamePlaceholder": "Group Name",
+      "selectFriendsLabel": "Select Friends:",
+      "createGroupBtn": "Create",
+      "myGroupsTitle": "My Joined Groups",
+      "noGroups": "No active groups. Create one above!",
+      "groupOwner": "Owner: You",
+      "groupMember": "Owner: Friend",
+      "themeTitle": "Soul Wallpapers",
+      "themeSubtitle": "Personalize your profile settings. Custom wallpapers appear as your conversational backdrop!",
+      "presetsLabel": "Presets Library",
+      "avatarUrlLabel": "Avatar URL",
+      "bgUrlLabel": "Chat Wallpaper URL",
+      "saveThemeBtn": "Save Theme"
+    },
+    "body": {
+      "connectedStatus": "Connected",
+      "offlineStatus": "Offline",
+      "inputTextPlaceholder": "Type a message...",
+      "sendBtn": "Send",
+      "noSelectionTitle": "Reconstruct conversations in real-time.",
+      "noSelectionSubtitle": "Select a friend from the Approved tab, search for other museum curators, or assemble a group chat to exchange thoughts."
+    }
+  },
+  "errors": {
+    "network": "Network error. Check your connection.",
+    "unauthorized": "Session expired. Please sign in again.",
+    "forbidden": "You don't have permission for this resource.",
+    "notFound": "Resource not found.",
+    "conflict": "Conflict: required field missing or value not unique.",
+    "server": "Service error. Please try again later.",
+    "unavailable": "Service temporarily unavailable.",
+    "unknown": "Unknown error. Please try again."
+  }
+}

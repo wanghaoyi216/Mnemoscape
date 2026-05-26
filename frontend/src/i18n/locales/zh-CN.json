@@ -1,0 +1,595 @@
+{
+  "brand": {
+    "name": "Mnemoscape",
+    "tagline": "记忆博物馆",
+    "subtitle": "AI 驱动的个人记忆博物馆",
+    "footer": "用心打造 · 重建是一种诠释，不是绝对真相",
+    "version": "v1.0"
+  },
+  "common": {
+    "loading": "加载中…",
+    "submit": "提交",
+    "cancel": "取消",
+    "confirm": "确认",
+    "save": "保存",
+    "delete": "删除",
+    "edit": "编辑",
+    "back": "返回",
+    "next": "下一步",
+    "previous": "上一步",
+    "search": "搜索",
+    "refresh": "刷新",
+    "retry": "重试",
+    "more": "更多",
+    "less": "收起",
+    "yes": "是",
+    "no": "否",
+    "empty": "暂无数据",
+    "comingSoon": "敬请期待"
+  },
+  "nav": {
+    "memories": "我的记忆",
+    "create": "新建记忆",
+    "graph": "记忆星图",
+    "timeline": "时光长河",
+    "atlas": "时空流光",
+    "resonance": "灵魂共鸣",
+    "chat": "聊天发现",
+    "profile": "个人主页",
+    "logout": "退出登录",
+    "locale": "语言"
+  },
+  "ai": {
+    "shortName": "使者",
+    "title": "星空使者",
+    "subtitle": "意图识别 · 规划执行 · 多模态结果",
+    "toggle": "唤起 AI 助手",
+    "close": "关闭",
+    "minimize": "收起",
+    "send": "发送",
+    "sending": "思索中…",
+    "greeting": "你好，我在右下角，随时待命。",
+    "hintsTitle": "试试这些起手式 ↓"
+  },
+  "atlas": {
+    "title": "时空记忆流光",
+    "subtitle": "在地球之上重走你的记忆轨迹 · 真实数据 · 五级下钻 · 双层动线",
+    "control": {
+      "title": "控制面板",
+      "view": "视图模式",
+      "view2d": "2D 地图",
+      "view3d": "3D 立体",
+      "orthographic": "正视",
+      "perspective": "斜视",
+      "reset": "重置视角",
+      "flyHome": "回到家",
+      "playback": "时间回放",
+      "play": "播放",
+      "pause": "暂停",
+      "speed": "倍速",
+      "rotate": "球体自转",
+      "rotateOn": "开启",
+      "rotateOff": "关闭",
+      "scale": "缩放层级",
+      "drill": "下钻链路",
+      "layers": "图层控制",
+      "hint": "拖动地球 / 滚轮缩放 / 双击下钻"
+    },
+    "scale": {
+      "global": "全球",
+      "continent": "大洲",
+      "country": "国家",
+      "province": "省市",
+      "city": "市级",
+      "district": "细节"
+    },
+    "layers": {
+      "title": "图层控制",
+      "physical": "真实地图",
+      "aura": "个人光晕",
+      "trips": "个人动线",
+      "others": "他人记忆网",
+      "personalAura": "个人光晕",
+      "personalTrips": "个人动线",
+      "othersWeb": "他人记忆网",
+      "extrusion": "记忆立柱",
+      "marquee": "跑马灯网格"
+    },
+    "signal": {
+      "title": "遥感数据",
+      "zoom": "缩放",
+      "pitch": "倾角",
+      "bearing": "方位",
+      "fps": "帧率",
+      "memories": "记忆点",
+      "mapped": "已落点",
+      "unmapped": "未落点",
+      "legendTitle": "图例",
+      "untitled": "未命名记忆",
+      "noLocation": "未填写地点",
+      "moreUnmapped": "还有 {count} 条未映射"
+    },
+    "timeline": {
+      "title": "时间轴",
+      "all": "全部时间",
+      "from": "起",
+      "to": "止",
+      "play": "播放",
+      "pause": "暂停"
+    },
+    "detail": {
+      "title": "记忆详情",
+      "location": "地点",
+      "date": "日期",
+      "year": "年份",
+      "fade": "淡化度",
+      "locked": "已锁定",
+      "open": "进入详情",
+      "flyTo": "飞到此处",
+      "untitled": "未命名记忆",
+      "empty": "在地图上选择一个记忆点查看详情"
+    },
+    "physical": {
+      "title": "物理坐标",
+      "lat": "纬度",
+      "lng": "经度",
+      "now": "当前焦点",
+      "note": "经纬度由地点文本本地匹配得到"
+    },
+    "others": {
+      "title": "他人记忆网",
+      "hint": "等待社区数据接入，当前展示示意性节点",
+      "note": "他人节点为示意，等待社区公开记忆接入"
+    },
+    "legend": {
+      "title": "图例",
+      "physical": "实体地图",
+      "memory": "个人记忆",
+      "trip": "记忆动线",
+      "others": "他人节点",
+      "personal": "个人记忆",
+      "locked": "已锁定"
+    },
+    "unmapped": {
+      "title": "未能映射的记忆",
+      "hint": "地点描述未匹配城市表，可在记忆详情补充明确地点"
+    },
+    "loading": {
+      "title": "正在校准时空坐标…",
+      "hint": "首次进入会加载 MapLibre 与 deck.gl 资源"
+    },
+    "error": {
+      "title": "未能加载地图模块",
+      "hint": "请检查网络后重试"
+    }
+  },
+  "locale": {
+    "zh-CN": "简体中文",
+    "en-US": "English"
+  },
+  "login": {
+    "eyebrow": "私人记忆工作室",
+    "title": "踏入你的<br/>记忆博物馆。",
+    "lead": "重新登入，回到那些被重建的场景；锁住易逝的瞬间，追溯记忆之间的共鸣。这里是为长时间深度工作而生的画布。",
+    "features": {
+      "jwt": { "title": "JWT 安全认证", "desc": "无状态会话，支持即时吊销。" },
+      "scene": { "title": "沉浸式 3D", "desc": "Three.js 渲染 + 空间音频。" },
+      "drift": { "title": "记忆漂移引擎", "desc": "艾宾浩斯曲线建模时间淡化。" },
+      "resonance": { "title": "共鸣匹配", "desc": "情感向量 + 场景相似度。" }
+    },
+    "quote": "每个人的人生都是一座永不闭馆的博物馆。Mnemoscape 用文字重建那些展厅，并让它们以记忆本来的方式悄悄褪色。",
+    "card": {
+      "eyebrow": "安全访问",
+      "title": "登录",
+      "subtitle": "回到博物馆，使用你已有的账户。"
+    },
+    "username": "用户名",
+    "usernamePlaceholder": "你的用户名",
+    "password": "密码",
+    "passwordPlaceholder": "••••••••••",
+    "submit": "登录",
+    "submitting": "正在登录…",
+    "noAccount": "还没有账户？",
+    "goRegister": "立即注册 →",
+    "error": {
+      "fallback": "登录失败，请检查用户名或密码。"
+    }
+  },
+  "register": {
+    "eyebrow": "创建你的工作室",
+    "title": "搭建一座<br/>属于你的记忆博物馆。",
+    "lead": "建立一个安全的私人空间。把瞬间重建为 3D 场景，追踪每一次修订，发现与你情感共鸣的其他记忆。",
+    "highlights": {
+      "private": "默认私密 — 只有你选择分享时才公开",
+      "secure": "BCrypt 加密凭据，JWT 会话",
+      "history": "完整版本历史，一键回滚",
+      "export": "随时导出 — 你的记忆，你的数据"
+    },
+    "card": {
+      "eyebrow": "新账户",
+      "title": "注册账户",
+      "subtitle": "几个字段就能踏入博物馆。"
+    },
+    "username": "用户名",
+    "usernamePlaceholder": "你的用户名",
+    "email": "邮箱",
+    "emailPlaceholder": "name@company.com",
+    "password": "密码",
+    "passwordPlaceholder": "至少 8 个字符",
+    "confirmPassword": "确认密码",
+    "confirmPasswordPlaceholder": "再次输入密码",
+    "submit": "创建账户",
+    "submitting": "正在创建账户…",
+    "haveAccount": "已有账户？",
+    "goLogin": "登录 →",
+    "rules": {
+      "length": "8 个字符以上",
+      "upper": "包含大写字母",
+      "lower": "包含小写字母",
+      "digit": "包含数字",
+      "symbol": "包含特殊符号"
+    },
+    "error": {
+      "mismatch": "两次输入的密码不一致",
+      "weak": "密码必须满足下方所有强度要求。",
+      "fallback": "注册失败，请稍后重试。"
+    }
+  },
+  "memory": {
+    "list": {
+      "title": "我的记忆库",
+      "subtitle": "已重建的场景将在这里展示。",
+      "empty": "尚未创建任何记忆，从「新建记忆」开始吧。",
+      "createButton": "新建记忆",
+      "openButton": "打开",
+      "fadeLevel": "漂移程度",
+      "error": {
+        "title": "记忆服务暂不可用",
+        "summary": "这通常是后端接口或数据库返回了错误，不是前端 mock。",
+        "backendHint": "你可以先稍后重试；如果一直出现，请检查 memory-service、MySQL 和部署环境。",
+        "requestId": "信标 ID：{id}",
+        "detailsToggle": "展开原始错误",
+        "detailLabel": "后端返回的详细信息"
+      },
+      "privacy": {
+        "PRIVATE": "私密",
+        "FRIENDS": "好友可见",
+        "PUBLIC": "公开"
+      }
+    },
+    "builder": {
+      "eyebrow": "记忆构建器",
+      "title": "用电影级的细节<br/>编排一段记忆。",
+      "lead": "尽量具体地描述场景，AI 重建引擎会据此塑造光线、声音以及那些值得被重新发现的片段。",
+      "metrics": {
+        "min": "最少描述",
+        "minValue": "5 字符",
+        "coverage": "感官覆盖",
+        "engine": "引擎",
+        "engineValue": "AI + Three.js"
+      },
+      "senses": {
+        "visual": "视觉",
+        "audio": "听觉",
+        "scent": "嗅觉",
+        "touch": "触觉",
+        "emotion": "情感"
+      },
+      "hint": "提到你看到的、听到的、闻到的、触摸的、感受到的 — 每多一个感官细节，重建质量都会提升一档。",
+      "card": {
+        "eyebrow": "新建记忆",
+        "title": "先取一个有力的标题",
+        "subtitle": "用感官细节让重建变得可信。"
+      },
+      "fields": {
+        "title": "标题",
+        "titlePlaceholder": "一个温暖的夏日傍晚，在露台上",
+        "description": "描述",
+        "descriptionPlaceholder": "描述场景、人物、光线、气味、声音和情绪氛围…",
+        "year": "年份",
+        "date": "日期",
+        "season": "季节",
+        "timeOfDay": "时段",
+        "location": "地点",
+        "locationPlaceholder": "奶奶家、屋顶、车站站台…",
+        "privacy": "隐私"
+      },
+      "seasons": {
+        "placeholder": "选择季节",
+        "SPRING": "春",
+        "SUMMER": "夏",
+        "AUTUMN": "秋",
+        "WINTER": "冬"
+      },
+      "times": {
+        "placeholder": "选择时段",
+        "MORNING": "清晨",
+        "NOON": "正午",
+        "AFTERNOON": "下午",
+        "EVENING": "傍晚",
+        "NIGHT": "夜晚"
+      },
+      "privacy": {
+        "PRIVATE": "私密 — 仅自己可见",
+        "FRIENDS": "好友 — 你的关系网络",
+        "PUBLIC": "公开 — 所有人可见"
+      },
+      "submit": "创建记忆",
+      "submitting": "正在构建场景…",
+      "ready": "✓ 已可进入重建阶段",
+      "needMore": "再添加 {count} 个感官细节，会让场景更立体",
+      "reconstructing": {
+        "eyebrow": "正在打捞这段时空",
+        "title": "AI 正在重建你的记忆…",
+        "lead": "沙漏在倒流，神经网络在拼接你写下的每一个细节、每一缕情绪。请稍候，几秒之内就能进入这段被重建的场景。"
+      },
+      "hints": {
+        "writeMore": "感官细节还不够丰富，建议写满 150 字",
+        "recommended": "✓ 字数已达建议区间 (150-300字)，细节非常完美！",
+        "sufficient": "✓ 描述字数充足 (301-500字)，场景可深度重建。",
+        "exceeded": "字数已超 500 字。可提交，但 150-300 字为 AI 最佳重建精度。"
+      },
+      "error": {
+        "tooShort": "描述至少需要 5 个字符",
+        "fallback": "创建失败，请稍后重试"
+      }
+    },
+    "timeline": {
+      "eyebrow": "时光长河",
+      "title": "把记忆放回时间的几何里。",
+      "lead": "将每段记忆按发生时间排列在一条长河上。色块的宽度暗示时间精度 — 精确到日、跨整年、或仅有系统时间。",
+      "metrics": {
+        "total": "记忆数",
+        "precision": "时间精度",
+        "precisionValue": "日/年/系统",
+        "layout": "排版",
+        "layoutValue": "左右交替"
+      },
+      "shell": {
+        "title": "时光长河",
+        "hint": "顶端是最新的记忆。点击任意卡片直达详情。"
+      },
+      "loading": "正在编织时光河…",
+      "legend": {
+        "day": "精确到日",
+        "year": "跨整年",
+        "system": "系统时间"
+      }
+    },
+    "graph": {
+      "eyebrow": "Mnemosyne 星图",
+      "title": "你的记忆，是一片星空。",
+      "lead": "每一段记忆都是一颗有自身光晕的恒星。位置由 ID 哈希到斐波那契球面，颜色随隐私级别变化，亮度随漂移程度褪色。",
+      "metrics": {
+        "total": "记忆星数",
+        "distribution": "分布算法",
+        "fibonacci": "斐波那契球面",
+        "engine": "渲染引擎"
+      },
+      "stage": {
+        "title": "记忆星空全景",
+        "hint": "拖动旋转视角，滚轮缩放。点击任意恒星可平滑推进至该记忆。"
+      },
+      "loading": "正在打捞你的记忆星辰…",
+      "selected": "聚焦",
+      "openDetail": "打开记忆档案"
+    },
+    "detail": {
+      "back": "返回列表",
+      "enterScene": "进入 3D 场景",
+      "lock": "锁定记忆",
+      "unlock": "解除锁定",
+      "locked": "已锁定",
+      "drift": "漂移度",
+      "fadeLevel": "漂移程度",
+      "fragments": "记忆碎片",
+      "versions": "版本历史",
+      "createdAt": "创建于",
+      "updatedAt": "最近更新",
+      "eyebrow": "记忆档案",
+      "loadError": "无法加载该记忆，可能已被删除或访问受限。",
+      "loading": {
+        "title": "正在唤醒这段记忆…",
+        "text": "正在拉取记忆档案与重建元数据。"
+      },
+      "error": {
+        "title": "记忆不可用"
+      },
+      "driftPanel": {
+        "title": "记忆漂移",
+        "subtitle": "漂移模型会实时调整场景的色温、饱和度与景深。",
+        "fade": "漂移",
+        "fadedPct": "已漂移 {pct}%",
+        "daysSinceCreation": "创建距今",
+        "saturation": "色彩饱和度",
+        "fog": "雾气浓度"
+      },
+      "fragmentsPanel": {
+        "title": "记忆碎片",
+        "subtitle": "在该记忆空间中检测到 {count} 个隐藏细节。",
+        "discovered": "已发现",
+        "hidden": "待探索",
+        "emptyTitle": "暂无碎片",
+        "emptyText": "继续重建或让记忆漂移，将生成可探索的碎片。"
+      },
+      "versionsPanel": {
+        "title": "版本历史",
+        "subtitle": "回到之前的快照，或观察这段记忆是如何演化的。",
+        "restore": "恢复此版本",
+        "restoring": "正在恢复…",
+        "empty": "暂无版本记录"
+      }
+    }
+  },
+  "scene": {
+    "eyebrow": "3D 场景漫游",
+    "loading": "场景加载中…",
+    "lead": "漫步在这段被重建的记忆里，寻找隐藏的碎片，观察漂移引擎如何悄悄改变空气与色温。",
+    "metrics": {
+      "objects": "场景物体",
+      "fragments": "可发现碎片",
+      "drift": "漂移度"
+    }
+  },
+  "resonance": {
+    "hub": {
+      "eyebrow": "灵魂共鸣大厅",
+      "title": "寻找与你情感共振的记忆。",
+      "lead": "选一段你写下的记忆，让相似度引擎在全网公开记忆中挑出与之共振的灵魂，然后开启一个融合的共鸣空间。",
+      "title_short": "共鸣大厅",
+      "subtitle": "寻找与你情感共振的灵魂。",
+      "empty": "尚未触发任何共鸣，发布更多公开记忆试试。",
+      "metrics": {
+        "threshold": "匹配阈值",
+        "ranking": "排序模型",
+        "rankingValue": "情绪 60%",
+        "output": "产出",
+        "outputValue": "融合空间"
+      },
+      "search": {
+        "title": "搜索共鸣",
+        "subtitle": "从你的记忆中挑出一段作为基准，相似度引擎会按情绪与场景维度排序候选。",
+        "baseMemory": "基准记忆",
+        "placeholder": "选择一段记忆…",
+        "searching": "搜索中…",
+        "submit": "搜索共鸣"
+      },
+      "result": {
+        "note": "情绪与场景维度均衡的潜在共鸣候选。",
+        "overall": "综合分",
+        "emotion": "情绪",
+        "scene": "场景",
+        "creating": "创建中…",
+        "openSpace": "进入共鸣空间"
+      },
+      "empty": {
+        "title": "暂无搜索结果",
+        "text": "在上方选择一段记忆并搜索，可挖掘出与之情绪结构相近的共鸣。"
+      }
+    },
+    "space": {
+      "title": "双人共鸣空间",
+      "placeNote": "留下信标",
+      "eyebrow": "灵魂共鸣空间",
+      "title_long": "两段记忆，共享同一个时空。",
+      "lead": "在这里，两段被算法挑出来的记忆共享同一个空间上下文，留言、漂浮指针与情绪振幅都将实时同步。",
+      "metrics": {
+        "status": "连接状态",
+        "connected": "已连接",
+        "reconnecting": "正在重连",
+        "notes": "留言信标",
+        "similarity": "记忆相似度"
+      },
+      "hud": {
+        "emotion": "情绪",
+        "scene": "场景",
+        "plantTip": "在地面上任意位置点击即可种下一颗信标，提交后会以光柱形式出现在场景中。",
+        "notesInSpace": "空间内信标 {count}",
+        "pressEHint": "靠近信标，按 E 键查看留言"
+      }
+    },
+    "beacon": {
+      "eyebrow": "全息展开",
+      "title": "信标留言",
+      "anonymous": "匿名访客",
+      "from": "来自：{author}",
+      "moods": {
+        "warm": "温暖",
+        "joyful": "欣喜",
+        "melancholic": "忧郁",
+        "contemplative": "沉思",
+        "grateful": "感激"
+      }
+    }
+  },
+  "profile": {
+    "title": "个人主页",
+    "eyebrow": "灵魂档案",
+    "lead": "在这里查看你的身份凭证、记忆生态健康度与情绪混沌轨迹。所有数据均来自当前已验证会话。",
+    "note": "Profile 数据来自当前认证会话；未来将拓展头像、偏好、订阅与多设备同步。",
+    "stats": {
+      "memories": "记忆数",
+      "fragments": "碎片数",
+      "resonances": "共鸣数"
+    },
+    "metrics": {
+      "status": "账户状态",
+      "verified": "已验证",
+      "pending": "待验证",
+      "email": "邮箱",
+      "memories": "记忆总数"
+    },
+    "avatar": {
+      "custom": "已上传头像",
+      "default": "使用默认头像"
+    },
+    "tags": {
+      "privacy": "记忆隐私",
+      "history": "版本历史",
+      "resonance": "共鸣权限"
+    },
+    "attractor": {
+      "eyebrow": "情绪考古",
+      "title": "情绪混沌吸引子",
+      "subtitle": "把五维情绪积分投入洛伦兹方程，绘出一条独属于你的灵魂轨迹。",
+      "intro": "轨迹的展开形态由你最近的记忆情绪决定 — 喜悦让它鲜活，怀旧让它舒展，平和让它收敛。",
+      "mockNote": "当前数值为占位示例；接入 ai-service 情绪聚合接口后会切换为实时数据。",
+      "dim": {
+        "joy": "喜悦",
+        "sorrow": "悲伤",
+        "fear": "恐惧",
+        "calm": "平和",
+        "nostalgia": "怀旧"
+      }
+    }
+  },
+  "chat": {
+    "tabs": {
+      "chats": "聊天会话",
+      "discover": "寻找 Curator",
+      "groups": "创建群聊",
+      "theme": "时空壁纸"
+    },
+    "sidebar": {
+      "friendsTitle": "我的好友列表",
+      "noFriends": "暂无好友。请前往「寻找 Curator」搜索并添加好友。",
+      "searchPlaceholder": "输入用户名搜索…",
+      "searchBtn": "搜索",
+      "matchesTitle": "搜索结果",
+      "noMatches": "输入用户名并搜索以发现其他馆长。",
+      "addFriendBtn": "+ 添加好友",
+      "createGroupTitle": "创建新时空群聊",
+      "groupNamePlaceholder": "群聊名称",
+      "selectFriendsLabel": "选择群聊成员：",
+      "createGroupBtn": "创建群聊",
+      "myGroupsTitle": "我加入的群聊",
+      "noGroups": "暂无活跃的群聊。请在上方创建一个吧！",
+      "groupOwner": "群主：你",
+      "groupMember": "群主：好友",
+      "themeTitle": "时空背景定制",
+      "themeSubtitle": "定制个性化聊天背景与头像，专属的时空背景会呈现在与他人的会话中！",
+      "presetsLabel": "馆藏画库壁纸",
+      "avatarUrlLabel": "头像链接",
+      "bgUrlLabel": "聊天壁纸链接",
+      "saveThemeBtn": "保存时空主题"
+    },
+    "body": {
+      "connectedStatus": "时空连接正常",
+      "offlineStatus": "连接已断开",
+      "inputTextPlaceholder": "输入时空讯息…",
+      "sendBtn": "发送",
+      "noSelectionTitle": "在实时会话中重建共鸣。",
+      "noSelectionSubtitle": "从「聊天会话」中选择一位好友，或通过「寻找 Curator」搜索其他时空馆长，也可以建立群聊来进行思想传递。"
+    }
+  },
+  "errors": {
+    "network": "网络异常，请检查连接后重试。",
+    "unauthorized": "登录已失效，请重新登录。",
+    "forbidden": "你没有访问该资源的权限。",
+    "notFound": "请求的资源不存在。",
+    "conflict": "数据约束冲突，请确认字段已填写完整且唯一。",
+    "server": "服务异常，请稍后重试。",
+    "unavailable": "服务暂不可用，请稍后重试。",
+    "unknown": "未知错误，请稍后重试。"
+  }
+}

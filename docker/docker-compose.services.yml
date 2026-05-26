@@ -1,0 +1,140 @@
+services:
+  frontend:
+    build:
+      context: ../frontend
+    container_name: mnemoscape-frontend
+    ports:
+      - "5173:80"
+    depends_on:
+      - api-gateway
+    networks:
+      - mnemoscape-net
+    restart: unless-stopped
+
+  api-gateway:
+    build:
+      context: ../backend/api-gateway
+    container_name: mnemoscape-gateway
+    ports:
+      - "8080:8080"
+    environment:
+      NACOS_HOST: nacos
+      JWT_SECRET: "bW5lbW9zY2FwZS1zZWNyZXQta2V5LWZvci1qd3Qtc2lnbmluZy1hbmQtdmVyaWZpY2F0aW9u"
+    depends_on:
+      nacos:
+        condition: service_healthy
+    networks:
+      - mnemoscape-net
+    restart: unless-stopped
+
+  auth-service:
+    build:
+      context: ../backend/auth-service
+    container_name: mnemoscape-auth
+    ports:
+      - "8081:8081"
+    environment:
+      NACOS_HOST: nacos
+      MYSQL_HOST: mysql
+      MYSQL_USER: root
+      MYSQL_PASSWORD: root123
+      JWT_SECRET: "bW5lbW9zY2FwZS1zZWNyZXQta2V5LWZvci1qd3Qtc2lnbmluZy1hbmQtdmVyaWZpY2F0aW9u"
+    depends_on:
+      mysql:
+        condition: service_healthy
+      nacos:
+        condition: service_healthy
+    networks:
+      - mnemoscape-net
+    restart: unless-stopped
+
+  memory-service:
+    build:
+      context: ../backend/memory-service
+    container_name: mnemoscape-memory
+    ports:
+      - "8082:8082"
+    environment:
+      NACOS_HOST: nacos
+      MYSQL_HOST: mysql
+      MYSQL_USER: root
+      MYSQL_PASSWORD: root123
+      NEO4J_HOST: neo4j
+      NEO4J_USER: neo4j
+      NEO4J_PASSWORD: password123
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USER: guest
+      RABBITMQ_PASS: guest
+    depends_on:
+      mysql:
+        condition: service_healthy
+      neo4j:
+        condition: service_healthy
+      rabbitmq:
+        condition: service_healthy
+      nacos:
+        condition: service_healthy
+    networks:
+      - mnemoscape-net
+    restart: unless-stopped
+
+  ai-service:
+    build:
+      context: ../backend/ai-service
+    container_name: mnemoscape-ai
+    ports:
+      - "8083:8083"
+    environment:
+      NACOS_HOST: nacos
+      NVIDIA_API_KEY: ${NVIDIA_API_KEY}
+    depends_on:
+      nacos:
+        condition: service_healthy
+    networks:
+      - mnemoscape-net
+    restart: unless-stopped
+
+  resonance-service:
+    build:
+      context: ../backend/resonance-service
+    container_name: mnemoscape-resonance
+    ports:
+      - "8084:8084"
+    environment:
+      NACOS_HOST: nacos
+      MYSQL_HOST: mysql
+      MYSQL_USER: root
+      MYSQL_PASSWORD: root123
+    depends_on:
+      mysql:
+        condition: service_healthy
+      nacos:
+        condition: service_healthy
+    networks:
+      - mnemoscape-net
+    restart: unless-stopped
+
+  asset-service:
+    build:
+      context: ../backend/asset-service
+    container_name: mnemoscape-asset
+    ports:
+      - "8085:8085"
+    environment:
+      NACOS_HOST: nacos
+      MINIO_ENDPOINT: http://minio:9000
+      MINIO_ACCESS_KEY: minioadmin
+      MINIO_SECRET_KEY: minioadmin123
+    depends_on:
+      minio:
+        condition: service_healthy
+      nacos:
+        condition: service_healthy
+    networks:
+      - mnemoscape-net
+    restart: unless-stopped
+
+networks:
+  mnemoscape-net:
+    driver: bridge

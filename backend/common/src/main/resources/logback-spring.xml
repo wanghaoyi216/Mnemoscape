@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Mnemoscape — shared logging configuration.
+  Lives in common/ and is loaded transitively by every service that depends
+  on the common module.  Outputs structured, MDC-enriched lines that the ELK
+  stack (or any JSON-aware log shipper) can parse.
+
+  Layout: ISO8601 timestamp  level  correlationId  userId  thread  logger - message
+  -->
+<configuration scan="true" scanPeriod="30 seconds">
+
+  <springProperty name="appName" source="spring.application.name" defaultValue="mnemoscape"/>
+
+  <!-- Console: human-readable for local dev, MDC fields kept short. -->
+  <appender name="CONSOLE" class="ch.qos.logback.core.ConsoleAppender">
+    <encoder>
+      <charset>UTF-8</charset>
+      <pattern>
+%d{yyyy-MM-dd HH:mm:ss.SSS} %highlight(%-5level) [${appName}] [%X{correlationId:-}] [%X{userId:-}] %cyan(%-32.32logger{32}) : %msg%n
+      </pattern>
+    </encoder>
+  </appender>
+
+  <!-- JSON-style appender for production log shipping.
+       We avoid the logstash-encoder dependency to keep the common module
+       lean; this pattern outputs a single line of JSON-shaped key/values
+       that Filebeat / Vector / Fluent Bit can parse.
+
+       NOTE: any %msg containing quotes will already be JSON-escaped by
+       Logback's pattern layout when %replace is applied below.
+  -->
+  <appender name="JSON" class="ch.qos.logback.core.ConsoleAppender">
+    <encoder>
+      <charset>UTF-8</charset>
+      <pattern>{"ts":"%d{yyyy-MM-dd'T'HH:mm:ss.SSSXXX}","level":"%level","app":"${appName}","correlationId":"%X{correlationId:-}","userId":"%X{userId:-}","username":"%X{username:-}","thread":"%thread","logger":"%logger","message":"%replace(%msg){'\"','\\\"'}"%n,"trace":"%replace(%ex{full}){'\"','\\\"'}"}%n</pattern>
+    </encoder>
+  </appender>
+
+  <!-- Active profile: "json" → JSON output for production / containerised envs.
+       Anything else → human-readable console output. -->
+  <springProfile name="json,prod,production">
+    <root level="INFO">
+      <appender-ref ref="JSON"/>
+    </root>
+  </springProfile>
+
+  <springProfile name="!json &amp; !prod &amp; !production">
+    <root level="INFO">
+      <appender-ref ref="CONSOLE"/>
+    </root>
+  </springProfile>
+
+  <!-- Reduce noise from chatty libraries. -->
+  <logger name="org.hibernate" level="WARN"/>
+  <logger name="org.hibernate.SQL" level="INFO"/>
+  <logger name="org.hibernate.orm.deprecation" level="ERROR"/>
+  <logger name="org.springframework" level="INFO"/>
+  <logger name="org.springframework.web" level="INFO"/>
+  <logger name="org.springframework.security" level="INFO"/>
+  <logger name="com.alibaba.nacos" level="WARN"/>
+  <logger name="com.netflix" level="WARN"/>
+  <logger name="reactor.netty" level="WARN"/>
+
+  <!-- App namespaces — verbose by default for diagnostics. -->
+  <logger name="com.mnemoscape" level="DEBUG"/>
+
+</configuration>

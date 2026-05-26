@@ -1,0 +1,121 @@
+server:
+  port: 8080
+
+spring:
+  application:
+    name: api-gateway
+  data:
+    redis:
+      host: ${REDIS_HOST:100.66.166.46}
+      port: ${REDIS_PORT:6379}
+      timeout: 3s
+      connect-timeout: 3s
+      lettuce:
+        pool:
+          max-active: 16
+          max-idle: 8
+          min-idle: 2
+          max-wait: 2s
+  cloud:
+    inetutils:
+      preferred-networks:
+        - 172.
+        - 100.
+    nacos:
+      discovery:
+        server-addr: ${NACOS_HOST:100.66.166.46}:8848
+        enabled: true
+        ip: ${SPRING_CLOUD_NACOS_DISCOVERY_IP:}
+      config:
+        enabled: false
+    gateway:
+      discovery:
+        locator:
+          enabled: true
+          lower-case-service-name: true
+      actuator:
+        verbose:
+          enabled: false
+      httpclient:
+        connect-timeout: ${GATEWAY_CONNECT_TIMEOUT:5000}
+        response-timeout: ${GATEWAY_RESPONSE_TIMEOUT:30s}
+        pool:
+          max-connections: ${GATEWAY_MAX_CONNECTIONS:200}
+          max-idle-time: 30s
+      globalcors:
+        cors-configurations:
+          '[/**]':
+            allowed-origins:
+              - http://localhost:5173
+            allowed-methods:
+              - GET
+              - POST
+              - PUT
+              - PATCH
+              - DELETE
+              - OPTIONS
+            allowed-headers:
+              - Authorization
+              - Content-Type
+              - X-Requested-With
+              - X-Correlation-Id
+            exposed-headers:
+              - X-Correlation-Id
+            allow-credentials: true
+            max-age: 3600
+      routes:
+        - id: auth-service
+          uri: lb://auth-service
+          predicates:
+            - Path=/api/v1/auth/**, /api/v1/friends/**
+        - id: memory-service
+          uri: lb://memory-service
+          predicates:
+            - Path=/api/v1/memories/**, /api/v1/fragments/**, /api/v1/atlas/**, /api/v1/users/me/location
+        - id: ai-service
+          uri: lb://ai-service
+          predicates:
+            - Path=/api/v1/reconstruct/**
+        - id: resonance-service
+          uri: lb://resonance-service
+          predicates:
+            - Path=/api/v1/resonances/**, /api/v1/chat/**
+        - id: resonance-ws
+          uri: lb:ws://resonance-service
+          predicates:
+            - Path=/ws/**
+        - id: asset-service
+          uri: lb://asset-service
+          predicates:
+            - Path=/api/v1/assets/**
+
+mnemoscape:
+  jwt:
+    secret: ${JWT_SECRET:bW5lbW9zY2FwZS1zZWNyZXQta2V5LWZvci1obWFjLXNoYTI1Ni1hbGdvcml0aG0tMjAyNQ==}
+    access-token-expiration: 3600000
+    refresh-token-expiration: 604800000
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus,gateway
+  endpoint:
+    health:
+      show-details: when_authorized
+      probes:
+        enabled: true
+  info:
+    env:
+      enabled: true
+    git:
+      mode: simple
+  metrics:
+    tags:
+      application: ${spring.application.name}
+
+logging:
+  level:
+    root: INFO
+    com.mnemoscape: INFO
+    org.springframework.cloud.gateway: INFO

@@ -1,0 +1,123 @@
+server:
+  port: 8083
+  shutdown: graceful
+
+spring:
+  application:
+    name: ai-service
+  lifecycle:
+    timeout-per-shutdown-phase: 30s
+  neo4j:
+    uri: bolt://${NEO4J_HOST:100.66.166.46}:7687
+    authentication:
+      username: ${NEO4J_USER:neo4j}
+      password: ${NEO4J_PASSWORD:password123}
+  cloud:
+    inetutils:
+      preferred-networks:
+        - 172.
+        - 100.
+    nacos:
+      discovery:
+        server-addr: ${NACOS_HOST:100.66.166.46}:8848
+        enabled: true
+        ip: ${SPRING_CLOUD_NACOS_DISCOVERY_IP:}
+      config:
+        enabled: false
+  ai:
+    openai:
+      # 凭证 *只* 通过环境变量注入（NVIDIA_API_KEY / NVIDIA_BASE_URL / NVIDIA_MODEL）。
+      # 没有提供 → 使用占位符 nvapi-placeholder-not-configured，让 Spring AI 完成
+      # bean 装配（OpenAiAutoConfiguration 要求 api-key 非空字符串），但
+      # ChatReasoner.ensureRealKeyOrThrow 会用 placeholderKeyPrefix 检测出占位符
+      # 并提前抛 AI_UPSTREAM_UNAVAILABLE 而不会真的发出网络请求 — 不会泄漏占位
+      # 字符到 NVIDIA。任何环境不应把真实密钥写进这份 yml；yml 会进 git。
+      api-key: ${NVIDIA_API_KEY:nvapi-placeholder-not-configured}
+      # ⚠️ base-url **不要带 `/v1`**：Spring AI 的 OpenAI 客户端会自己拼上
+      # `/v1/chat/completions`。带上 `/v1` 会得到 `/v1/v1/chat/completions` → 404。
+      # 参考 Spring AI 官方 NVIDIA 文档：
+      # https://docs.spring.io/spring-ai/reference/api/chat/nvidia-chat.html
+      base-url: ${NVIDIA_BASE_URL:https://integrate.api.nvidia.com}
+      chat:
+        options:
+          model: ${NVIDIA_MODEL:minimaxai/minimax-m2.7}
+          temperature: 0.7
+          # NVIDIA Integrate may not implement parallel tool calls; keep them
+          # sequential so SSE tool_start / tool_end ordering matches reality.
+          parallel-tool-calls: false
+
+# ---------------------------------------------------------------------------
+# Mnemoscape AI 自定义配置 —— 控制工具调用与服务发现
+# ---------------------------------------------------------------------------
+mnemoscape:
+  ai:
+    upstream:
+      # 旧版用占位符前缀来表达"未配置"。现已改为：api-key 为空字符串 = 未配置，
+      # 由 ChatReasoner.ensureRealKeyOrThrow 通过 isBlank() 检测。保留这个 key 以
+      # 向后兼容，可通过 AI_PLACEHOLDER_PREFIX 自定义历史占位符前缀（如有人继续
+      # 在私有部署里使用 "nvapi-placeholder-..." 形式的占位）。
+      placeholder-key-prefix: ${AI_PLACEHOLDER_PREFIX:nvapi-placeholder}
+      # 单次请求的硬上限；超过即视为 AI_UPSTREAM_UNAVAILABLE。
+      timeout-ms: ${AI_TIMEOUT_MS:30000}
+      # 给 RestController 抛 502/503 时一个短的降级文案
+      fallback-message: ${AI_FALLBACK_MESSAGE:AI 暂时不可用。请确认服务端已注入 NVIDIA_API_KEY 环境变量后重试。}
+  asset-service:
+    base-url: ${ASSET_SERVICE_BASE_URL:http://asset-service}
+  memory-service:
+    base-url: ${MEMORY_SERVICE_BASE_URL:http://memory-service}
+
+# Resilience4j circuit breaker template for downstream AI providers.
+# The MockReconstructService doesn't trip these today, but real DeepSeek
+# integration should annotate calls with @CircuitBreaker(name = "deepseek").
+resilience4j:
+  circuitbreaker:
+    instances:
+      deepseek:
+        registerHealthIndicator: true
+        slidingWindowSize: 20
+        failureRateThreshold: 50
+        waitDurationInOpenState: 30s
+        permittedNumberOfCallsInHalfOpenState: 3
+        minimumNumberOfCalls: 10
+        slowCallDurationThreshold: 10s
+        slowCallRateThreshold: 60
+  retry:
+    instances:
+      deepseek:
+        maxAttempts: 3
+        waitDuration: 500ms
+        exponentialBackoffMultiplier: 2
+  timelimiter:
+    instances:
+      deepseek:
+        timeoutDuration: 15s
+        cancelRunningFuture: true
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+  packages-to-scan: com.mnemoscape.ai
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus,circuitbreakers,retries
+  endpoint:
+    health:
+      show-details: when_authorized
+      probes:
+        enabled: true
+  health:
+    circuitbreakers:
+      enabled: true
+  metrics:
+    tags:
+      application: ${spring.application.name}
+
+logging:
+  level:
+    root: INFO
+    com.mnemoscape: INFO
