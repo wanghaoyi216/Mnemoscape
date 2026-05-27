@@ -19,5 +19,14 @@ public interface MemoryRepository extends JpaRepository<Memory, String> {
         return findByUserIdAndPrivacyLevel(userId, Memory.PrivacyLevel.PUBLIC);
     }
 
+    /**
+     * 跨用户的公共记忆池（排除调用方自己）。
+     * 按 createdAt 倒序，limit 由调用层用 Pageable 控制；用于 resonance 的真实化检索。
+     */
+    @Query("SELECT m FROM Memory m WHERE m.privacyLevel = com.mnemoscape.memory.model.entity.Memory$PrivacyLevel.PUBLIC "
+         + "AND m.userId <> :excludeUserId "
+         + "ORDER BY m.createdAt DESC")
+    List<Memory> findPublicPoolExcludingUser(String excludeUserId, Pageable pageable);
+
     Page<Memory> findByUserIdAndPrivacyLevelOrderByCreatedAtDesc(String userId, Memory.PrivacyLevel privacyLevel, Pageable pageable);
 }

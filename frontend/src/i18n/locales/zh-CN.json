@@ -161,6 +161,15 @@
     "error": {
       "title": "未能加载地图模块",
       "hint": "请检查网络后重试"
+    },
+    "emptyHints": {
+      "noCoordsTitle": "这片星图还没有记忆坐标",
+      "noCoordsBody": "请先去「{link}」填写「地点」字段（例如：北京 / 大理 / 东京）。",
+      "noCoordsLink": "创建记忆",
+      "noCoordsFooter": "地图会自动把你的记忆按地点串成时空轨迹。",
+      "oneCoordTitle": "还差一条记忆就能形成时空流光",
+      "oneCoordBody": "目前只有 1 条带坐标的记忆 —— 再去「{link}」并填上另一个地点，就能看到两点之间的彩色记忆流。",
+      "oneCoordLink": "创建一条"
     }
   },
   "locale": {
@@ -332,6 +341,49 @@
       "error": {
         "tooShort": "描述至少需要 5 个字符",
         "fallback": "创建失败，请稍后重试"
+      },
+      "cover": {
+        "label": "时空记忆封面",
+        "subtitle": "为这片记忆赋予一张视觉艺术封面，它将出现在记忆列表、详情和时光长河中。",
+        "openPicker": "选择封面",
+        "change": "更换封面",
+        "current": "当前封面",
+        "none": "尚未选择封面",
+        "clear": "清除选择"
+      },
+      "coverPicker": {
+        "title": "选择时空记忆封面",
+        "subtitle": "从内置画库挑选，或从你的资源池里选用，也可以现场上传一张本地图片。",
+        "tabs": {
+          "builtIn": "内置画库",
+          "library": "资源池",
+          "upload": "上传图片"
+        },
+        "badge": {
+          "builtIn": "内置",
+          "minio": "MinIO",
+          "local": "本地",
+          "uploaded": "刚刚上传"
+        },
+        "search": "搜索封面…",
+        "empty": {
+          "library": "资源池里还没有可用图片，先上传一张试试。",
+          "search": "没有匹配「{q}」的封面，换个关键词或上传一张试试。"
+        },
+        "upload": {
+          "drag": "把图片拖到这里，或点击下方按钮选择",
+          "btn": "选择本地图片",
+          "uploading": "正在上传到 MinIO…",
+          "success": "上传成功，已加入资源池",
+          "errorSize": "图片不能超过 {mb} MB",
+          "errorType": "请选择 JPEG/PNG/WebP/GIF 格式的图片",
+          "errorNetwork": "上传失败，请检查 asset-service 是否在线"
+        },
+        "actions": {
+          "select": "选用此封面",
+          "close": "关闭",
+          "preview": "预览"
+        }
       }
     },
     "timeline": {
@@ -359,12 +411,13 @@
     "graph": {
       "eyebrow": "Mnemosyne 星图",
       "title": "你的记忆，是一片星空。",
-      "lead": "每一段记忆都是一颗有自身光晕的恒星。位置由 ID 哈希到斐波那契球面，颜色随隐私级别变化，亮度随漂移程度褪色。",
+      "lead": "每一段记忆都是一颗有自身光晕的恒星。位置由 ID 哈希到斐波那契球面，颜色由 AI 解析的主导情绪决定，亮度随漂移程度褪色。",
       "metrics": {
         "total": "记忆星数",
         "distribution": "分布算法",
         "fibonacci": "斐波那契球面",
-        "engine": "渲染引擎"
+        "engine": "渲染引擎",
+        "engineValue": "WebGL"
       },
       "stage": {
         "title": "记忆星空全景",
@@ -388,6 +441,7 @@
       "updatedAt": "最近更新",
       "eyebrow": "记忆档案",
       "loadError": "无法加载该记忆，可能已被删除或访问受限。",
+      "regenError": "重建场景失败，请稍后重试或检查 AI 服务。",
       "loading": {
         "title": "正在唤醒这段记忆…",
         "text": "正在拉取记忆档案与重建元数据。"
@@ -410,14 +464,74 @@
         "discovered": "已发现",
         "hidden": "待探索",
         "emptyTitle": "暂无碎片",
-        "emptyText": "继续重建或让记忆漂移，将生成可探索的碎片。"
+        "emptyText": "继续重建或让记忆漂移，将生成可探索的碎片。",
+        "regenerate": "重建场景",
+        "regenerating": "AI 正在重读这段记忆…",
+        "regenHint": "让 AI 基于当前描述重新生成 3D 场景与记忆碎片（约 10-30 秒）",
+        "fragmentTypes": {
+          "forgotten_detail": "被遗忘的细节",
+          "emotion_flashback": "情感闪回",
+          "sensory_echo": "感官余韵",
+          "ambient_clue": "环境线索"
+        },
+        "legacyContent": {
+          "A small bird nest hidden in the branches above": "枝丫深处藏着一个小小的鸟巢",
+          "Faded initials carved into the tree trunk": "树干上有人刻下的、已经褪色的姓名缩写",
+          "A forgotten toy half-buried in the warm soil": "被遗忘的玩具半埋在温热的泥土里",
+          "An old photograph tucked behind the bench": "长椅背后塞着一张旧照片",
+          "Wild mushrooms growing in a shaded corner": "阴影角落里悄悄长出几朵野菇",
+          "A sudden wave of warmth and safety washes over you": "一阵温暖与安全感忽然将你包裹",
+          "You feel a brief pang of bittersweet nostalgia": "你心底掠过一丝甜中带苦的怀念",
+          "A moment of pure childhood joy flashes through": "童年里某个纯粹的快乐瞬间一闪而过",
+          "The quiet peace of that moment returns briefly": "那个静谧的瞬间又短暂地回到身边",
+          "Frost etched patterns on the window glass": "玻璃窗上结着精细的冰花",
+          "A woolen scarf left on the bench": "长椅上忘了拿走的羊毛围巾",
+          "Boot prints leading away from the snowman": "雪人旁延伸出去的一串靴印",
+          "Icicles shimmering under a pale sky": "苍白天光下闪着光的冰柱",
+          "A hush of stillness settles in your chest": "胸口涌起一阵静默的安宁",
+          "A memory of laughter echoes softly across the snow": "雪地里似乎传来某段久远的笑声",
+          "You feel the calm that comes with fresh snowfall": "那种新雪初落时特有的安心感又回来了",
+          "A light flickers behind the distant window": "远处那扇窗里有一束灯光在闪烁",
+          "Constellations you used to trace as a child": "你小时候反复描绘过的那几颗星座",
+          "A quiet footstep echoing on stone": "石阶上传来的、轻轻的脚步回响",
+          "A tranquil hush wraps around you": "一种安静的温柔把你整个人裹住",
+          "You feel the comfort of a familiar night": "你感到一种与某个熟悉夜晚同源的安心",
+          "A note of thunder rolling in the distance": "一道闷雷在远处缓缓滚过",
+          "Raindrops rippling across the puddle surface": "雨滴在水洼表面荡出层层涟漪",
+          "A lone streetlight buzzing softly": "孤零零的路灯发出轻微的电流声",
+          "A familiar storm brings back a quiet comfort": "熟悉的雨势带来一种安静的慰藉",
+          "You recall sharing an umbrella in the rain": "你想起某次共撑一把伞穿过雨幕的瞬间",
+          "Petals caught in a small breeze": "几片花瓣被风裹着飞过身边",
+          "A ribbon tied to the bench arm": "长椅扶手上系着的一条丝带",
+          "Fresh footprints in the soft soil": "松软泥土上一串新鲜的脚印",
+          "A hopeful warmth rises with the sunlight": "随着阳光升起，希望也悄悄涨起来",
+          "You feel the excitement of beginnings": "你心底涌起一股关于「开始」的雀跃",
+          "A single leaf spiraling down from the canopy": "一片叶子从树冠缓缓盘旋落下",
+          "Warm light spilling from the house window": "屋内透出的暖光从窗里漫开",
+          "A soft crunch underfoot": "脚下传来落叶被踩碎的轻响",
+          "A wistful memory of autumn evenings returns": "某个秋夜的回忆若有似无地回到心里",
+          "You feel a calm acceptance settle in": "你心底浮起一种温和的、接受一切的平静"
+        }
       },
       "versionsPanel": {
         "title": "版本历史",
         "subtitle": "回到之前的快照，或观察这段记忆是如何演化的。",
         "restore": "恢复此版本",
         "restoring": "正在恢复…",
-        "empty": "暂无版本记录"
+        "empty": "暂无版本记录",
+        "versionTypes": {
+          "CREATE": "创建",
+          "MODIFY": "修改",
+          "LOCK": "封存",
+          "RESTORE": "回滚"
+        },
+        "versionMessages": {
+          "Memory created": "记忆已创建",
+          "Memory updated": "记忆内容已更新",
+          "Memory locked": "记忆已封存",
+          "Memory unlocked": "记忆已解封",
+          "Memory restored": "记忆已回滚到先前版本"
+        }
       }
     }
   },
@@ -429,6 +543,42 @@
       "objects": "场景物体",
       "fragments": "可发现碎片",
       "drift": "漂移度"
+    },
+    "hud": {
+      "reconstructing": "正在重建场景…",
+      "lightingSuffix": "光线",
+      "terrainSuffix": "地形",
+      "objects": "物体 {count}",
+      "fragments": "碎片 {count}",
+      "saturation": "饱和度 {pct}%"
+    },
+    "errorTitle": "场景暂不可用",
+    "loadError": "无法加载这段记忆的场景",
+    "reconstructError": "场景重建当前不可用",
+    "environments": {
+      "outdoor_courtyard": "露天庭院",
+      "snowy_landscape": "雪域风光",
+      "night_courtyard": "夜色庭院",
+      "rainy_street": "雨夜街巷",
+      "flower_garden": "花丛庭园",
+      "autumn_path": "秋色步道"
+    },
+    "lighting": {
+      "warm_sunset": "暖夕阳",
+      "diffuse_winter": "冬日漫射",
+      "moonlight": "月光",
+      "overcast": "阴天",
+      "morning_sun": "晨曦",
+      "golden_hour": "金色时刻",
+      "ambient": "环境光"
+    },
+    "terrain": {
+      "flat": "平地",
+      "snow": "雪地",
+      "wet": "湿地",
+      "grass": "草地",
+      "leaves": "落叶层",
+      "terrain": "地表"
     }
   },
   "resonance": {
@@ -500,6 +650,13 @@
         "contemplative": "沉思",
         "grateful": "感激"
       }
+    },
+    "noteComposer": {
+      "title": "留下一段心声",
+      "subtitle": "为当前的共鸣空间附上一段简短的思绪。",
+      "placeholder": "你在这片空间里感受到了什么？",
+      "submit": "种下信标",
+      "cancel": "取消"
     }
   },
   "profile": {
@@ -546,13 +703,13 @@
   "chat": {
     "tabs": {
       "chats": "聊天会话",
-      "discover": "寻找 Curator",
+      "discover": "寻找馆长",
       "groups": "创建群聊",
       "theme": "时空壁纸"
     },
     "sidebar": {
       "friendsTitle": "我的好友列表",
-      "noFriends": "暂无好友。请前往「寻找 Curator」搜索并添加好友。",
+      "noFriends": "暂无好友。请前往「寻找馆长」搜索并添加好友。",
       "searchPlaceholder": "输入用户名搜索…",
       "searchBtn": "搜索",
       "matchesTitle": "搜索结果",
@@ -570,7 +727,9 @@
       "themeSubtitle": "定制个性化聊天背景与头像，专属的时空背景会呈现在与他人的会话中！",
       "presetsLabel": "馆藏画库壁纸",
       "avatarUrlLabel": "头像链接",
+      "avatarUrlPlaceholder": "HTTP(S) 链接，指向头像图片",
       "bgUrlLabel": "聊天壁纸链接",
+      "bgUrlPlaceholder": "HTTP(S) 链接，指向 WebP/JPG/PNG 壁纸",
       "saveThemeBtn": "保存时空主题"
     },
     "body": {
@@ -579,7 +738,7 @@
       "inputTextPlaceholder": "输入时空讯息…",
       "sendBtn": "发送",
       "noSelectionTitle": "在实时会话中重建共鸣。",
-      "noSelectionSubtitle": "从「聊天会话」中选择一位好友，或通过「寻找 Curator」搜索其他时空馆长，也可以建立群聊来进行思想传递。"
+      "noSelectionSubtitle": "从「聊天会话」中选择一位好友，或通过「寻找馆长」搜索其他时空馆长，也可以建立群聊来进行思想传递。"
     }
   },
   "errors": {

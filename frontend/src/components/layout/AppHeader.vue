@@ -12,17 +12,42 @@ const { t, locale } = useI18n()
 const initials = computed(() => auth.user?.username?.charAt(0).toUpperCase() || 'M')
 
 const scrolled = ref(false)
+const headerEl = ref<HTMLElement | null>(null)
+let headerObserver: ResizeObserver | null = null
+
 function handleScroll() {
   scrolled.value = window.scrollY > 8
+}
+
+/** 把实时 header 高度写到 :root --app-header-h，让需要让位的页面（atlas / scene 等）
+ *  通过 var(--app-header-h, 88px) 拿到精确数值，避免在 1100px 以下 nav wrap 后被压住。 */
+function publishHeaderHeight() {
+  const el = headerEl.value
+  if (!el) return
+  const h = Math.round(el.getBoundingClientRect().height)
+  if (h > 0) {
+    document.documentElement.style.setProperty('--app-header-h', `${h}px`)
+  }
 }
 
 onMounted(() => {
   window.addEventListener('scroll', handleScroll, { passive: true })
   handleScroll()
+  publishHeaderHeight()
+  if (typeof ResizeObserver !== 'undefined' && headerEl.value) {
+    headerObserver = new ResizeObserver(() => publishHeaderHeight())
+    headerObserver.observe(headerEl.value)
+  }
+  window.addEventListener('resize', publishHeaderHeight)
 })
 
 onUnmounted(() => {
   window.removeEventListener('scroll', handleScroll)
+  window.removeEventListener('resize', publishHeaderHeight)
+  if (headerObserver) {
+    headerObserver.disconnect()
+    headerObserver = null
+  }
 })
 
 function handleLogout() {
@@ -36,7 +61,7 @@ function switchLocale(l: Locale) {
 </script>
 
 <template>
-  <header class="app-header ai-glow-edge" :class="{ 'app-header--scrolled': scrolled }">
+  <header ref="headerEl" class="app-header ai-glow-edge" :class="{ 'app-header--scrolled': scrolled }">
     <div class="page-shell--wide app-header__inner">
       <RouterLink to="/" class="brand" :aria-label="t('brand.name')">
         <span class="brand__mark" aria-hidden="true">

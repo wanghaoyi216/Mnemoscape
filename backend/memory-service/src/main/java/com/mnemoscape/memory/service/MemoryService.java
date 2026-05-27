@@ -34,16 +34,22 @@ public class MemoryService {
     private final MemoryVersionRepository versionRepository;
     private final MemoryFragmentRepository fragmentRepository;
     private final AiServiceClient aiServiceClient;
+    private final com.mnemoscape.memory.client.AuthServiceClient authServiceClient;
     private final DriftCalculator driftCalculator;
     private final ObjectMapper objectMapper;
     private final MemoryLookup memoryLookup;
     private final MemoryGraphService memoryGraphService;
     private final GeocodingService geocodingService;
+    /** 自代理 — 用来从 createMemory 主线程触发 @Async 方法（@Async 不走 self-call 代理）。 */
+    @org.springframework.beans.factory.annotation.Autowired
+    @org.springframework.context.annotation.Lazy
+    private MemoryService asyncEnrichmentSelf;
 
     public MemoryService(MemoryRepository memoryRepository,
                          MemoryVersionRepository versionRepository,
                          MemoryFragmentRepository fragmentRepository,
                          AiServiceClient aiServiceClient,
+                         com.mnemoscape.memory.client.AuthServiceClient authServiceClient,
                          DriftCalculator driftCalculator,
                          ObjectMapper objectMapper,
                          MemoryLookup memoryLookup,
@@ -53,6 +59,7 @@ public class MemoryService {
         this.versionRepository = versionRepository;
         this.fragmentRepository = fragmentRepository;
         this.aiServiceClient = aiServiceClient;
+        this.authServiceClient = authServiceClient;
         this.driftCalculator = driftCalculator;
         this.objectMapper = objectMapper;
         this.memoryLookup = memoryLookup;
@@ -82,22 +89,69 @@ public class MemoryService {
      * 这样即使 AI 服务挂掉，用户依旧能拿到一个可用的 memory（带默认 scene url）；
      * 当后续 Sprint 接入 RabbitMQ 异步重建时，第二步直接换成发消息即可。
      */
+    /**
+     * 创建记忆 — 主线程只做"基础持久化 + 占位 scene url + CREATE 版本快照"，
+     * AI 重建（visualData / fragments / 实体抽取）异步在后台跑，让前端 POST /memories
+     * 在 1s 内拿到响应，跳进详情页后再陆续看到 AI 增强结果。
+     *
+     * <p>之前主线程顺序跑 enrichWithReconstruction（10-30s）会让前端建造完按提交后
+     * 卡很久，体验差且 axios 默认 15s 超时容易直接报错。
+     */
     public Memory createMemory(CreateMemoryRequest request, String userId) {
         log.info("Starting memory creation process for user: {}", userId);
         Memory memory = persistBaseMemory(request, userId);
         log.info("Base memory successfully persisted. ID: {}", memory.getId());
 
-        log.info("Beginning best-effort AI reconstruction enrichment for memory: {}", memory.getId());
-        enrichWithReconstruction(memory);
-
-        log.info("Beginning best-effort entity extraction and Neo4j graph projection for memory: {}", memory.getId());
-        extractAndProjectGraph(memory);
-
         log.info("Creating audit snapshot version for memory: {}", memory.getId());
         createVersion(memory, MemoryVersion.ChangeType.CREATE, "Memory created");
 
-        log.info("Memory creation process completed successfully for ID: {}", memory.getId());
+        // 异步触发 AI 增强：调用方拿到结果立即返回；详情页/SceneViewer 后续会读到
+        // visualData / fragments；如果用户太快进 SceneViewer，老路径的 reconstruct 兜底
+        // 仍能现场补一份。
+        triggerAsyncEnrichment(memory.getId());
+
+        log.info("Memory creation process completed (async enrichment dispatched) for ID: {}", memory.getId());
         return memory;
+    }
+
+    /**
+     * Spring 异步代理调用 — 通过自身代理拿到一个新线程跑 enrichWithReconstruction +
+     * extractAndProjectGraph。注意：@Async 不能从同一类的内部直接调，必须经过 Spring
+     * 代理，所以这里通过 ApplicationContext 拿到代理 bean。
+     */
+    private void triggerAsyncEnrichment(String memoryId) {
+        try {
+            asyncEnrichmentSelf.runEnrichmentAsync(memoryId);
+        } catch (Exception e) {
+            log.warn("Failed to dispatch async enrichment for {}: {}", memoryId, e.toString());
+        }
+    }
+
+    /**
+     * 异步增强：通过同类自代理（{@code asyncEnrichmentSelf}）确保 @Async 生效。
+     * 这条流水线整段都是 best-effort：单步失败不抛错，记日志即可。
+     */
+    @org.springframework.scheduling.annotation.Async
+    public void runEnrichmentAsync(String memoryId) {
+        Memory memory;
+        try {
+            memory = memoryLookup.findById(memoryId);
+        } catch (Exception e) {
+            log.warn("[async-enrich] memory {} disappeared before enrichment: {}", memoryId, e.toString());
+            return;
+        }
+        log.info("[async-enrich] start for memory {}", memoryId);
+        try {
+            enrichWithReconstruction(memory);
+        } catch (Exception e) {
+            log.warn("[async-enrich] reconstruction failed for {}: {}", memoryId, e.toString());
+        }
+        try {
+            extractAndProjectGraph(memory);
+        } catch (Exception e) {
+            log.warn("[async-enrich] graph projection failed for {}: {}", memoryId, e.toString());
+        }
+        log.info("[async-enrich] done for memory {}", memoryId);
     }
 
     /**
@@ -183,7 +237,15 @@ public class MemoryService {
     protected void enrichWithReconstruction(Memory memory) {
         Map<String, Object> reconstruction;
         try {
-            reconstruction = aiServiceClient.reconstruct(Map.of("description", memory.getDescription()));
+            // 把整段结构化上下文发给 ai-service，让 LLM 输出更 grounded（季节/时段/地点匹配）
+            Map<String, Object> payload = new java.util.LinkedHashMap<>();
+            payload.put("description", memory.getDescription());
+            if (memory.getTitle() != null) payload.put("title", memory.getTitle());
+            if (memory.getMemoryYear() != null) payload.put("memoryYear", memory.getMemoryYear());
+            if (memory.getMemorySeason() != null) payload.put("memorySeason", memory.getMemorySeason());
+            if (memory.getMemoryTimeOfDay() != null) payload.put("memoryTimeOfDay", memory.getMemoryTimeOfDay());
+            if (memory.getMemoryLocation() != null) payload.put("memoryLocation", memory.getMemoryLocation());
+            reconstruction = aiServiceClient.reconstruct(payload);
         } catch (Exception e) {
             log.warn("AI reconstruction call failed for memory {}, using defaults: {}",
                     memory.getId(), e.toString());
@@ -397,8 +459,40 @@ public class MemoryService {
     }
 
     public List<MemoryFragment> getFragments(String memoryId, String userId) {
-        getMemory(memoryId, userId);
+        Memory memory = getMemory(memoryId, userId);
         return fragmentRepository.findByMemoryId(memoryId);
+    }
+
+    /**
+     * 重建场景：删除现有 fragments → 重新调 ai-service /reconstruct → 写回 visualData / fragments。
+     *
+     * <p>用户在记忆详情页点"重建 3D 场景"按钮触发；用于把历史"假" fragment（旧规则版
+     * 套模板生成的英文/无关内容）刷成 grounded 在自己记忆描述上的真实内容。
+     *
+     * <p>权限：{@link #getMemory(String, String)} 已经做过 checkAccess；只有 owner
+     * 能触发（FRIENDS / PUBLIC 即使可读也不允许其他人改写）。
+     */
+    @Transactional
+    public Memory regenerateScene(String memoryId, String userId) {
+        Memory memory = getMemory(memoryId, userId);
+        if (!memory.getUserId().equals(userId)) {
+            throw BizException.forbidden();
+        }
+        // 1. 清掉旧 fragments（按 memoryId 整段删）
+        try {
+            fragmentRepository.deleteByMemoryId(memoryId);
+        } catch (Exception e) {
+            log.warn("Failed to clear old fragments for memory {}: {}", memoryId, e.toString());
+        }
+        // 2. 重新跑 reconstruct（写入 visualData / emotionProfile / 新 fragments）
+        enrichWithReconstruction(memory);
+        // 3. 落版本记录，方便回滚
+        try {
+            createVersion(memory, MemoryVersion.ChangeType.MODIFY, "Memory updated");
+        } catch (Exception e) {
+            log.warn("Failed to record version for regenerate: {}", e.toString());
+        }
+        return memory;
     }
 
     @Transactional
@@ -429,9 +523,21 @@ public class MemoryService {
     private void checkAccess(Memory memory, String userId) {
         if (memory.getPrivacyLevel() == Memory.PrivacyLevel.PUBLIC) return;
         if (memory.getUserId().equals(userId)) return;
-        // FRIENDS privacy currently behaves as PRIVATE.
-        // TODO: call auth-service friends API to allow approved friends — until
-        // that integration lands, the safer default is to deny non-owners.
+        if (memory.getPrivacyLevel() == Memory.PrivacyLevel.FRIENDS) {
+            // FRIENDS 级别：调用 auth-service 探针确认 caller 与 owner 是双向已接受的好友。
+            // auth-service 不可达 / 关系不存在 / 状态非 ACCEPTED → 一律拒绝（fail-closed），
+            // 避免好友服务降级时把私密记忆暴露出去。
+            try {
+                var resp = authServiceClient.friendshipStatus(memory.getUserId(), userId);
+                if (resp != null && resp.getData() != null) {
+                    Object isFriend = resp.getData().get("isFriend");
+                    if (Boolean.TRUE.equals(isFriend)) return;
+                }
+            } catch (Exception e) {
+                log.warn("[MemoryService] auth-service friendship check failed; denying access. memoryId={} caller={} owner={} reason={}",
+                        memory.getId(), userId, memory.getUserId(), e.getClass().getSimpleName());
+            }
+        }
         throw BizException.forbidden();
     }
 

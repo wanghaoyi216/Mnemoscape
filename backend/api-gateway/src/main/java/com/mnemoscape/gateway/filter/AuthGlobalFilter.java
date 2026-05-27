@@ -65,7 +65,10 @@ public class AuthGlobalFilter implements GlobalFilter, Ordered {
         String path = exchange.getRequest().getURI().getPath();
 
         if (isPublicPath(path)) {
-            return chain.filter(exchange);
+            // 公共路径无需 token；但若客户端带了有效 token，"尽力解析"并注入身份头，
+            // 让下游服务（如 asset-service）可以区分"匿名访问"vs"该用户的私有视图"。
+            // 解析失败 / 无 token / 黑名单命中都视为匿名，绝不阻塞公共路径。
+            return chain.filter(maybeAttachIdentity(exchange));
         }
 
         String correlationId = resolveCorrelationId(exchange);
@@ -119,6 +122,27 @@ public class AuthGlobalFilter implements GlobalFilter, Ordered {
     private boolean isPublicPath(String path) {
         return PUBLIC_EXACT_PATHS.contains(path)
                 || PUBLIC_PREFIX_PATHS.stream().anyMatch(path::startsWith);
+    }
+
+    /**
+     * 公共路径"尽力解析"模式：带有效 token 时把身份头注入到下游 request；
+     * 没带 / 解析失败 / 黑名单命中都不阻塞，只是不注入身份头。
+     */
+    private ServerWebExchange maybeAttachIdentity(ServerWebExchange exchange) {
+        String token = extractBearerToken(exchange.getRequest().getHeaders());
+        if (token == null) return exchange;
+        try {
+            Claims claims = jwtTokenProvider.validateToken(token);
+            ServerHttpRequest.Builder builder = exchange.getRequest().mutate()
+                    .header("X-User-Id", claims.getSubject());
+            String username = claims.get("username", String.class);
+            if (username != null && !username.isBlank()) {
+                builder.header("X-User-Name", username);
+            }
+            return exchange.mutate().request(builder.build()).build();
+        } catch (Exception ignored) {
+            return exchange;
+        }
     }
 
     private String extractBearerToken(HttpHeaders headers) {

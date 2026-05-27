@@ -20,12 +20,22 @@ public class AiChatRequest {
     /** 可选 — 客户端期望语言：zh / en，缺省 zh */
     private String locale;
 
+    /**
+     * 可选 — 用户附件图片 URL 列表（来自 asset-service 的 presigned URL）。
+     * 非空时，{@code ChatReasoner} 会先调一次视觉模型（默认 Qwen3.5-VL）做
+     * "图片→密集描述"，再把描述 prepend 到 prompt 喂给基座模型 (M2.7)。
+     * 这样保留 M2.7 的中文/agentic 优势，同时具备真正的视觉理解能力。
+     */
+    private List<String> images;
+
     public String getQuestion() { return question; }
     public void setQuestion(String question) { this.question = question; }
     public List<MemoryDigest> getContext() { return context; }
     public void setContext(List<MemoryDigest> context) { this.context = context; }
     public String getLocale() { return locale; }
     public void setLocale(String locale) { this.locale = locale; }
+    public List<String> getImages() { return images; }
+    public void setImages(List<String> images) { this.images = images; }
 
     public static class MemoryDigest {
         private String id;

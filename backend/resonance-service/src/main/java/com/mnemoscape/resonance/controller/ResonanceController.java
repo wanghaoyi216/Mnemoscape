@@ -24,16 +24,20 @@ public class ResonanceController {
 
     @GetMapping("/search")
     public ResponseEntity<ApiResponse<List<Map<String, Object>>>> search(
-            @RequestParam String memoryId) {
-        return ResponseEntity.ok(ApiResponse.success(resonanceService.searchResonances(memoryId)));
+            @RequestParam String memoryId,
+            HttpServletRequest request) {
+        String userId = RequestContext.requireUserId(request);
+        return ResponseEntity.ok(ApiResponse.success(resonanceService.searchResonances(memoryId, userId)));
     }
 
     @PostMapping("/spaces")
     public ResponseEntity<ApiResponse<ResonanceSpace>> createSpace(
-            @RequestBody Map<String, String> body) {
+            @RequestBody Map<String, String> body,
+            HttpServletRequest request) {
+        String userId = RequestContext.requireUserId(request);
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(ApiResponse.created(resonanceService.createSpace(
-                        body.get("memoryId1"), body.get("memoryId2"))));
+                        body.get("memoryId1"), body.get("memoryId2"), userId)));
     }
 
     @GetMapping("/spaces/{id}")

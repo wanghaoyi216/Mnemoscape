@@ -61,6 +61,26 @@ mnemoscape:
       timeout-ms: ${AI_TIMEOUT_MS:30000}
       # 给 RestController 抛 502/503 时一个短的降级文案
       fallback-message: ${AI_FALLBACK_MESSAGE:AI 暂时不可用。请确认服务端已注入 NVIDIA_API_KEY 环境变量后重试。}
+      # ---------------- 多模态混合检索（hybrid retrieval）----------------
+      # 基座模型 (NVIDIA_MODEL) 仍为 MiniMax M2.7 — 文本/agentic/中文强项；
+      # 检测到附件时先调用 vision-model 跑"图片→密集英文描述"，再 prepend 到
+      # 基座 prompt（M2.7 把英文描述吸收后用中文回复用户）。
+      #
+      # 默认走 Llama 3.2 11B Vision（实测 ~5s 即返回，稳定）；同族 90B 在公网
+      # trial 节点上偶尔出现 application/octet-stream 协议异常或 40+s 长尾，
+      # 反而拖垮 SSE 体验。若需要更高视觉精度可改 90B 或第三方多模态模型。
+      vision-model: ${NVIDIA_VISION_MODEL:meta/llama-3.2-11b-vision-instruct}
+      vision-fallback-model: ${NVIDIA_VISION_FALLBACK_MODEL:meta/llama-3.2-90b-vision-instruct}
+      vision-max-images: ${NVIDIA_VISION_MAX_IMAGES:4}
+      vision-timeout-ms: ${NVIDIA_VISION_TIMEOUT_MS:45000}
+    # ---------------- 场景重建路由 ----------------
+    # auto = 先 LLM，失败/超时无缝降级到规则版（默认）；llm = 强制 LLM；rule = 强制规则版
+    reconstruct:
+      mode: ${RECONSTRUCT_MODE:auto}
+    # ---------------- 实体提取路由 ----------------
+    # 同样三档：auto = LLM 优先 + 失败降规则；llm = 强制 LLM；rule = 强制规则版
+    extract:
+      mode: ${EXTRACT_MODE:auto}
   asset-service:
     base-url: ${ASSET_SERVICE_BASE_URL:http://asset-service}
   memory-service:

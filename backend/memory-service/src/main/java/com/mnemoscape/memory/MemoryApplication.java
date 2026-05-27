@@ -12,6 +12,7 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 @EnableFeignClients
 @EnableScheduling
 @EnableCaching
+@org.springframework.scheduling.annotation.EnableAsync
 public class MemoryApplication {
     public static void main(String[] args) {
         SpringApplication.run(MemoryApplication.class, args);

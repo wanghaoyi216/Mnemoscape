@@ -4,6 +4,8 @@ import com.mnemoscape.asset.model.StaticResource;
 import com.mnemoscape.asset.service.AssetService;
 import com.mnemoscape.asset.service.LocalResourceWatcher;
 import com.mnemoscape.common.dto.ApiResponse;
+import com.mnemoscape.common.web.RequestContext;
+import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.*;
@@ -28,14 +30,21 @@ public class AssetController {
     }
 
     @PostMapping("/upload")
-    public ApiResponse<Map<String, String>> upload(@RequestParam("file") MultipartFile file) {
-        String objectName = assetService.upload(file);
+    public ApiResponse<Map<String, String>> upload(@RequestParam("file") MultipartFile file,
+                                                    HttpServletRequest request) {
+        // 必须身份感知：每个用户上传的对象都加 users/{userId}/ 前缀，互相不可见
+        String userId = RequestContext.requireUserId(request);
+        String objectName = assetService.uploadForUser(file, userId);
         String url = assetService.getPresignedUrl(objectName);
         return ApiResponse.success(Map.of("objectName", objectName, "url", url));
     }
 
     @GetMapping("/download/{objectName}")
-    public void download(@PathVariable String objectName, HttpServletResponse response) {
+    public void download(@PathVariable String objectName,
+                         HttpServletRequest request,
+                         HttpServletResponse response) {
+        // 公共素材（不带 users/ 前缀）任何人可读；私有素材只能本人读
+        assetService.checkReadPermission(objectName, RequestContext.optionalUserId(request));
         try (InputStream in = assetService.download(objectName)) {
             response.setContentType(MediaType.APPLICATION_OCTET_STREAM_VALUE);
             in.transferTo(response.getOutputStream());
@@ -46,22 +55,31 @@ public class AssetController {
     }
 
     @GetMapping("/{objectName}/url")
-    public ApiResponse<Map<String, String>> presignedUrl(@PathVariable String objectName) {
+    public ApiResponse<Map<String, String>> presignedUrl(@PathVariable String objectName,
+                                                          HttpServletRequest request) {
+        assetService.checkReadPermission(objectName, RequestContext.optionalUserId(request));
         return ApiResponse.success(Map.of("url", assetService.getPresignedUrl(objectName)));
     }
 
     @DeleteMapping("/{objectName}")
-    public ApiResponse<Void> delete(@PathVariable String objectName) {
+    public ApiResponse<Void> delete(@PathVariable String objectName,
+                                     HttpServletRequest request) {
+        // 删除是写操作：必须登录，且只能删除自己的对象
+        String userId = RequestContext.requireUserId(request);
+        assetService.checkWritePermission(objectName, userId);
         assetService.delete(objectName);
         return ApiResponse.success(null);
     }
 
     @GetMapping("/static/resources")
-    public ApiResponse<List<StaticResource>> getStaticResources() {
-        // 本地静态资源（WatchService 热更新）+ MinIO 对象（按需直连，URL 为 presigned）
+    public ApiResponse<List<StaticResource>> getStaticResources(HttpServletRequest request) {
+        // 本地静态资源（WatchService 热更新）+ MinIO 对象（按调用者身份过滤）
+        // - 匿名（未登录）：只返回公共素材（不带 users/ 前缀）+ 本地 resource/
+        // - 已登录：上面 + users/{当前userId}/ 前缀下自己的对象
+        String userId = RequestContext.optionalUserId(request);
         List<StaticResource> merged = new java.util.ArrayList<>(localResourceWatcher.getResources());
         try {
-            merged.addAll(assetService.listMinioStatic());
+            merged.addAll(assetService.listMinioStaticForUser(userId));
         } catch (Exception e) {
             // MinIO 不可达不影响本地资源返回
         }

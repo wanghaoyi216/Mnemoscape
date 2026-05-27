@@ -19,6 +19,11 @@ public class MemoryResponse {
     private double fadeLevel;
     private String sceneDataUrl;
     private String emotionVectorId;
+    /** AI 创建期已经 freeze 的完整 SceneReconstructionResponse JSON 字符串。
+     *  非空 → SceneViewer 直接用，无需重跑 /api/v1/reconstruct（避免每次进页面卡 30s）。 */
+    private String visualData;
+    /** AI 创建期 freeze 的 emotion vector JSON。 */
+    private String emotionProfile;
     private String createdAt;
     private String updatedAt;
 
@@ -43,6 +48,8 @@ public class MemoryResponse {
         response.fadeLevel = memory.getFadeLevel() != null ? memory.getFadeLevel() : 0.0;
         response.sceneDataUrl = memory.getSceneDataUrl();
         response.emotionVectorId = memory.getEmotionVectorId();
+        response.visualData = memory.getVisualData();
+        response.emotionProfile = memory.getEmotionProfile();
         response.createdAt = memory.getCreatedAt() != null ? memory.getCreatedAt().toString() : null;
         response.updatedAt = memory.getUpdatedAt() != null ? memory.getUpdatedAt().toString() : null;
         return response;
@@ -78,6 +85,10 @@ public class MemoryResponse {
     public void setSceneDataUrl(String sceneDataUrl) { this.sceneDataUrl = sceneDataUrl; }
     public String getEmotionVectorId() { return emotionVectorId; }
     public void setEmotionVectorId(String emotionVectorId) { this.emotionVectorId = emotionVectorId; }
+    public String getVisualData() { return visualData; }
+    public void setVisualData(String visualData) { this.visualData = visualData; }
+    public String getEmotionProfile() { return emotionProfile; }
+    public void setEmotionProfile(String emotionProfile) { this.emotionProfile = emotionProfile; }
     public String getCreatedAt() { return createdAt; }
     public void setCreatedAt(String createdAt) { this.createdAt = createdAt; }
     public String getUpdatedAt() { return updatedAt; }

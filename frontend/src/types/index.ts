@@ -44,6 +44,11 @@ export interface MemoryItem {
   fadeLevel: number
   sceneDataUrl?: string
   emotionVectorId?: string
+  /** AI 创建期 freeze 的完整 SceneReconstructionResponse JSON 字符串。
+   *  非空 → SceneViewer 直接 JSON.parse 用，无需重跑 /reconstruct（避免每次卡 30s）。 */
+  visualData?: string
+  /** AI 创建期 freeze 的 emotion vector JSON 字符串。 */
+  emotionProfile?: string
   attachments?: MemoryAttachment[]
   createdAt: string
   updatedAt: string

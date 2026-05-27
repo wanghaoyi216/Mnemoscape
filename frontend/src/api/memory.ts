@@ -66,6 +66,21 @@ export function discoverFragment(fragmentId: string) {
   return client.post<ApiResponse<void>>(`/memories/fragments/${fragmentId}/discover`)
 }
 
+/**
+ * 重建场景：让 AI 重新基于记忆描述生成 grounded fragments + visualData。
+ * 用于把历史"假" fragment（旧规则版套模板生成的英文/无关内容）刷成紧扣描述的真实碎片。
+ * 用 60s timeout 给 LLM 留足时间。
+ */
+export function regenerateScene(id: string) {
+  return client.post<ApiResponse<MemoryItem>>(`/memories/${id}/regenerate-scene`, undefined, {
+    timeout: 60_000,
+  })
+}
+
 export function reconstruct(data: { description: string }) {
-  return client.post<ApiResponse<SceneReconstructionResponse>>('/reconstruct', data)
+  // 场景重建可能要 LLM 跑 10-30s（生成完整 SceneData JSON），
+  // 用 axios 默认 15s timeout 会断；这里专门放宽到 60s。
+  return client.post<ApiResponse<SceneReconstructionResponse>>('/reconstruct', data, {
+    timeout: 60_000,
+  })
 }

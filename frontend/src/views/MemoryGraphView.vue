@@ -73,13 +73,50 @@ function hash(s: string): number {
   return Math.abs(h)
 }
 
-/** privacyLevel + fadeLevel → 主色调 */
+/**
+ * 情绪 → HEX 颜色（设计书 §3.2.1 璀璨多色星群）：
+ * 把记忆 emotionProfile JSON 里的主导情绪映射到星光颜色。
+ * 缺失 emotionProfile / 无法解析 → 退回到原本的 privacyLevel 着色。
+ */
+const EMOTION_COLOR_MAP: Record<string, string> = {
+  joy: '#ffd76a',         // 微暖明黄 — 喜悦
+  sadness: '#5b8def',     // 深海蓝 — 悲伤
+  anger: '#f87171',       // 热血赤 — 愤怒
+  fear: '#9ca3af',        // 灰雾 — 恐惧
+  surprise: '#34d399',    // 嫩绿 — 惊奇
+  nostalgia: '#c084fc',   // 梦幻浅紫 — 怀念
+  peace: '#5ee5d9',       // 极光青 — 平和
+  melancholy: '#6cc6ff',  // 冷蓝 — 忧郁
+}
+
+function dominantEmotionColor(memory: MemoryItem): THREE.Color | null {
+  const raw = (memory as { emotionProfile?: string }).emotionProfile
+  if (!raw || typeof raw !== 'string') return null
+  try {
+    const vec = JSON.parse(raw) as Record<string, number>
+    if (!vec || typeof vec !== 'object') return null
+    let best: { key: string; val: number } | null = null
+    for (const [k, v] of Object.entries(vec)) {
+      const num = typeof v === 'number' ? v : parseFloat(String(v))
+      if (!Number.isFinite(num)) continue
+      if (!best || num > best.val) best = { key: k, val: num }
+    }
+    // 主导情绪权重过低（< 0.2）说明记忆情绪平淡，让 privacyLevel 来定色更合理
+    if (!best || best.val < 0.2) return null
+    const hex = EMOTION_COLOR_MAP[best.key]
+    return hex ? new THREE.Color(hex) : null
+  } catch {
+    return null
+  }
+}
+
+/** 主色调：情绪着色优先 → privacyLevel 兜底；fadeLevel 越高越向灰色退色 */
 function colorFor(memory: MemoryItem): THREE.Color {
-  const base = memory.privacyLevel === 'PUBLIC'
+  const base = dominantEmotionColor(memory) || (memory.privacyLevel === 'PUBLIC'
     ? new THREE.Color('#f2b95c')
     : memory.privacyLevel === 'FRIENDS'
       ? new THREE.Color('#846edc')
-      : new THREE.Color('#36d8b4')
+      : new THREE.Color('#36d8b4'))
   // fadeLevel 高的恒星向冷灰退色 — 视觉上"褪去"
   const fade = Math.min(1, Math.max(0, memory.fadeLevel || 0))
   const grey = new THREE.Color('#3b4452')
@@ -418,7 +455,7 @@ function openDetail(memory: MemoryItem) {
         </div>
         <div class="metric-card">
           <span class="metric-card__label">{{ t('memory.graph.metrics.engine') }}</span>
-          <strong class="metric-card__value">WebGL</strong>
+          <strong class="metric-card__value">{{ t('memory.graph.metrics.engineValue', 'WebGL') }}</strong>
         </div>
       </div>
     </section>

@@ -10,6 +10,8 @@ export function useThreeScene(containerRef: Ref<HTMLElement | null>) {
   const controls = ref<OrbitControls | null>(null)
   const contentGroup = ref<THREE.Group | null>(null)
   let animFrameId = 0
+  // ResizeObserver 监听父容器尺寸（init 时父容器可能还是 0×0；onMounted 同步阶段没拿到布局）
+  let resizeObserver: ResizeObserver | null = null
 
   function init() {
     if (!containerRef.value) return
@@ -17,12 +19,16 @@ export function useThreeScene(containerRef: Ref<HTMLElement | null>) {
     s.background = new THREE.Color(0x0f172a)
     scene.value = s
 
-    const c = new THREE.PerspectiveCamera(60, containerRef.value.clientWidth / containerRef.value.clientHeight, 0.1, 100)
+    // 初始尺寸：兜底为 1，避免 0×0 导致 WebGL 上下文异常；ResizeObserver 会很快补一次正确尺寸
+    const initW = Math.max(1, containerRef.value.clientWidth)
+    const initH = Math.max(1, containerRef.value.clientHeight)
+
+    const c = new THREE.PerspectiveCamera(60, initW / initH, 0.1, 100)
     c.position.set(5, 3.5, 8)
     camera.value = c
 
     const r = new THREE.WebGLRenderer({ antialias: true })
-    r.setSize(containerRef.value.clientWidth, containerRef.value.clientHeight)
+    r.setSize(initW, initH)
     r.setPixelRatio(Math.min(window.devicePixelRatio, 2))
     r.shadowMap.enabled = true
     r.outputColorSpace = THREE.SRGBColorSpace
@@ -47,13 +53,19 @@ export function useThreeScene(containerRef: Ref<HTMLElement | null>) {
     animate()
     window.addEventListener('resize', onResize)
 
+    // 父容器初次布局可能晚于 onMounted；ResizeObserver 兜底确保拿到真实宽高后立即同步相机/渲染器
+    if (typeof ResizeObserver !== 'undefined' && containerRef.value) {
+      resizeObserver = new ResizeObserver(() => onResize())
+      resizeObserver.observe(containerRef.value)
+    }
+
     return s
   }
 
   function onResize() {
     if (!containerRef.value || !renderer.value || !camera.value) return
-    const w = containerRef.value.clientWidth
-    const h = containerRef.value.clientHeight
+    const w = Math.max(1, containerRef.value.clientWidth)
+    const h = Math.max(1, containerRef.value.clientHeight)
     camera.value.aspect = w / h
     camera.value.updateProjectionMatrix()
     renderer.value.setSize(w, h)
@@ -193,6 +205,10 @@ export function useThreeScene(containerRef: Ref<HTMLElement | null>) {
     renderer.value?.dispose()
     renderer.value?.domElement.remove()
     window.removeEventListener('resize', onResize)
+    if (resizeObserver) {
+      resizeObserver.disconnect()
+      resizeObserver = null
+    }
     contentGroup.value = null
   }
 

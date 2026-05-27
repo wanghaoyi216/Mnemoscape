@@ -95,16 +95,27 @@ public class MilvusSearchTool {
     /** 真实查询：先从 memory-service 拉用户记忆，再按关键词打分。 */
     @SuppressWarnings("unchecked")
     public Response search(Request req) {
+        return searchForUser(req, currentUserId());
+    }
+
+    /**
+     * 同 {@link #search(Request)}，但显式接受 userId 参数 — 给 ChatReasoner 的
+     * "强制 RAG"路径用：那条路径走 servlet 而不是 SecurityContext，没法通过
+     * {@link #currentUserId()} 拿到身份。
+     *
+     * <p>调用方负责保证 userId 来自网关 X-User-Id 而非用户输入。
+     */
+    @SuppressWarnings("unchecked")
+    public Response searchForUser(Request req, String userId) {
         Response resp = new Response();
         if (req == null) {
             resp.degraded = true;
             resp.message = "Empty request";
             return resp;
         }
-        String userId = currentUserId();
         if (userId == null) {
             resp.degraded = true;
-            resp.message = "No authenticated user in security context";
+            resp.message = "No authenticated user";
             return resp;
         }
         int topK = req.topK == null ? 5 : Math.max(1, Math.min(20, req.topK));

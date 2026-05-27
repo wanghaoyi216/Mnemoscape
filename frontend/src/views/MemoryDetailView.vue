@@ -10,13 +10,33 @@ const versionsBg = images.historicalRubbing.src
 const route = useRoute()
 const router = useRouter()
 const store = useMemoryStore()
-const { t } = useI18n()
+const { t, tm } = useI18n()
 const id = route.params.id as string
 const restoring = ref<number | null>(null)
 const loadError = ref('')
 
 const fragments = computed(() => store.currentFragments)
 const versions = computed(() => store.currentVersions)
+
+/**
+ * 把英文历史 fragment 内容映射为中文。
+ *
+ * <p>历史规则版（v1 MockReconstructService）把 24 条英文文案 freeze 进 DB 的
+ * memory_fragments.content；新建记忆已经走 LLM 中文输出。这个函数让旧数据也能
+ * 显示为中文 — 用 vue-i18n 的 {@code tm()} 拿 i18n 字典里的 legacyContent 整段，
+ * 再用完整原文精确匹配；命中返回中文，未命中保留原文。
+ *
+ * <p>tm() 不会按 "." 分割 key，避免 fragment.content 里的句点 / 空格被
+ * messageResolver 误解析。
+ */
+const legacyContentMap = computed<Record<string, string>>(() => {
+  const dict = tm('memory.detail.fragmentsPanel.legacyContent') as Record<string, string> | undefined
+  return (dict && typeof dict === 'object') ? dict : {}
+})
+function fragmentContent(content: string | null | undefined): string {
+  if (!content) return ''
+  return legacyContentMap.value[content] || content
+}
 
 onMounted(async () => {
   loadError.value = ''
@@ -51,6 +71,23 @@ async function handleRestore(versionNumber: number) {
     await store.fetchVersions(id)
   } finally {
     restoring.value = null
+  }
+}
+
+const regenerating = ref(false)
+const regenError = ref('')
+async function handleRegenerate() {
+  if (regenerating.value) return
+  regenerating.value = true
+  regenError.value = ''
+  try {
+    await store.regenerateScene(id)
+    await store.fetchFragments(id)
+    await store.fetchVersions(id)
+  } catch (e: any) {
+    regenError.value = e.response?.data?.message || t('memory.detail.regenError')
+  } finally {
+    regenerating.value = false
   }
 }
 
@@ -158,7 +195,24 @@ function viewScene() {
                 <h2 class="section-title">{{ t('memory.detail.fragmentsPanel.title') }}</h2>
                 <p class="subtitle">{{ t('memory.detail.fragmentsPanel.subtitle', { count: fragments.length }) }}</p>
               </div>
+              <button
+                type="button"
+                class="button button--secondary"
+                :disabled="regenerating"
+                :title="t('memory.detail.fragmentsPanel.regenHint')"
+                @click="handleRegenerate"
+              >
+                <span v-if="regenerating" class="auth-spinner" aria-hidden="true"></span>
+                <span>{{ regenerating
+                  ? t('memory.detail.fragmentsPanel.regenerating')
+                  : t('memory.detail.fragmentsPanel.regenerate') }}</span>
+              </button>
             </div>
+            <transition name="alert">
+              <p v-if="regenError" class="status-pill status-pill--danger" role="alert" style="margin-bottom: 12px;">
+                {{ regenError }}
+              </p>
+            </transition>
 
             <div v-if="fragments.length > 0" class="stack">
               <article
@@ -169,11 +223,11 @@ function viewScene() {
               >
                 <div class="fragment-card__head">
                   <span class="status-pill" :class="fragment.isDiscovered ? 'status-pill--success' : 'status-pill--accent'">
-                    {{ fragment.fragmentType }}
+                    {{ t(`memory.detail.fragmentsPanel.fragmentTypes.${fragment.fragmentType}`, fragment.fragmentType) }}
                   </span>
                   <span class="chip">{{ fragment.isDiscovered ? t('memory.detail.fragmentsPanel.discovered') : t('memory.detail.fragmentsPanel.hidden') }}</span>
                 </div>
-                <p class="fragment-card__content">{{ fragment.content }}</p>
+                <p class="fragment-card__content">{{ fragmentContent(fragment.content) }}</p>
               </article>
             </div>
 
@@ -197,9 +251,9 @@ function viewScene() {
             <article v-for="version in versions" :key="version.id" class="version-card">
               <div class="version-card__head">
                 <span class="chip">v{{ version.versionNumber }}</span>
-                <span class="status-pill status-pill--accent">{{ version.changeType }}</span>
+                <span class="status-pill status-pill--accent">{{ t(`memory.detail.versionsPanel.versionTypes.${version.changeType}`, version.changeType) }}</span>
               </div>
-              <p class="help-text">{{ version.changeDescription }}</p>
+              <p class="help-text">{{ t(`memory.detail.versionsPanel.versionMessages.${version.changeDescription}`, version.changeDescription) }}</p>
               <button
                 type="button"
                 class="button button--secondary"
@@ -254,5 +308,28 @@ function viewScene() {
   background-position: center;
   background-repeat: no-repeat;
   border: 1px solid rgba(255, 255, 255, 0.06);
+}
+
+.auth-spinner {
+  width: 12px;
+  height: 12px;
+  border: 2px solid rgba(54, 216, 180, 0.25);
+  border-top-color: var(--primary, #36d8b4);
+  border-radius: 50%;
+  animation: auth-spin 0.7s linear infinite;
+  margin-right: 6px;
+  vertical-align: -2px;
+  display: inline-block;
+}
+@keyframes auth-spin { to { transform: rotate(360deg); } }
+
+.alert-enter-active,
+.alert-leave-active {
+  transition: opacity 200ms ease, transform 200ms ease;
+}
+.alert-enter-from,
+.alert-leave-to {
+  opacity: 0;
+  transform: translateY(-4px);
 }
 </style>

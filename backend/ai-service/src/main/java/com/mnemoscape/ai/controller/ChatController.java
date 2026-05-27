@@ -4,6 +4,7 @@ import com.mnemoscape.ai.exception.AiUpstreamException;
 import com.mnemoscape.ai.model.dto.AiChatRequest;
 import com.mnemoscape.ai.service.ChatReasoner;
 import com.mnemoscape.common.dto.ApiResponse;
+import jakarta.annotation.PreDestroy;
 import jakarta.validation.Valid;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -17,6 +18,11 @@ import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.UUID;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.ScheduledFuture;
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.atomic.AtomicBoolean;
 
 /**
  * AI 对话 SSE 接口（v2 — 真实模型流式）。
@@ -43,24 +49,52 @@ public class ChatController {
 
     private final ChatReasoner reasoner;
 
+    /** 共享调度器：在视觉前置阻塞 / 上游首字延迟期间发 SSE 注释帧 :keepalive，
+     *  防止前端浏览器 / 反向代理 / 开发服务器把"无任何字节流出"的 SSE 当死连接 reset。
+     *  daemon 线程 + 单例 — 不会延迟 ai-service 关闭。 */
+    private final ScheduledExecutorService keepAliveExec = Executors.newSingleThreadScheduledExecutor(r -> {
+        Thread t = new Thread(r, "sse-keepalive");
+        t.setDaemon(true);
+        return t;
+    });
+
+    /** P3-13 动态 plan：把 LLM 规划调用放在独立线程池，不阻塞主回答的首字延迟。
+     *  生成完成后通过 SSE 的 plan_update 帧异步推到前端，前端 reducer 替换硬编码 plan。 */
+    private final java.util.concurrent.ExecutorService planExec = Executors.newCachedThreadPool(r -> {
+        Thread t = new Thread(r, "ai-dynamic-plan");
+        t.setDaemon(true);
+        return t;
+    });
+
     public ChatController(ChatReasoner reasoner) {
         this.reasoner = reasoner;
     }
 
+    @PreDestroy
+    public void shutdown() {
+        keepAliveExec.shutdownNow();
+        planExec.shutdownNow();
+    }
+
     @PostMapping(consumes = MediaType.APPLICATION_JSON_VALUE)
     public ResponseEntity<ApiResponse<Map<String, Object>>> chatOnce(
-            @Valid @RequestBody AiChatRequest request) {
+            @Valid @RequestBody AiChatRequest request,
+            jakarta.servlet.http.HttpServletRequest http) {
+        // 通过网关 X-User-Id 头取 caller，让 reasoner 能跑强制 RAG（关键词召回当前用户记忆）
+        String userId = http.getHeader("X-User-Id");
         Map<String, Object> body = buildPayload(request);
-        body.put("answer", reasoner.generateAnswer(request));
+        body.put("answer", reasoner.generateAnswer(request, userId));
         return ResponseEntity.ok(ApiResponse.success(body));
     }
 
     @PostMapping(value = "/stream",
                  consumes = MediaType.APPLICATION_JSON_VALUE,
                  produces = MediaType.TEXT_EVENT_STREAM_VALUE)
-    public SseEmitter chatStream(@Valid @RequestBody AiChatRequest request) {
+    public SseEmitter chatStream(@Valid @RequestBody AiChatRequest request,
+                                  jakarta.servlet.http.HttpServletRequest http) {
+        String userId = http.getHeader("X-User-Id");
         SseEmitter emitter = new SseEmitter(120_000L); // 2 min
-        stream(emitter, request);
+        stream(emitter, request, userId);
         return emitter;
     }
 
@@ -74,6 +108,12 @@ public class ChatController {
         body.put("traceId", UUID.randomUUID().toString());
         if (intent == ChatReasoner.Intent.PLAN) {
             body.put("plan", reasoner.buildPlan(request.getQuestion(), zh));
+        }
+        // 多模态混合检索：让前端在消息泡里渲染"🔍 已分析 N 张图片"标签
+        if (reasoner.hasImages(request)) {
+            body.put("vision_used", true);
+            body.put("vision_model", reasoner.getVisionModel());
+            body.put("attachment_count", request.getImages().size());
         }
         return body;
     }
@@ -97,10 +137,10 @@ public class ChatController {
      * 暴露 callback；保留事件名以便前端 reducer 不变；当模型确实触发 tool calling 时，
      * Spring AI 会在内部消化（多轮），最终输出仍然只是 token Flux。
      */
-    private void stream(SseEmitter emitter, AiChatRequest request) {
+    private void stream(SseEmitter emitter, AiChatRequest request, String userId) {
         String requestId = UUID.randomUUID().toString();
         try {
-            // event: meta — intent + plan
+            // event: meta — intent + 硬编码 plan（首帧极快返回，前端立刻渲染骨架）
             Map<String, Object> meta = buildPayload(request);
             meta.put("requestId", requestId);
             emitter.send(SseEmitter.event().name("meta").data(meta));
@@ -110,12 +150,75 @@ public class ChatController {
             return;
         }
 
+        // P3-13：PLAN 意图下并发跑一次 LLM 动态规划。完成后推 plan_update 帧覆盖前端硬编码 4 步。
+        // 这样首字延迟保持极快（先发硬编码 plan），动态 plan 在后台 1-3s 内自然替换。
+        ChatReasoner.Intent intent = reasoner.classify(request.getQuestion());
+        if (intent == ChatReasoner.Intent.PLAN) {
+            boolean zh = request.getLocale() == null || request.getLocale().startsWith("zh");
+            planExec.submit(() -> {
+                try {
+                    java.util.List<String> dyn = reasoner.generateDynamicPlan(
+                            request.getQuestion(), zh, userId);
+                    if (dyn != null && !dyn.isEmpty()) {
+                        emitter.send(SseEmitter.event().name("plan_update").data(Map.of(
+                                "plan", dyn,
+                                "source", "llm",
+                                "requestId", requestId)));
+                    }
+                } catch (Exception e) {
+                    log.debug("[ChatController] plan_update emit failed (client gone?): {}", e.getMessage());
+                }
+            });
+        }
+
+        // ---- SSE keepalive：每 5 秒发一次注释帧（":\n\n"），防止视觉前置阻塞期间
+        //      浏览器 / 代理把死连接 reset。第一条 token 到达后立即取消。 ----
+        AtomicBoolean firstTokenSeen = new AtomicBoolean(false);
+        ScheduledFuture<?> keepAlive = keepAliveExec.scheduleAtFixedRate(() -> {
+            if (firstTokenSeen.get()) return;
+            try {
+                // SseEmitter.event().comment(...) 产出 "<text>\n\n"，浏览器会忽略但保活
+                emitter.send(SseEmitter.event().comment("keepalive"));
+            } catch (Exception e) {
+                // 客户端断了 / emitter complete 了，让定时器里的下一次自然 noop
+            }
+        }, 5, 5, TimeUnit.SECONDS);
+
         // 把 reactor Flux 订阅在它自己的弹性调度器上，不阻塞 servlet 线程
+        // 同时把 RAG / vision 工序作为 ReAct "tool call" 推到 SSE，前端渲染齿轮 → ✓ 动效
+        ChatReasoner.ToolEventListener tools = new ChatReasoner.ToolEventListener() {
+            @Override public void onStart(String name, String label, Object input) {
+                Map<String, Object> body = new LinkedHashMap<>();
+                body.put("name", name);
+                body.put("label", label);
+                body.put("input", input);
+                try {
+                    emitter.send(SseEmitter.event().name("tool_start").data(body));
+                } catch (Exception e) {
+                    log.debug("[ChatController] tool_start emit failed: {}", e.getMessage());
+                }
+            }
+            @Override public void onEnd(String name, Object output) {
+                Map<String, Object> body = new LinkedHashMap<>();
+                body.put("name", name);
+                body.put("output", output);
+                try {
+                    emitter.send(SseEmitter.event().name("tool_end").data(body));
+                } catch (Exception e) {
+                    log.debug("[ChatController] tool_end emit failed: {}", e.getMessage());
+                }
+            }
+        };
+
         Disposable[] holder = new Disposable[1];
-        holder[0] = reasoner.streamAnswer(request)
+        holder[0] = reasoner.streamAnswer(request, userId, tools)
                 .doOnError(err -> sendError(emitter, err, requestId))
+                .doFinally(sig -> {
+                    keepAlive.cancel(false);
+                })
                 .subscribe(
                         chunk -> {
+                            firstTokenSeen.set(true);
                             try {
                                 emitter.send(SseEmitter.event().name("token").data(chunk));
                             } catch (Exception e) {
@@ -139,12 +242,14 @@ public class ChatController {
                 );
 
         emitter.onTimeout(() -> {
+            keepAlive.cancel(false);
             if (holder[0] != null) holder[0].dispose();
             sendError(emitter, new AiUpstreamException(AiUpstreamException.Reason.TIMEOUT,
                     "SSE timeout"), requestId);
             try { emitter.complete(); } catch (Exception ignored) {}
         });
         emitter.onError(t -> {
+            keepAlive.cancel(false);
             if (holder[0] != null) holder[0].dispose();
         });
     }

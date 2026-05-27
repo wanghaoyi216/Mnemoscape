@@ -117,6 +117,25 @@
       "play": "Play",
       "pause": "Pause"
     },
+    "graph": {
+      "eyebrow": "Mnemosyne starmap",
+      "title": "Your memories form a galaxy.",
+      "lead": "Each memory is a star with its own halo. Position is hashed onto a Fibonacci sphere, color follows the AI-detected dominant emotion, and brightness fades with drift level.",
+      "metrics": {
+        "total": "Stars",
+        "distribution": "Distribution",
+        "fibonacci": "Fibonacci sphere",
+        "engine": "Renderer",
+        "engineValue": "WebGL"
+      },
+      "stage": {
+        "title": "Memory galaxy",
+        "hint": "Drag to rotate, scroll to zoom. Click any star to fly to its detail."
+      },
+      "loading": "Charting your memory stars…",
+      "selected": "Focused",
+      "openDetail": "Open memory archive"
+    },
     "detail": {
       "title": "Memory detail",
       "location": "Location",
@@ -161,6 +180,15 @@
     "error": {
       "title": "Atlas failed to load",
       "hint": "Check network and retry"
+    },
+    "emptyHints": {
+      "noCoordsTitle": "No memory coordinates yet",
+      "noCoordsBody": "Head to \"{link}\" and fill in the \"location\" field (e.g. Beijing / Dali / Tokyo).",
+      "noCoordsLink": "Create memory",
+      "noCoordsFooter": "The atlas will weave your memories into a spacetime trail automatically.",
+      "oneCoordTitle": "One more memory will light up the trail",
+      "oneCoordBody": "Only 1 geo-tagged memory so far — \"{link}\" with another location to see a colored memory flow between them.",
+      "oneCoordLink": "create one more"
     }
   },
   "locale": {
@@ -327,6 +355,49 @@
       "error": {
         "tooShort": "Description must be at least 5 characters",
         "fallback": "Creation failed"
+      },
+      "cover": {
+        "label": "Memory cover artwork",
+        "subtitle": "Give this memory a cinematic cover. It appears on lists, the timeline and the detail page.",
+        "openPicker": "Choose cover",
+        "change": "Change cover",
+        "current": "Current cover",
+        "none": "No cover selected yet",
+        "clear": "Clear"
+      },
+      "coverPicker": {
+        "title": "Choose a memory cover",
+        "subtitle": "Pick from the built-in gallery, reuse one from your asset library, or upload a local image.",
+        "tabs": {
+          "builtIn": "Built-in",
+          "library": "Asset library",
+          "upload": "Upload"
+        },
+        "badge": {
+          "builtIn": "Built-in",
+          "minio": "MinIO",
+          "local": "Local",
+          "uploaded": "Just uploaded"
+        },
+        "search": "Search covers…",
+        "empty": {
+          "library": "Your asset library is empty. Upload an image to populate it.",
+          "search": "No covers match \"{q}\". Try another keyword or upload a new image."
+        },
+        "upload": {
+          "drag": "Drop an image here, or use the button below",
+          "btn": "Choose local image",
+          "uploading": "Uploading to MinIO…",
+          "success": "Upload complete. Added to your library.",
+          "errorSize": "Image must be smaller than {mb} MB",
+          "errorType": "Please pick a JPEG / PNG / WebP / GIF image",
+          "errorNetwork": "Upload failed. Check that asset-service is online."
+        },
+        "actions": {
+          "select": "Use this cover",
+          "close": "Close",
+          "preview": "Preview"
+        }
       }
     },
     "detail": {
@@ -338,7 +409,80 @@
       "fragments": "Fragments",
       "versions": "Versions",
       "createdAt": "Created",
-      "updatedAt": "Updated"
+      "updatedAt": "Updated",
+      "regenError": "Failed to regenerate the scene. Try again or check the AI service.",
+      "fragmentsPanel": {
+        "regenerate": "Regenerate scene",
+        "regenerating": "AI is rereading the memory…",
+        "regenHint": "Let the AI rebuild the 3D scene + fragments grounded in the current description (about 10-30s)",
+        "fragmentTypes": {
+          "forgotten_detail": "Forgotten detail",
+          "emotion_flashback": "Emotion flashback",
+          "sensory_echo": "Sensory echo",
+          "ambient_clue": "Ambient clue"
+        }
+      },
+      "versionsPanel": {
+        "versionTypes": {
+          "CREATE": "Create",
+          "MODIFY": "Modify",
+          "LOCK": "Lock",
+          "RESTORE": "Restore"
+        },
+        "versionMessages": {
+          "Memory created": "Memory created",
+          "Memory updated": "Memory updated",
+          "Memory locked": "Memory locked",
+          "Memory unlocked": "Memory unlocked",
+          "Memory restored": "Memory restored to previous version"
+        }
+      }
+    }
+  },
+  "scene": {
+    "eyebrow": "3D scene walkthrough",
+    "loading": "Loading scene…",
+    "lead": "Walk through this reconstructed memory, find hidden fragments, watch the drift engine subtly shift air and color temperature.",
+    "metrics": {
+      "objects": "Objects",
+      "fragments": "Fragments",
+      "drift": "Drift"
+    },
+    "hud": {
+      "reconstructing": "Reconstructing scene…",
+      "lightingSuffix": "lighting",
+      "terrainSuffix": "terrain",
+      "objects": "{count} objects",
+      "fragments": "{count} fragments",
+      "saturation": "{pct}% saturation"
+    },
+    "errorTitle": "Scene unavailable",
+    "loadError": "Unable to load memory scene",
+    "reconstructError": "Scene reconstruction is unavailable",
+    "environments": {
+      "outdoor_courtyard": "Outdoor courtyard",
+      "snowy_landscape": "Snowy landscape",
+      "night_courtyard": "Night courtyard",
+      "rainy_street": "Rainy street",
+      "flower_garden": "Flower garden",
+      "autumn_path": "Autumn path"
+    },
+    "lighting": {
+      "warm_sunset": "Warm sunset",
+      "diffuse_winter": "Diffuse winter",
+      "moonlight": "Moonlight",
+      "overcast": "Overcast",
+      "morning_sun": "Morning sun",
+      "golden_hour": "Golden hour",
+      "ambient": "Ambient"
+    },
+    "terrain": {
+      "flat": "Flat ground",
+      "snow": "Snow",
+      "wet": "Wet ground",
+      "grass": "Grass",
+      "leaves": "Leaves",
+      "terrain": "Terrain"
     }
   },
   "resonance": {
@@ -350,6 +494,22 @@
     "space": {
       "title": "Shared resonance space",
       "placeNote": "Place note"
+    },
+    "beacon": {
+      "moods": {
+        "warm": "Warm",
+        "joyful": "Joyful",
+        "melancholic": "Melancholic",
+        "contemplative": "Contemplative",
+        "grateful": "Grateful"
+      }
+    },
+    "noteComposer": {
+      "title": "Leave a note",
+      "subtitle": "Attach a brief thought to the current resonance space.",
+      "placeholder": "What do you feel in this space?",
+      "submit": "Place note",
+      "cancel": "Cancel"
     }
   },
   "profile": {
@@ -387,7 +547,9 @@
       "themeSubtitle": "Personalize your profile settings. Custom wallpapers appear as your conversational backdrop!",
       "presetsLabel": "Presets Library",
       "avatarUrlLabel": "Avatar URL",
+      "avatarUrlPlaceholder": "HTTP(S) link to avatar image",
       "bgUrlLabel": "Chat Wallpaper URL",
+      "bgUrlPlaceholder": "HTTP(S) link to wallpaper (WebP/JPG/PNG)",
       "saveThemeBtn": "Save Theme"
     },
     "body": {

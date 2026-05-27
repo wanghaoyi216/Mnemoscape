@@ -82,6 +82,13 @@ interface ChatMessage {
    *  不会再用模板拼接冒充正常回答（Bugfix 2.5）。 */
   upstreamError?: boolean
   errorCode?: string
+  /** 多模态混合检索：本条 assistant 消息使用了视觉前置（Qwen3.5-VL / Kimi-K2.5）
+   *  → 在消息泡里渲染一个"🔍 已分析 N 张图片 · model"小标签。 */
+  visionUsed?: boolean
+  visionModel?: string
+  attachmentCount?: number
+  /** P3-13 动态 plan：'heuristic' 表示硬编码 4 步；'llm' 表示后端基于本次问题动态生成。 */
+  planSource?: 'heuristic' | 'llm'
   createdAt: number
 }
 
@@ -93,6 +100,7 @@ interface ChatConversation {
 }
 
 const CONV_STORAGE_KEY = 'ai_conversations_v1'
+// 仅记录"当前活跃会话 id"，不再用于挂载时恢复；启动后默认开新对话。
 const CONV_ACTIVE_KEY = 'ai_conversation_active_v1'
 
 const { t, locale } = useI18n()
@@ -112,6 +120,112 @@ const panelEl = ref<HTMLElement | null>(null)
 const transcriptEl = ref<HTMLElement | null>(null)
 
 const greetingShown = ref(false)
+
+/* ============ 多模态附件（v2 — hybrid retrieval）============
+ * 用户点📎 → 选/拖图 → asset-service /assets/upload → 拿到 presigned URL
+ * → 推到 pendingAttachments。send() 时把 URLs 注入 SSE body 的 images 字段。
+ * 后端检测到 images 非空 → 先调 Qwen3.5-VL 拿"图片→中文密集描述"，再喂基座 M2.7。 */
+interface PendingAttachment {
+  id: string
+  url: string
+  thumb: string
+  name: string
+  uploading: boolean
+  /** asset-service 拒绝 / 网络失败时记录原因，让用户能感知 */
+  error?: string
+}
+const pendingAttachments = ref<PendingAttachment[]>([])
+const attachmentUploadBusy = ref(false)
+const attachInputEl = ref<HTMLInputElement | null>(null)
+const ATTACH_MAX_MB = 8
+const ATTACH_ACCEPT = 'image/jpeg,image/png,image/webp,image/gif'
+const ATTACH_ALLOWED = ['image/jpeg', 'image/png', 'image/webp', 'image/gif']
+/** AI 球目前只支持图片附件；后续接 Whisper / Gemini Audio 时再开 audio/video */
+const ATTACH_MAX_COUNT = 4
+
+function pickAttachment() {
+  if (streaming.value) return
+  if (pendingAttachments.value.length >= ATTACH_MAX_COUNT) return
+  attachInputEl.value?.click()
+}
+
+async function onAttachmentChange(e: Event) {
+  const target = e.target as HTMLInputElement
+  const files = Array.from(target.files || [])
+  target.value = ''
+  for (const f of files) {
+    if (pendingAttachments.value.length >= ATTACH_MAX_COUNT) break
+    await uploadAttachment(f)
+  }
+}
+
+async function uploadAttachment(file: File) {
+  if (!ATTACH_ALLOWED.includes(file.type)) {
+    pendingAttachments.value.push({
+      id: shortId(),
+      url: '',
+      thumb: '',
+      name: file.name,
+      uploading: false,
+      error: locale.value === 'zh-CN' ? '仅支持 JPEG/PNG/WebP/GIF' : 'JPEG/PNG/WebP/GIF only',
+    })
+    return
+  }
+  if (file.size > ATTACH_MAX_MB * 1024 * 1024) {
+    pendingAttachments.value.push({
+      id: shortId(),
+      url: '',
+      thumb: '',
+      name: file.name,
+      uploading: false,
+      error: locale.value === 'zh-CN' ? `文件超过 ${ATTACH_MAX_MB} MB` : `> ${ATTACH_MAX_MB} MB`,
+    })
+    return
+  }
+
+  // 临时本地预览（blob URL）→ 上传成功后替换为 presigned URL
+  const localPreview = URL.createObjectURL(file)
+  const item: PendingAttachment = reactive<PendingAttachment>({
+    id: shortId(),
+    url: '',
+    thumb: localPreview,
+    name: file.name,
+    uploading: true,
+  })
+  pendingAttachments.value.push(item)
+  attachmentUploadBusy.value = true
+
+  try {
+    const fd = new FormData()
+    fd.append('file', file)
+    const { data } = await client.post('/assets/upload', fd, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    })
+    const url: string | undefined = data?.data?.url
+    if (!url) throw new Error('No url returned')
+    item.url = url
+    item.uploading = false
+  } catch (e: any) {
+    item.uploading = false
+    item.error = locale.value === 'zh-CN' ? '上传失败' : 'Upload failed'
+  } finally {
+    // 至少有一个仍在上传则保持 busy
+    attachmentUploadBusy.value = pendingAttachments.value.some((a) => a.uploading)
+  }
+}
+
+function removeAttachment(id: string) {
+  const idx = pendingAttachments.value.findIndex((a) => a.id === id)
+  if (idx === -1) return
+  // ⚠️ 不 revokeObjectURL：blob URL 可能被已发送的用户消息泡复用作缩略图。
+  //    内存代价上限是 ATTACH_MAX_COUNT × ATTACH_MAX_MB ≈ 32MB，浏览器关页时自动回收。
+  pendingAttachments.value.splice(idx, 1)
+}
+
+function clearAttachments() {
+  // 同上：不 revoke，让历史消息泡能继续展示缩略图。
+  pendingAttachments.value = []
+}
 
 const activeConv = computed<ChatConversation | null>(() =>
   conversations.value.find((c) => c.id === activeConvId.value) || null
@@ -148,13 +262,19 @@ function loadConversations() {
       if (Array.isArray(parsed)) conversations.value = parsed
     }
   } catch { /* ignore */ }
-  const active = localStorage.getItem(CONV_ACTIVE_KEY)
-  if (active && conversations.value.some((c) => c.id === active)) {
-    activeConvId.value = active
-  } else if (conversations.value.length > 0) {
-    activeConvId.value = conversations.value[0].id
+
+  // 启动 / 登录后默认开启一段新对话（旧对话保留在历史里可切回）。
+  // 例外：如果上一条会话本身就是空白新对话（没有任何用户消息），直接复用，
+  //       避免每次刷新都堆出一堆空白 "New chat" 把历史撑爆。
+  const lastConv = conversations.value[0]
+  const lastIsEmpty = !!lastConv && !lastConv.messages.some((m) => m.role === 'user')
+  if (lastIsEmpty) {
+    activeConvId.value = lastConv.id
+    greetingShown.value = lastConv.messages.length > 0
+    persistConversations()
   } else {
-    startNewChat(false)
+    // startNewChat 会 unshift 进 conversations 顶端并设置 activeConvId
+    startNewChat(true)
   }
 }
 
@@ -384,7 +504,7 @@ function buildMemoryDigest(): Array<{
  *  以前那个 "失败就静默切到 simulateStreaming 模板" 的兜底已经删掉 —
  *  Bugfix 2.5 要求前端在上游 NVIDIA / MiniMax 不可用时显示明确错误，
  *  不能再用本地模板冒充 AI 回答。 */
-async function streamFromBackend(reply: ChatMessage, question: string): Promise<StreamResult> {
+async function streamFromBackend(reply: ChatMessage, question: string, images?: string[]): Promise<StreamResult> {
   const token = authStore.token
   if (!token) return { ok: false, upstreamError: false, errorCode: 'NO_AUTH' }
 
@@ -410,6 +530,8 @@ async function streamFromBackend(reply: ChatMessage, question: string): Promise<
         question,
         context: buildMemoryDigest(),
         locale: locale.value,
+        // 多模态混合检索：非空时后端会先过一遍视觉模型再喂基座
+        ...(images && images.length ? { images } : {}),
       }),
       signal: ctrl.signal,
     })
@@ -457,6 +579,27 @@ async function streamFromBackend(reply: ChatMessage, question: string): Promise<
               reply.plan = m.plan.map((label: string) => ({
                 id: shortId(), label, status: 'pending' as const,
               }))
+            }
+            // 多模态混合检索：把 visionUsed 标记记入 reply，UI 据此渲染"🔍 已分析 N 张图片"
+            if (m.vision_used) {
+              reply.visionUsed = true
+              reply.visionModel = m.vision_model
+              reply.attachmentCount = m.attachment_count
+            }
+          } catch { /* ignore parse */ }
+        } else if (evt === 'plan_update') {
+          // P3-13 动态 plan：后端 1-3s 内异步生成的 LLM plan，覆盖之前 meta 帧里的硬编码 plan。
+          // 保留已经完成（done）的步骤状态，新步骤都设为 pending。
+          try {
+            const u = JSON.parse(payload)
+            if (Array.isArray(u.plan) && u.plan.length) {
+              const doneCount = (reply.plan || []).filter((s) => s.status === 'done').length
+              reply.plan = u.plan.map((label: string, idx: number) => ({
+                id: shortId(),
+                label,
+                status: idx < doneCount ? 'done' as const : 'pending' as const,
+              }))
+              reply.planSource = u.source || 'llm'
             }
           } catch { /* ignore parse */ }
         } else if (evt === 'tool_start') {
@@ -538,6 +681,33 @@ function safeJsonParse(s: string): string {
   try { return JSON.parse(s) } catch { return s }
 }
 
+/** 图片加载失败兜底：把 img 隐藏，让父 .ai-attach 的渐变占位裸出来，
+ *  同时在 alt 区域显示。常见触发：blob URL 已 revoke、MinIO 内网不可达。 */
+function onAttachImgError(ev: Event) {
+  const el = ev.target as HTMLImageElement | null
+  if (!el) return
+  el.style.display = 'none'
+  // 给父节点加一个 class，让 CSS 露出兜底文案
+  el.parentElement?.classList.add('ai-attach--broken')
+}
+
+/** 把 model id 简化成 "厂商/末段"。例：
+ *   meta/llama-3.2-11b-vision-instruct → llama-3.2-11b
+ *   qwen/qwen3.5-397b-a17b              → qwen3.5
+ *   moonshotai/kimi-k2.5                → kimi-k2.5
+ *  让 vision 胶囊在窄消息泡里也不溢出。 */
+function shortVisionModel(id: string | undefined): string {
+  if (!id) return ''
+  const tail = id.includes('/') ? id.split('/').pop()! : id
+  // 去掉 "-instruct" / "-vision-instruct" 等后缀，截 5 段以内
+  const cleaned = tail
+    .replace(/-vision-instruct$/i, '')
+    .replace(/-instruct$/i, '')
+    .replace(/-it$/i, '')
+  // 再做一次安全长度限制，避免极长 model id
+  return cleaned.length > 22 ? cleaned.slice(0, 22) + '…' : cleaned
+}
+
 /** streamFromBackend 的结果。
  *  - ok=true   ：成功收到至少一个 token，正常完成。
  *  - ok=false  ：连接 / 鉴权 / 网关层失败（无法建立 SSE），由调用方决定文案。
@@ -553,9 +723,29 @@ interface StreamResult {
 async function send() {
   const text = inputText.value.trim()
   if (!text || streaming.value) return
+  // 等待所有上传完成（用户已点 send 但还有图在传）
+  if (attachmentUploadBusy.value) return
+
+  // 把已上传成功的图片信息收集起来：
+  //  - url:   asset-service 返回的 MinIO presigned URL → 发给后端，让 ai-service / vision 用
+  //  - thumb: 本地 blob URL → 用户消息泡里显示，永远可见（不依赖网络），
+  //           因为浏览器无法直接访问 Tailscale 内网的 MinIO。
+  const ready = pendingAttachments.value
+    .filter((a) => !a.error && !a.uploading && a.url)
+  const readyImages = ready.map((a) => a.url)
+  // user-bubble 缩略图候选：拷贝一份 thumb / url，避免之后 clearAttachments revoke 影响显示
+  const userBubbleAttachments = ready.map((a) => ({
+    kind: 'image' as const,
+    src: a.thumb || a.url,
+  }))
 
   inputText.value = ''
-  appendMessage({ role: 'user', text })
+  // 用户消息泡里附带显示已上传的缩略图（便于追溯）
+  appendMessage({
+    role: 'user',
+    text,
+    attachments: userBubbleAttachments.length ? userBubbleAttachments : undefined,
+  })
 
   const intent = classifyIntent(text)
   const reply = appendMessage({
@@ -579,7 +769,7 @@ async function send() {
   try {
     // 真后端 SSE — 失败时 NOT silently fall back to a mock template
     // (Bugfix 2.5: 上游不可用必须以明确文案告知用户, 而非伪装成正常回答)
-    const result = await streamFromBackend(reply, text)
+    const result = await streamFromBackend(reply, text, readyImages.length ? readyImages : undefined)
     if (!result.ok) {
       const zh = locale.value === 'zh-CN'
       // 抹掉之前部分写入的 text；以错误卡片替代
@@ -610,6 +800,8 @@ async function send() {
     reply.streaming = false
     if (activeConv.value) activeConv.value.updatedAt = Date.now()
     persistConversations()
+    // 发送完成后清空待发附件队列；用户消息泡里仍保留缩略图记录
+    clearAttachments()
   }
 }
 
@@ -649,9 +841,9 @@ async function discoverMascotAsset() {
     const resp = await client.get('/assets/static/resources')
     const files: Array<{ name: string; path: string; type: string }> = resp.data?.data || []
     const isMascot = (n: string) => /mascot|envoy|star\-?envoy|ai-?orb|ai-?mascot|spirit/i.test(n)
-    // 优先 GIF，其次 SVG/PNG/WebP
+    // ⚠️ 只接受文件名命中"吉祥物"约定的资源；以前 fallback 到"任意一个 GIF"，
+    //    会把用户上传的随机封面（紫色球之类）当吉祥物盖在 conic 彩虹球之上 → 球瞬间变实心紫
     const gif = files.find((f) => f.type === 'gif' && isMascot(f.name))
-              || files.find((f) => f.type === 'gif')
     const icon = files.find((f) => (f.type === 'icon' || f.type === 'photo') && isMascot(f.name))
     const chosen = gif || icon
     if (chosen) {
@@ -974,6 +1166,18 @@ shallowRef([images.goldenAfternoon.src, images.memoryCorona.src, images.resonanc
                   </div>
                 </div>
 
+                <!-- 多模态视觉前置标签：本条 assistant 回复使用了 vision 预读 -->
+                <div v-if="m.role === 'assistant' && m.visionUsed" class="ai-vision-badge" role="note" :title="m.visionModel">
+                  <svg viewBox="0 0 24 24" width="12" height="12" fill="none" aria-hidden="true">
+                    <circle cx="12" cy="12" r="3.5" stroke="currentColor" stroke-width="1.6" />
+                    <path d="M3 12s3-7 9-7 9 7 9 7-3 7-9 7-9-7-9-7z" stroke="currentColor" stroke-width="1.4" />
+                  </svg>
+                  <span>{{ locale === 'zh-CN'
+                    ? `已分析 ${m.attachmentCount || 0} 张图片`
+                    : `Analyzed ${m.attachmentCount || 0} image${(m.attachmentCount || 0) === 1 ? '' : 's'}` }}</span>
+                  <span v-if="m.visionModel" class="ai-vision-badge__model">· {{ shortVisionModel(m.visionModel) }}</span>
+                </div>
+
                 <!-- Streamed text -->
                 <p v-if="m.text" class="ai-msg__text">
                   <template v-for="(line, idx) in m.text.split('\n')" :key="idx">
@@ -985,7 +1189,13 @@ shallowRef([images.goldenAfternoon.src, images.memoryCorona.src, images.resonanc
                 <!-- Multimodal attachments -->
                 <div v-if="m.attachments && m.attachments.length" class="ai-attachments">
                   <a v-for="(a, idx) in m.attachments" :key="idx" class="ai-attach" :href="a.src" target="_blank" rel="noopener">
-                    <img v-if="a.kind === 'image'" :src="a.src" :alt="a.caption || ''" />
+                    <img
+                      v-if="a.kind === 'image'"
+                      :src="a.src"
+                      :alt="a.caption || (locale === 'zh-CN' ? '图片附件' : 'image attachment')"
+                      loading="lazy"
+                      @error="(e) => onAttachImgError(e)"
+                    />
                     <span class="ai-attach__caption">{{ a.caption }}</span>
                   </a>
                 </div>
@@ -1011,11 +1221,63 @@ shallowRef([images.goldenAfternoon.src, images.memoryCorona.src, images.resonanc
             </button>
           </div>
 
+          <!-- 多模态附件队列：已选 / 上传中 / 失败 状态 -->
+          <div v-if="pendingAttachments.length" class="ai-attach-queue" role="list">
+            <div
+              v-for="a in pendingAttachments"
+              :key="a.id"
+              class="ai-attach-chip"
+              :class="{
+                'ai-attach-chip--uploading': a.uploading,
+                'ai-attach-chip--error': a.error,
+              }"
+              role="listitem"
+              :title="a.error || a.name"
+            >
+              <img v-if="a.thumb" :src="a.thumb" :alt="a.name" />
+              <span v-else class="ai-attach-chip__file">📄</span>
+              <span class="ai-attach-chip__name">{{ a.name }}</span>
+              <span v-if="a.uploading" class="ai-attach-chip__spin" aria-hidden="true"></span>
+              <span v-else-if="a.error" class="ai-attach-chip__err" aria-hidden="true">!</span>
+              <button
+                type="button"
+                class="ai-attach-chip__close"
+                :aria-label="locale === 'zh-CN' ? '移除附件' : 'Remove attachment'"
+                @click="removeAttachment(a.id)"
+              >×</button>
+            </div>
+          </div>
+
           <div class="ai-input" :class="{ 'ai-input--active': streaming || waiting }">
             <span class="ai-input__taiji" aria-hidden="true">
               <span class="ai-input__fish ai-input__fish--yang" aria-hidden="true"></span>
               <span class="ai-input__fish ai-input__fish--yin" aria-hidden="true"></span>
             </span>
+
+            <!-- 📎 附件按钮：图片/GIF，最多 4 张 -->
+            <button
+              type="button"
+              class="ai-attach-btn"
+              :disabled="streaming || pendingAttachments.length >= ATTACH_MAX_COUNT"
+              :title="locale === 'zh-CN'
+                ? `添加图片附件（最多 ${ATTACH_MAX_COUNT} 张，将由视觉模型预读）`
+                : `Attach images (up to ${ATTACH_MAX_COUNT}, processed by vision model)`"
+              :aria-label="locale === 'zh-CN' ? '添加附件' : 'Attach files'"
+              @click="pickAttachment"
+            >
+              <svg viewBox="0 0 24 24" width="16" height="16" fill="none" aria-hidden="true">
+                <path d="m21 12-8.5 8.5a5 5 0 1 1-7-7L13.5 5a3.5 3.5 0 0 1 5 5L10 19" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
+              </svg>
+            </button>
+            <input
+              ref="attachInputEl"
+              type="file"
+              :accept="ATTACH_ACCEPT"
+              multiple
+              hidden
+              @change="onAttachmentChange"
+            />
+
             <textarea
               v-model="inputText"
               class="ai-input__field"
@@ -1024,7 +1286,12 @@ shallowRef([images.goldenAfternoon.src, images.memoryCorona.src, images.resonanc
               :disabled="streaming"
               @keydown="onKeydown"
             ></textarea>
-            <button class="ai-send" type="button" :disabled="streaming || !inputText.trim()" @click="send">
+            <button
+              class="ai-send"
+              type="button"
+              :disabled="streaming || attachmentUploadBusy || !inputText.trim()"
+              @click="send"
+            >
               <svg viewBox="0 0 24 24" width="18" height="18" fill="none">
                 <path d="M5 12l14-7-5 14-3-6-6-1z" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" />
               </svg>
@@ -1077,10 +1344,12 @@ shallowRef([images.goldenAfternoon.src, images.memoryCorona.src, images.resonanc
       #58c4ff 315deg,
       #5ee5d9 360deg);
   background-blend-mode: screen, normal;
+  /* 外晕从"紫色 50px"换成中性"青+金"双层，避免核心被紫色外晕回染 */
   box-shadow:
     0 14px 40px rgba(94, 229, 217, 0.42),
     0 0 0 1px rgba(255, 255, 255, 0.18) inset,
-    0 0 50px rgba(192, 132, 252, 0.45);
+    0 0 36px rgba(94, 229, 217, 0.32),
+    0 0 60px rgba(255, 215, 106, 0.18);
   animation: orbBreath 4s ease-in-out infinite, orbColorSpin 9s linear infinite;
   display: grid;
   place-items: center;
@@ -1090,8 +1359,20 @@ shallowRef([images.goldenAfternoon.src, images.memoryCorona.src, images.resonanc
 .ai-orb:hover { transform: translateY(-3px) scale(1.04); }
 
 @keyframes orbBreath {
-  0%, 100% { box-shadow: 0 14px 40px rgba(94,229,217,0.42), 0 0 0 1px rgba(255,255,255,0.18) inset, 0 0 50px rgba(192,132,252,0.45); }
-  50%      { box-shadow: 0 18px 56px rgba(94,229,217,0.65), 0 0 0 1px rgba(255,255,255,0.28) inset, 0 0 80px rgba(255,108,182,0.55); }
+  0%, 100% {
+    box-shadow:
+      0 14px 40px rgba(94,229,217,0.42),
+      0 0 0 1px rgba(255,255,255,0.18) inset,
+      0 0 36px rgba(94,229,217,0.32),
+      0 0 60px rgba(255,215,106,0.18);
+  }
+  50% {
+    box-shadow:
+      0 18px 56px rgba(94,229,217,0.6),
+      0 0 0 1px rgba(255,255,255,0.28) inset,
+      0 0 56px rgba(94,229,217,0.5),
+      0 0 88px rgba(255,215,106,0.32);
+  }
 }
 @keyframes orbColorSpin {
   from { --orb-rot: 0deg; }
@@ -1105,11 +1386,15 @@ shallowRef([images.goldenAfternoon.src, images.memoryCorona.src, images.resonanc
 
 .ai-orb__core {
   position: absolute;
-  inset: 18px;
+  /* inset 从 18px → 26px，缩小白色高光占比，把更多 conic 彩虹露出来 */
+  inset: 26px;
   border-radius: 50%;
-  background: radial-gradient(circle, #ffffff 0%, rgba(180, 220, 255, 0.6) 35%, transparent 70%);
-  filter: blur(4px);
-  opacity: 0.8;
+  /* 高光本身改为冷白色 + overlay 混合，让它对下层是"提亮"而不是"覆盖" */
+  background: radial-gradient(circle at 35% 30%, rgba(255,255,255,0.95) 0%, rgba(190,225,255,0.4) 45%, transparent 75%);
+  filter: blur(3px);
+  opacity: 0.35;
+  mix-blend-mode: overlay;
+  pointer-events: none;
 }
 
 /* 若 asset-service 提供 GIF mascot，盖在最上层 */
@@ -1545,9 +1830,30 @@ shallowRef([images.goldenAfternoon.src, images.memoryCorona.src, images.resonanc
   border-radius: 10px;
   overflow: hidden;
   transition: transform 240ms ease, border-color 200ms ease;
+  /* 占位渐变：图片加载失败 / blob 失效时仍能看到一个有形状的卡片，
+   *  而不是完全透明。 */
+  background-image: linear-gradient(135deg, rgba(54,216,180,0.08), rgba(192,132,252,0.10));
 }
 .ai-attach:hover { transform: translateY(-2px); border-color: rgba(54,216,180,0.45); }
-.ai-attach img { width: 100%; height: 88px; object-fit: cover; display: block; }
+.ai-attach img {
+  width: 100%;
+  height: 88px;
+  object-fit: cover;
+  display: block;
+  background: rgba(8,10,14,0.55);
+}
+/* 图片加载失败兜底：用 ::before 显示一个图标 + 文案，避免容器纯透明 */
+.ai-attach--broken {
+  min-height: 88px;
+  display: grid;
+  place-items: center;
+  position: relative;
+}
+.ai-attach--broken::before {
+  content: '🖼️';
+  font-size: 1.4rem;
+  opacity: 0.7;
+}
 .ai-attach__caption {
   font-size: 0.7rem;
   padding: 6px 8px;
@@ -1694,6 +2000,139 @@ shallowRef([images.goldenAfternoon.src, images.memoryCorona.src, images.resonanc
 }
 .ai-send:hover:not(:disabled) { filter: brightness(1.08); transform: translateY(-1px); }
 .ai-send:disabled { opacity: 0.55; cursor: not-allowed; }
+
+/* ============ 多模态附件队列 ============ */
+.ai-attach-btn {
+  display: inline-grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  margin-right: 4px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid var(--border, rgba(255, 255, 255, 0.1));
+  border-radius: 8px;
+  color: var(--text-soft, rgba(255, 255, 255, 0.7));
+  cursor: pointer;
+  transition: all 160ms ease;
+  flex-shrink: 0;
+}
+.ai-attach-btn:hover:not(:disabled) {
+  border-color: rgba(54, 216, 180, 0.55);
+  color: #36d8b4;
+  background: rgba(54, 216, 180, 0.08);
+}
+.ai-attach-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+
+.ai-attach-queue {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 0 14px 6px;
+}
+.ai-attach-chip {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 22px 4px 4px;
+  background: rgba(14, 17, 22, 0.65);
+  border: 1px solid var(--border, rgba(255, 255, 255, 0.1));
+  border-radius: 8px;
+  font-size: 0.72rem;
+  color: var(--text-soft, rgba(255, 255, 255, 0.78));
+  max-width: 180px;
+}
+.ai-attach-chip img {
+  width: 28px;
+  height: 28px;
+  object-fit: cover;
+  border-radius: 5px;
+  flex-shrink: 0;
+}
+.ai-attach-chip__file { font-size: 1.1rem; padding: 0 4px; }
+.ai-attach-chip__name {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 110px;
+}
+.ai-attach-chip__close {
+  position: absolute;
+  top: 50%;
+  right: 4px;
+  transform: translateY(-50%);
+  width: 16px;
+  height: 16px;
+  border: none;
+  background: transparent;
+  color: var(--text-muted, rgba(255, 255, 255, 0.5));
+  cursor: pointer;
+  font-size: 0.96rem;
+  line-height: 1;
+  border-radius: 50%;
+  transition: all 160ms ease;
+}
+.ai-attach-chip__close:hover {
+  background: rgba(248, 113, 113, 0.18);
+  color: #f87171;
+}
+.ai-attach-chip__spin {
+  width: 12px;
+  height: 12px;
+  border: 2px solid rgba(54, 216, 180, 0.25);
+  border-top-color: #36d8b4;
+  border-radius: 50%;
+  animation: ai-attach-spin 0.7s linear infinite;
+  flex-shrink: 0;
+}
+@keyframes ai-attach-spin { to { transform: rotate(360deg); } }
+.ai-attach-chip--uploading { border-color: rgba(54, 216, 180, 0.45); }
+.ai-attach-chip--error {
+  border-color: rgba(248, 113, 113, 0.55);
+  background: rgba(248, 113, 113, 0.08);
+}
+.ai-attach-chip__err {
+  display: inline-grid;
+  place-items: center;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: #f87171;
+  color: #1a0808;
+  font-size: 0.7rem;
+  font-weight: 800;
+  flex-shrink: 0;
+}
+
+/* 多模态视觉前置标签：贴在 assistant 消息上方 */
+.ai-vision-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px 3px 8px;
+  margin: 0 0 8px;
+  font-size: 0.7rem;
+  color: #052017;
+  background: linear-gradient(135deg, #c084fc, #6cc6ff);
+  border-radius: 999px;
+  /* 限制最大宽度并让超长 model id 省略；外层泡再多层也撑不爆 */
+  max-width: 100%;
+  overflow: hidden;
+  letter-spacing: 0.02em;
+  box-shadow: 0 2px 8px rgba(192, 132, 252, 0.28);
+}
+.ai-vision-badge svg { color: #052017; flex-shrink: 0; }
+.ai-vision-badge > span:not(.ai-vision-badge__model) { flex-shrink: 0; }
+.ai-vision-badge__model {
+  font-family: var(--font-mono, monospace);
+  font-size: 0.65rem;
+  opacity: 0.85;
+  /* model id 可能很长（如 meta/llama-3.2-90b-vision-instruct），单行省略 */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
 
 /* ============ 进出场动效 ============ */
 .dock-panel-enter-active, .dock-panel-leave-active {

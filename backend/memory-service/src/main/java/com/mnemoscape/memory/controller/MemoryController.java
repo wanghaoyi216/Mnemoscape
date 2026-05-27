@@ -25,9 +25,12 @@ import java.util.stream.Collectors;
 @RequestMapping("/api/v1/memories")
 public class MemoryController {
     private final MemoryService memoryService;
+    private final com.mnemoscape.memory.repository.MemoryRepository memoryRepository;
 
-    public MemoryController(MemoryService memoryService) {
+    public MemoryController(MemoryService memoryService,
+                            com.mnemoscape.memory.repository.MemoryRepository memoryRepository) {
         this.memoryService = memoryService;
+        this.memoryRepository = memoryRepository;
     }
 
     @PostMapping
@@ -125,6 +128,42 @@ public class MemoryController {
                 .map(MemoryFragmentResponse::fromEntity)
                 .collect(Collectors.toList());
         return ResponseEntity.ok(ApiResponse.success(fragments));
+    }
+
+    /**
+     * 重建场景：删除现有 fragments，重新调 ai-service 生成 grounded 内容。
+     * 用户在记忆详情页一键触发，让历史"假" fragment（旧规则版套模板）刷成
+     * 紧扣描述的真实碎片。
+     */
+    @PostMapping("/{id}/regenerate-scene")
+    public ResponseEntity<ApiResponse<MemoryResponse>> regenerateScene(@PathVariable String id,
+                                                                       HttpServletRequest httpReq) {
+        String userId = RequestContext.requireUserId(httpReq);
+        return ResponseEntity.ok(ApiResponse.success(MemoryResponse.fromEntity(
+                memoryService.regenerateScene(id, userId))));
+    }
+
+    /**
+     * 跨用户公共记忆池（专供 resonance-service 真实化检索；非前端直调）。
+     *
+     * <p>返回他人 PRIVACY_LEVEL = PUBLIC 的最近 N 条记忆，排除调用方自己。
+     * 不脱敏 ownerId / title / description —— 这是 PUBLIC 设计应有的语义；
+     * 真正面向前端的脱敏由 atlas/others 端点专门负责。
+     *
+     * <p>权限：要求登录（任何已认证用户都能拉公共池），通过 X-User-Id 取 caller。
+     */
+    @GetMapping("/public-pool")
+    public ResponseEntity<ApiResponse<List<MemoryResponse>>> publicPool(
+            @RequestParam(defaultValue = "200") int limit,
+            HttpServletRequest httpReq) {
+        String userId = RequestContext.requireUserId(httpReq);
+        int safeLimit = Math.max(10, Math.min(limit, 500));
+        List<Memory> rows = memoryRepository.findPublicPoolExcludingUser(
+                userId, org.springframework.data.domain.PageRequest.of(0, safeLimit));
+        List<MemoryResponse> items = rows.stream()
+                .map(MemoryResponse::fromEntity)
+                .collect(Collectors.toList());
+        return ResponseEntity.ok(ApiResponse.success(items));
     }
 
     @PostMapping("/fragments/{fragmentId}/discover")

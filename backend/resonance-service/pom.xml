@@ -42,6 +42,18 @@
             <groupId>com.alibaba.cloud</groupId>
             <artifactId>spring-cloud-starter-alibaba-nacos-discovery</artifactId>
         </dependency>
+        <!-- OpenFeign：让 resonance-service 调 memory-service 拉跨用户公共记忆池，
+             给真实化版的 searchResonances 提供数据源（取代写死的 mock-memory-1/2/3）。 -->
+        <dependency>
+            <groupId>org.springframework.cloud</groupId>
+            <artifactId>spring-cloud-starter-openfeign</artifactId>
+        </dependency>
+        <!-- Spring Cloud LoadBalancer：Feign 通过 Nacos 解析逻辑服务名（如 memory-service）
+             必须装它，否则启动期 FeignClientFactoryBean 会抛 NPE。 -->
+        <dependency>
+            <groupId>org.springframework.cloud</groupId>
+            <artifactId>spring-cloud-starter-loadbalancer</artifactId>
+        </dependency>
     </dependencies>
 
     <build>

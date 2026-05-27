@@ -4,37 +4,11 @@ import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useMemoryStore } from '../stores/memory'
 import { images, videos } from '../assets/media-catalog'
-import { useDynamicMedia } from '../composables/useDynamicMedia'
 import LocationPicker from '../components/common/LocationPicker.vue'
+import CoverPickerModal from '../components/common/CoverPickerModal.vue'
 
 const heroBg = images.memoryFoundry.src
 const reconstructingVideo = videos.ebbingHourglass.src
-
-// v1.1：把 MinIO / 本地静态资源池的图也并入封面候选，让用户存进 MinIO 的素材
-// 自动出现在"选择封面"里，不再闲置。
-const dynamicMedia = useDynamicMedia()
-const allCoverOptions = computed(() => {
-  // 内置 media-catalog（首选 — 永远存在）
-  const builtIn = Object.entries(images).map(([k, v]) => ({
-    key: `local:${k}`,
-    src: v.src,
-    thumb: v.thumb || v.src,
-    origin: v.origin,
-    badge: '内置',
-  }))
-  // MinIO + 本地 photo 池
-  const dyn = [
-    ...dynamicMedia.state.photos,
-    ...dynamicMedia.state.gifs,
-  ].slice(0, 40).map((a) => ({
-    key: `dyn:${a.name}`,
-    src: a.url,
-    thumb: a.url,
-    origin: a.name.replace(/\.[^.]+$/, ''),
-    badge: a.url.includes('X-Amz-Signature') ? 'MinIO' : '本地',
-  }))
-  return [...builtIn, ...dyn]
-})
 
 const router = useRouter()
 const store = useMemoryStore()
@@ -50,6 +24,9 @@ const memoryLocation = ref('')
 const privacyLevel = ref('PRIVATE')
 const error = ref('')
 const loading = ref(false)
+
+// 封面选择器对话框：替代旧的"挤在表单里的窄网格"
+const coverPickerOpen = ref(false)
 
 // 地点输入：交给 LocationPicker（国家/省/市 + 浏览器定位 + Nominatim 反查）。
 // 这里不再保留写死的 chip 列表 — 由 LocationPicker.vue 内部管理。
@@ -237,26 +214,46 @@ async function handleSubmit() {
             </div>
           </label>
 
-          <!-- 记忆视觉共鸣封面选择器 -->
+          <!-- 记忆视觉共鸣封面选择器：触发对话框 -->
           <div class="field" style="grid-column: 1 / -1; margin-bottom: 8px;">
-            <span class="field__label">{{ locale === 'zh-CN' ? '选择时空记忆封面艺术' : 'Select Memory Space Art Cover' }}</span>
+            <span class="field__label">{{ t('memory.builder.cover.label') }}</span>
             <p class="subtitle" style="font-size:0.78rem; line-height:1.4; margin-top:2px; margin-bottom:12px;">
-              {{ locale === 'zh-CN' ? '为这片记忆赋予一张时空视觉艺术封面，它将呈现在记忆列表、记忆详情与时光长河中。' : 'Give this memory a cinematic space artwork cover, shown on your lists and timeline.' }}
+              {{ t('memory.builder.cover.subtitle') }}
             </p>
-            <div class="cover-art-gallery">
+            <div class="cover-trigger">
               <button
-                v-for="opt in allCoverOptions"
-                :key="opt.key"
+                v-if="selectedCoverUrl"
                 type="button"
-                :class="['cover-art-item', selectedCoverUrl === opt.src ? 'active' : '']"
-                @click="selectedCoverUrl = opt.src"
-                :title="opt.origin"
+                class="cover-trigger__preview"
+                :title="t('memory.builder.cover.change')"
+                @click="coverPickerOpen = true"
               >
-                <img :src="opt.thumb" :alt="opt.origin" />
-                <span class="cover-art-item__label">{{ opt.origin }}</span>
-                <span class="cover-art-item__badge">{{ opt.badge }}</span>
-                <span class="cover-art-item__active-badge" v-if="selectedCoverUrl === opt.src">✓</span>
+                <img :src="selectedCoverUrl" :alt="t('memory.builder.cover.current')" />
+                <span class="cover-trigger__hover">{{ t('memory.builder.cover.change') }}</span>
               </button>
+              <button
+                v-else
+                type="button"
+                class="cover-trigger__empty"
+                @click="coverPickerOpen = true"
+              >
+                <svg viewBox="0 0 24 24" width="22" height="22" fill="none" aria-hidden="true">
+                  <rect x="3" y="5" width="18" height="14" rx="2" stroke="currentColor" stroke-width="1.6" />
+                  <path d="m3 16 5-5 4 4 3-3 6 6" stroke="currentColor" stroke-width="1.6" stroke-linejoin="round" />
+                  <circle cx="9" cy="10" r="1.2" fill="currentColor" />
+                </svg>
+                <span class="stack" style="gap:2px; align-items:flex-start;">
+                  <strong>{{ t('memory.builder.cover.openPicker') }}</strong>
+                  <span class="help-text" style="margin:0;">{{ t('memory.builder.cover.none') }}</span>
+                </span>
+              </button>
+              <button
+                v-if="selectedCoverUrl"
+                type="button"
+                class="cover-trigger__clear"
+                :title="t('memory.builder.cover.clear')"
+                @click="selectedCoverUrl = ''"
+              >×</button>
             </div>
           </div>
 
@@ -329,6 +326,14 @@ async function handleSubmit() {
         </div>
       </form>
     </div>
+
+    <!-- 封面选择对话框：受控显示 -->
+    <CoverPickerModal
+      :open="coverPickerOpen"
+      :selected-url="selectedCoverUrl"
+      @select="(url) => (selectedCoverUrl = url)"
+      @close="coverPickerOpen = false"
+    />
   </div>
 </template>
 
@@ -422,7 +427,90 @@ async function handleSubmit() {
   gap: 12px;
 }
 
-/* ============== 记忆封面画库 ============== */
+/* ============== 封面选择触发按钮（替代旧网格） ============== */
+.cover-trigger {
+  display: flex;
+  align-items: stretch;
+  gap: 12px;
+}
+
+.cover-trigger__empty {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 16px 18px;
+  background: rgba(14, 17, 22, 0.55);
+  border: 1.5px dashed var(--border);
+  border-radius: var(--radius-md);
+  color: var(--text-soft);
+  cursor: pointer;
+  transition: all 240ms ease;
+  text-align: left;
+}
+.cover-trigger__empty:hover {
+  border-color: var(--border-accent);
+  background: rgba(54, 216, 180, 0.06);
+  color: var(--text);
+}
+.cover-trigger__empty svg { color: var(--accent); flex-shrink: 0; }
+
+.cover-trigger__preview {
+  position: relative;
+  flex: 1;
+  height: 140px;
+  border: 1px solid var(--primary);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  cursor: pointer;
+  padding: 0;
+  background: rgba(14, 17, 22, 0.6);
+  box-shadow: 0 0 14px rgba(54, 216, 180, 0.28);
+  transition: transform 220ms ease, box-shadow 220ms ease;
+}
+.cover-trigger__preview:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(54, 216, 180, 0.4);
+}
+.cover-trigger__preview img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+.cover-trigger__hover {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  background: rgba(2, 6, 23, 0.55);
+  color: var(--text);
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  opacity: 0;
+  transition: opacity 220ms ease;
+}
+.cover-trigger__preview:hover .cover-trigger__hover { opacity: 1; }
+
+.cover-trigger__clear {
+  width: 36px;
+  align-self: stretch;
+  background: rgba(14, 17, 22, 0.55);
+  color: var(--text-muted);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  cursor: pointer;
+  font-size: 1.1rem;
+  transition: all 200ms ease;
+}
+.cover-trigger__clear:hover {
+  border-color: var(--danger, #f87171);
+  color: var(--danger, #f87171);
+}
+
+/* ============== 旧的 cover-art-gallery 网格已下线 ==============
+ * 改用 CoverPickerModal 对话框；下面这段保留以防其他视图复用，
+ * 但 MemoryBuilderView 里已经不再渲染。 */
 .cover-art-gallery {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(110px, 1fr));

@@ -127,4 +127,37 @@ public class FriendController {
         friendshipRepository.findByUserPair(userId, friendId).ifPresent(friendshipRepository::delete);
         return ResponseEntity.ok(ApiResponse.success("Friend removed", null));
     }
+
+    /**
+     * 查询当前用户与另一用户的好友关系状态（轻量探针）。
+     * 用于服务间调用（例如 memory-service 判断 FRIENDS 隐私级别可访问性）。
+     *
+     * <p>响应：{@code {"status": "ACCEPTED" | "PENDING" | "REJECTED" | "NONE", "isFriend": boolean}}
+     * <ul>
+     *   <li>{@code isFriend = true} 当且仅当 status=ACCEPTED</li>
+     *   <li>self-check（otherUserId 等于 caller）→ status=NONE, isFriend=false（让上层语义清晰）</li>
+     * </ul>
+     */
+    @GetMapping("/{otherUserId}/status")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> friendshipStatus(
+            @PathVariable String otherUserId, HttpServletRequest request) {
+        String userId = RequestContext.requireUserId(request);
+        Map<String, Object> body = new java.util.LinkedHashMap<>();
+        if (otherUserId == null || otherUserId.isBlank() || otherUserId.equals(userId)) {
+            body.put("status", "NONE");
+            body.put("isFriend", false);
+            return ResponseEntity.ok(ApiResponse.success(body));
+        }
+        Friendship.FriendshipStatus status = friendshipRepository.findByUserPair(userId, otherUserId)
+                .map(Friendship::getStatus)
+                .orElse(null);
+        if (status == null) {
+            body.put("status", "NONE");
+            body.put("isFriend", false);
+        } else {
+            body.put("status", status.name());
+            body.put("isFriend", status == Friendship.FriendshipStatus.ACCEPTED);
+        }
+        return ResponseEntity.ok(ApiResponse.success(body));
+    }
 }

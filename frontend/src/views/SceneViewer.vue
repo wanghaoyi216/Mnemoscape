@@ -37,11 +37,30 @@ onMounted(async () => {
     await memoryStore.fetchOne(id)
     await memoryStore.fetchDrift(id)
   } catch (e: any) {
-    sceneError.value = e.response?.data?.message || 'Unable to load memory scene'
+    sceneError.value = e.response?.data?.message || t('scene.loadError')
     return
   }
 
-  if (memoryStore.current?.sceneDataUrl) {
+  // 优先用记忆创建期已经 freeze 的 visualData（完整的 SceneReconstructionResponse）
+  // —— 这避免了每次进 SceneViewer 都重跑 /reconstruct 的 30s 等待 + 失败风险，
+  // 且和创建当时 AI 输出保持一致（fragments 来自当时的描述，永远 grounded）。
+  const visualData = memoryStore.current?.visualData
+  if (visualData && typeof visualData === 'string') {
+    try {
+      const parsed = JSON.parse(visualData)
+      const data = normalizeScene(parsed)
+      if (data) {
+        sceneStore.setScene(data)
+      }
+    } catch (e) {
+      console.warn('Failed to parse memory.visualData; will try /reconstruct fallback', e)
+    }
+  }
+
+  // sceneDataUrl 二级兜底（http/https 链接指向预先生成的场景资源）
+  if (!sceneStore.sceneData && memoryStore.current?.sceneDataUrl
+      && (memoryStore.current.sceneDataUrl.startsWith('http')
+          || memoryStore.current.sceneDataUrl.startsWith('/'))) {
     try {
       const response = await fetch(memoryStore.current.sceneDataUrl)
       const data = normalizeScene(await response.json())
@@ -53,11 +72,12 @@ onMounted(async () => {
     }
   }
 
+  // 终极兜底：现场调一次 reconstruct（只在前两条都失败时）
   if (!sceneStore.sceneData && memoryStore.current) {
     try {
       await sceneStore.reconstruct(memoryStore.current.description)
     } catch (e: any) {
-      sceneError.value = e.response?.data?.message || 'Scene reconstruction is unavailable'
+      sceneError.value = e.response?.data?.message || t('scene.reconstructError')
       return
     }
   }
@@ -116,21 +136,27 @@ watch(
     <section class="section-card stack" style="margin-top: 24px; position: relative;">
       <div class="scene-hud">
         <div>
-          <h2 class="section-title">{{ scene?.environment || 'Reconstructing...' }}</h2>
+          <h2 class="section-title">
+            {{ scene?.environment
+              ? t(`scene.environments.${scene.environment}`, scene.environment)
+              : t('scene.hud.reconstructing') }}
+          </h2>
           <p class="subtitle">
-            {{ scene?.lighting?.type || 'ambient' }} lighting ·
-            {{ scene?.terrain?.type || 'terrain' }} terrain
+            {{ t(`scene.lighting.${scene?.lighting?.type || 'ambient'}`, scene?.lighting?.type || 'ambient') }}
+            {{ t('scene.hud.lightingSuffix') }} ·
+            {{ t(`scene.terrain.${scene?.terrain?.type || 'terrain'}`, scene?.terrain?.type || 'terrain') }}
+            {{ t('scene.hud.terrainSuffix') }}
           </p>
         </div>
         <div class="chip-grid">
-          <span class="chip">{{ objectCount }} objects</span>
-          <span class="chip">{{ fragmentCount }} fragments</span>
-          <span class="chip">{{ Math.round((memoryStore.currentDrift?.colorSaturation || 0) * 100) }}% saturation</span>
+          <span class="chip">{{ t('scene.hud.objects', { count: objectCount }) }}</span>
+          <span class="chip">{{ t('scene.hud.fragments', { count: fragmentCount }) }}</span>
+          <span class="chip">{{ t('scene.hud.saturation', { pct: Math.round((memoryStore.currentDrift?.colorSaturation || 0) * 100) }) }}</span>
         </div>
       </div>
 
       <div v-if="sceneError" class="scene-error empty-state" role="alert">
-        <h3 class="empty-state__title">Scene unavailable</h3>
+        <h3 class="empty-state__title">{{ t('scene.errorTitle') }}</h3>
         <p class="empty-state__text">{{ sceneError }}</p>
       </div>
 

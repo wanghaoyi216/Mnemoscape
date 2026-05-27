@@ -161,11 +161,11 @@ onMounted(async () => {
           <span class="field__label">{{ locale === 'zh-CN' ? '链接手动设置' : 'Manual Link Settings' }}</span>
           <label class="field">
             <span class="field__label">{{ locale === 'zh-CN' ? '头像链接' : 'Avatar URL' }}</span>
-            <input v-model="avatarInput" class="input" placeholder="HTTP(S) Link to Avatar" />
+            <input v-model="avatarInput" class="input" :placeholder="t('chat.sidebar.avatarUrlPlaceholder')" />
           </label>
           <label class="field">
             <span class="field__label">{{ locale === 'zh-CN' ? '时空壁纸链接' : 'Chat Wallpaper URL' }}</span>
-            <input v-model="bgInput" class="input" placeholder="HTTP(S) Link to Wallpaper" />
+            <input v-model="bgInput" class="input" :placeholder="t('chat.sidebar.bgUrlPlaceholder')" />
           </label>
           <button type="submit" class="button button--primary" style="margin-top: 8px; min-height: 40px; width: 100%;">
             {{ locale === 'zh-CN' ? '保存自定义设置' : 'Save Custom Settings' }}

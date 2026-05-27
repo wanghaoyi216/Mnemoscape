@@ -492,12 +492,12 @@ function formatBytes(bytes: number) {
  
               <label class="field" style="margin-top: 10px;">
                 <span class="field__label">{{ t('chat.sidebar.avatarUrlLabel') }}</span>
-                <input v-model="newAvatarUrl" class="input" placeholder="HTTP Link to Avatar" />
+                <input v-model="newAvatarUrl" class="input" :placeholder="t('chat.sidebar.avatarUrlPlaceholder')" />
               </label>
  
               <label class="field">
                 <span class="field__label">{{ t('chat.sidebar.bgUrlLabel') }}</span>
-                <input v-model="newBgUrl" class="input" placeholder="HTTP Link to Wallpaper WebP" />
+                <input v-model="newBgUrl" class="input" :placeholder="t('chat.sidebar.bgUrlPlaceholder')" />
               </label>
  
               <button 

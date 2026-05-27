@@ -360,7 +360,8 @@ NVIDIA Integrate 上有真正的多模态聊天模型，比如 `meta/llama-3.2-9
   String model = req.getImages() != null && !req.getImages().isEmpty()
                  ? props.getVisionModel()    // "meta/llama-3.2-90b-vision-instruct"
                  : props.getDefaultModel();  // "minimaxai/minimax-m2.7"
-  ```
+  ``` 
+  
 - Spring AI 1.0.0-M4 支持 `OpenAiChatOptions.builder().model(...)` 在调用时覆写
 
 **优点**：保留 M2.7 优势 + 必要时多模态。

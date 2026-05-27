@@ -20,6 +20,39 @@ public class AiUpstreamProperties {
     private String fallbackMessage =
             "AI 暂时不可用。请确认服务端已注入 NVIDIA_API_KEY 环境变量后重试。";
 
+    /**
+     * 视觉模型 id（OpenAI 兼容 endpoint）。
+     *
+     * <p>选型说明（基于 NVIDIA Integrate /docs/multimodal-apis 页面验证）：
+     * 默认走 {@code meta/llama-3.2-11b-vision-instruct} —— 同步 chat/completions
+     * 端点，实测 ~5s 返回；同族 90B 模型在公网 trial 节点上经常出现
+     * application/octet-stream 协议异常或 40~50s 超时，反而拖累 SSE 体验。
+     * 若 11B 对场景描述精度不够，可通过 {@code NVIDIA_VISION_MODEL} 环境变量
+     * 切换到 90B 或其他视觉模型。
+     *
+     * <p>Llama 3.2 Vision 在 image+text 场景只输出英文 —— 这反而契合本服务的
+     * 「混合检索」架构：视觉模型只负责"看图→文字描述"前置，最终面对用户的是
+     * 基座 M2.7（中文极强），它能把英文描述消化并用中文回复。
+     */
+    private String visionModel = "meta/llama-3.2-11b-vision-instruct";
+
+    /**
+     * 视觉模型主选不可用时的降级（默认 90B Vision）。
+     * 两者都不可用时，最终降级为"用文件名 + URL 注入 prompt"，让基座 M2.7 至少
+     * 知道有附件，不要假装没看见。
+     */
+    private String visionFallbackModel = "meta/llama-3.2-90b-vision-instruct";
+
+    /**
+     * 视觉调用最多接受的图片数量（防滥用 + 防超长 prompt）。
+     */
+    private int visionMaxImages = 4;
+
+    /**
+     * 视觉模型单次调用的硬上限（毫秒）。Vision 模型相对较慢，给得更宽。
+     */
+    private long visionTimeoutMs = 45_000;
+
     public String getPlaceholderKeyPrefix() { return placeholderKeyPrefix; }
     public void setPlaceholderKeyPrefix(String placeholderKeyPrefix) {
         this.placeholderKeyPrefix = placeholderKeyPrefix;
@@ -30,4 +63,16 @@ public class AiUpstreamProperties {
     public void setFallbackMessage(String fallbackMessage) {
         this.fallbackMessage = fallbackMessage;
     }
+    public String getVisionModel() { return visionModel; }
+    public void setVisionModel(String visionModel) { this.visionModel = visionModel; }
+    public String getVisionFallbackModel() { return visionFallbackModel; }
+    public void setVisionFallbackModel(String visionFallbackModel) {
+        this.visionFallbackModel = visionFallbackModel;
+    }
+    public int getVisionMaxImages() { return visionMaxImages; }
+    public void setVisionMaxImages(int visionMaxImages) {
+        this.visionMaxImages = Math.max(1, Math.min(visionMaxImages, 16));
+    }
+    public long getVisionTimeoutMs() { return visionTimeoutMs; }
+    public void setVisionTimeoutMs(long visionTimeoutMs) { this.visionTimeoutMs = visionTimeoutMs; }
 }

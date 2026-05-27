@@ -1,25 +1,29 @@
 <script setup lang="ts">
 import { ref } from 'vue'
+import { useI18n } from 'vue-i18n'
 
 const emit = defineEmits<{ place: [content: string, mood: string]; close: [] }>()
+const { t } = useI18n()
+
 const content = ref('')
 const mood = ref('warm')
 
-const moods = ['warm', 'melancholic', 'joyful', 'contemplative', 'grateful']
+// 5 个 mood 与后端 ResonanceNote 约定一致；显示文案走 resonance.beacon.moods 字典
+const moods = ['warm', 'melancholic', 'joyful', 'contemplative', 'grateful'] as const
 </script>
 
 <template>
   <div class="note-composer-overlay" role="dialog" aria-modal="true" aria-labelledby="note-composer-title">
     <form class="note-composer stack" @submit.prevent="emit('place', content, mood)">
       <div class="stack">
-        <h3 id="note-composer-title" class="section-title">Leave a note</h3>
-        <p class="help-text" style="margin: 0;">Attach a brief thought to the current resonance space.</p>
+        <h3 id="note-composer-title" class="section-title">{{ t('resonance.noteComposer.title') }}</h3>
+        <p class="help-text" style="margin: 0;">{{ t('resonance.noteComposer.subtitle') }}</p>
       </div>
 
       <textarea
         v-model="content"
         class="textarea"
-        placeholder="What do you feel in this space?"
+        :placeholder="t('resonance.noteComposer.placeholder')"
         rows="4"
       ></textarea>
 
@@ -32,13 +36,17 @@ const moods = ['warm', 'melancholic', 'joyful', 'contemplative', 'grateful']
           :class="{ 'button--primary': mood === m }"
           @click="mood = m"
         >
-          {{ m }}
+          {{ t(`resonance.beacon.moods.${m}`, m) }}
         </button>
       </div>
 
       <div class="hero-row" style="margin: 0;">
-        <button class="button button--primary" type="submit" :disabled="!content.trim()">Place note</button>
-        <button class="button button--ghost" type="button" @click="emit('close')">Cancel</button>
+        <button class="button button--primary" type="submit" :disabled="!content.trim()">
+          {{ t('resonance.noteComposer.submit') }}
+        </button>
+        <button class="button button--ghost" type="button" @click="emit('close')">
+          {{ t('resonance.noteComposer.cancel') }}
+        </button>
       </div>
     </form>
   </div>

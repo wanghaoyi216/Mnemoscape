@@ -102,6 +102,13 @@ export const useMemoryStore = defineStore('memory', () => {
     current.value = data.data
   }
 
+  /** 让 AI 重新基于记忆描述生成 grounded scene + fragments。 */
+  async function regenerateScene(id: string) {
+    const { data } = await api.regenerateScene(id)
+    current.value = data.data
+    return data.data
+  }
+
   async function fetchFragments(id: string) {
     const { data } = await api.getFragments(id)
     currentFragments.value = data.data
@@ -117,6 +124,6 @@ export const useMemoryStore = defineStore('memory', () => {
     memories, current, currentDrift, currentVersions, currentFragments, loadingList, loadingDetail,
     error, errorStatus, errorRequestId,
     fetchList, fetchOne, create, update, remove, toggleLock,
-    fetchDrift, fetchVersions, restoreVersion, fetchFragments, discover,
+    fetchDrift, fetchVersions, restoreVersion, regenerateScene, fetchFragments, discover,
   }
 })

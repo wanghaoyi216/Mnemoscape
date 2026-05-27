@@ -14,6 +14,7 @@
  *      时填写地点（如 北京 / 大理 / 东京）」 — 不再让用户看到一张空地图。
  */
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
+import { useI18n } from 'vue-i18n'
 import maplibregl from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import { MapboxOverlay } from '@deck.gl/mapbox'
@@ -25,6 +26,7 @@ import { resolveLevel, shouldTilt } from '../composables/useAtlasZoomLevel'
 import client from '../api/client'
 
 const atlas = useAtlasStore()
+const { t } = useI18n()
 
 /* ============================================================
  * 1) State
@@ -1047,28 +1049,33 @@ function timeMeta(mem: MemoryWithCoords): string {
 
     <!-- v8：空状态也放在右下角，避免遮挡地图主体 -->
     <div v-if="showNoCoordsHint" class="atlas-empty-hint" role="status">
-      <div class="atlas-empty-hint__icon" aria-hidden="true">MAP</div>
+      <div class="atlas-empty-hint__icon" aria-hidden="true">🗺️</div>
       <div class="atlas-empty-hint__body">
-        <p class="atlas-empty-hint__title">这片星图还没有记忆坐标</p>
-        <p class="atlas-empty-hint__sub">
-          请先去「<router-link to="/memories/new" class="atlas-empty-hint__link">创建记忆</router-link>」
-          填写「地点」字段（例如：<b>北京</b> / <b>大理</b> / <b>东京</b>）。
-        </p>
+        <p class="atlas-empty-hint__title">{{ t('atlas.emptyHints.noCoordsTitle') }}</p>
+        <i18n-t keypath="atlas.emptyHints.noCoordsBody" tag="p" class="atlas-empty-hint__sub">
+          <template #link>
+            <router-link to="/memories/new" class="atlas-empty-hint__link">
+              {{ t('atlas.emptyHints.noCoordsLink') }}
+            </router-link>
+          </template>
+        </i18n-t>
         <p class="atlas-empty-hint__sub atlas-empty-hint__sub--small">
-          地图会自动把你的记忆按地点串成时空轨迹。
+          {{ t('atlas.emptyHints.noCoordsFooter') }}
         </p>
       </div>
     </div>
 
     <div v-else-if="showOneCoordHint" class="atlas-empty-hint atlas-empty-hint--soft" role="status">
-      <div class="atlas-empty-hint__icon" aria-hidden="true">FLOW</div>
+      <div class="atlas-empty-hint__icon" aria-hidden="true">🌊</div>
       <div class="atlas-empty-hint__body">
-        <p class="atlas-empty-hint__title">还差一条记忆就能形成时空流光</p>
-        <p class="atlas-empty-hint__sub">
-          目前只有 1 条带坐标的记忆 ——
-          再去「<router-link to="/memories/new" class="atlas-empty-hint__link">创建一条</router-link>」
-          并填上另一个地点，就能看到两点之间的彩色记忆流。
-        </p>
+        <p class="atlas-empty-hint__title">{{ t('atlas.emptyHints.oneCoordTitle') }}</p>
+        <i18n-t keypath="atlas.emptyHints.oneCoordBody" tag="p" class="atlas-empty-hint__sub">
+          <template #link>
+            <router-link to="/memories/new" class="atlas-empty-hint__link">
+              {{ t('atlas.emptyHints.oneCoordLink') }}
+            </router-link>
+          </template>
+        </i18n-t>
       </div>
     </div>
 
@@ -1293,11 +1300,13 @@ function timeMeta(mem: MemoryWithCoords): string {
 
 <style scoped>
 .atlas-root {
+  /* 用 AppHeader 实时发布的 --app-header-h 兜底 88px。这样 1100px 以下 nav wrap
+     成两行（实际 header ~140px）时 atlas 也不会被压住。 */
   position: fixed;
-  top: 64px;
+  top: var(--app-header-h, 88px);
+  bottom: 0;
   left: 0;
   right: 0;
-  bottom: 0;
   background: #050714;
   color: #1c2533;
   overflow: hidden;
@@ -1305,7 +1314,8 @@ function timeMeta(mem: MemoryWithCoords): string {
   z-index: 1;
 }
 @media (max-width: 768px) {
-  .atlas-root { top: 56px; }
+  /* 移动端 fallback：如果 ResizeObserver 还没跑就先用一个小值 */
+  .atlas-root { top: var(--app-header-h, 76px); }
 }
 
 /* v6：星空 canvas — 默认隐藏；只在 globe 模式淡入显示在地图后面 */

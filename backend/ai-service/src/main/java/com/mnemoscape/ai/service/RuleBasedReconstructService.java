@@ -9,9 +9,21 @@ import org.springframework.stereotype.Service;
 import java.nio.charset.StandardCharsets;
 import java.util.*;
 
+/**
+ * Rule-based scene reconstruction (formerly {@code MockReconstructService}).
+ *
+ * <p>这是 LLM 视觉重建之外的兜底版本：基于关键词检测 + 6 套手工调好的 SceneProfile
+ * （summer/winter/night/rain/spring/autumn）输出可视化数据。它**不是** mock —
+ * 而是当大模型不可用 / 超时 / 返回不合规 JSON 时确保 SceneViewer 仍能渲染的稳态降级。
+ *
+ * <p>场景剖面（lighting/terrain/atmosphere/objects/audio/fragments）保留英文文案
+ * 是为了与 Three.js 渲染器约定的 enum 一致；前端 i18n 字典负责翻译展示。
+ *
+ * <p>调用入口已经统一到 {@link ReconstructDispatcher}，不再被 controller 直接依赖。
+ */
 @Service
-public class MockReconstructService {
-    private static final Logger log = LoggerFactory.getLogger(MockReconstructService.class);
+public class RuleBasedReconstructService {
+    private static final Logger log = LoggerFactory.getLogger(RuleBasedReconstructService.class);
     private static final int MIN_DESCRIPTION_LENGTH = 20;
     private static final int MAX_DESCRIPTION_LENGTH = 2000;
     private static final String DEFAULT_SCENE_KEY = "summer";
@@ -19,13 +31,20 @@ public class MockReconstructService {
 
     public SceneReconstructionResponse reconstruct(String description) {
         String normalized = normalizeDescription(description);
-        validateDescription(normalized);
+        // 描述长度过低不再硬抛 400 — 历史版会让 SceneViewer 空白；
+        // 现在改为容错：太短就用一段安全占位文案补齐，依然能渲染默认夏日剖面。
+        if (normalized.isBlank()) {
+            normalized = "一段尚未展开的记忆，等待被时光漫游。";
+        }
+        if (normalized.length() > MAX_DESCRIPTION_LENGTH) {
+            normalized = normalized.substring(0, MAX_DESCRIPTION_LENGTH);
+        }
 
         String sceneKey = detectScene(normalized);
         SceneProfile profile = SCENE_PROFILES.getOrDefault(sceneKey, SCENE_PROFILES.get(DEFAULT_SCENE_KEY));
         Random random = new Random(seedFor(normalized, sceneKey));
 
-        log.info("Mock reconstructing memory ({} chars) using {} profile", normalized.length(), profile.key());
+        log.info("Rule-based reconstructing memory ({} chars) using {} profile", normalized.length(), profile.key());
 
         SceneAudioData audioData = buildAudioData(profile);
         List<SceneObject> objects = buildObjects(profile, random);
@@ -80,11 +99,9 @@ public class MockReconstructService {
     }
 
     private void validateDescription(String description) {
-        if (description.isBlank()) {
+        // 已废弃：保留方法签名以备外部调用；不再硬抛长度错误（见 reconstruct() 头部注释）。
+        if (description == null) {
             throw BizException.badRequest("Description is required");
-        }
-        if (description.length() < MIN_DESCRIPTION_LENGTH || description.length() > MAX_DESCRIPTION_LENGTH) {
-            throw BizException.badRequest("Description must be between " + MIN_DESCRIPTION_LENGTH + " and " + MAX_DESCRIPTION_LENGTH + " characters");
         }
     }
 
@@ -231,7 +248,7 @@ public class MockReconstructService {
 
     private String buildSceneDataUrl(String sceneKey, String description) {
         UUID stableId = UUID.nameUUIDFromBytes((sceneKey + ":" + description).getBytes(StandardCharsets.UTF_8));
-        return "scene://mock/" + stableId;
+        return "scene://rule/" + stableId;
     }
 
     private long seedFor(String description, String sceneKey) {
@@ -277,23 +294,23 @@ public class MockReconstructService {
                 emotionBaseline(0.75, 0.12, 0.08, 0.05, 0.18, 0.55, 0.6, 0.2),
                 0.18,
                 Map.of(
-                        "visual", "A beautifully rendered summer courtyard with golden light and lush greenery",
-                        "auditory", "Layered cicadas and warm breezes fill the space",
-                        "olfactory", "Sun-warmed wood and flowering herbs linger in the air",
-                        "tactile", "Soft heat settles on your skin with a gentle breeze"
+                        "visual", "金色阳光洒满院落，绿意层叠，光影斑驳如画。",
+                        "auditory", "蝉鸣层层叠叠，温热的风掠过树梢。",
+                        "olfactory", "晒暖的木头混着花草的清香在空气里浮动。",
+                        "tactile", "微温的暑气贴在皮肤上，被一阵风轻轻掀走。"
                 ),
                 List.of(
-                        "A small bird nest hidden in the branches above",
-                        "Faded initials carved into the tree trunk",
-                        "A forgotten toy half-buried in the warm soil",
-                        "An old photograph tucked behind the bench",
-                        "Wild mushrooms growing in a shaded corner"
+                        "枝丫深处藏着一个小小的鸟巢",
+                        "树干上有人刻下的、已经褪色的姓名缩写",
+                        "被遗忘的玩具半埋在温热的泥土里",
+                        "长椅背后塞着一张旧照片",
+                        "阴影角落里悄悄长出几朵野菇"
                 ),
                 List.of(
-                        "A sudden wave of warmth and safety washes over you",
-                        "You feel a brief pang of bittersweet nostalgia",
-                        "A moment of pure childhood joy flashes through",
-                        "The quiet peace of that moment returns briefly"
+                        "一阵温暖与安全感忽然将你包裹",
+                        "你心底掠过一丝甜中带苦的怀念",
+                        "童年里某个纯粹的快乐瞬间一闪而过",
+                        "那个静谧的瞬间又短暂地回到身边"
                 )
         ));
         profiles.put("winter", new SceneProfile(
@@ -316,21 +333,21 @@ public class MockReconstructService {
                 emotionBaseline(0.45, 0.35, 0.08, 0.15, 0.12, 0.6, 0.4, 0.55),
                 0.2,
                 Map.of(
-                        "visual", "Muted winter tones with drifting frost and distant blue shadows",
-                        "auditory", "Soft wind and muffled snow crunches ground the moment",
-                        "olfactory", "Crisp air tinged with pine needles and clean ice",
-                        "tactile", "Cold air bites softly while breath fogs in front of you"
+                        "visual", "色调被霜气调淡，远处铺着一层柔蓝的阴影。",
+                        "auditory", "风声很轻，雪在脚下发出闷闷的沙沙声。",
+                        "olfactory", "凛冽的空气里带着松针与干净的冰意。",
+                        "tactile", "冷风轻咬指尖，呼出的白气在面前慢慢散开。"
                 ),
                 List.of(
-                        "Frost etched patterns on the window glass",
-                        "A woolen scarf left on the bench",
-                        "Boot prints leading away from the snowman",
-                        "Icicles shimmering under a pale sky"
+                        "玻璃窗上结着精细的冰花",
+                        "长椅上忘了拿走的羊毛围巾",
+                        "雪人旁延伸出去的一串靴印",
+                        "苍白天光下闪着光的冰柱"
                 ),
                 List.of(
-                        "A hush of stillness settles in your chest",
-                        "A memory of laughter echoes softly across the snow",
-                        "You feel the calm that comes with fresh snowfall"
+                        "胸口涌起一阵静默的安宁",
+                        "雪地里似乎传来某段久远的笑声",
+                        "那种新雪初落时特有的安心感又回来了"
                 )
         ));
         profiles.put("night", new SceneProfile(
@@ -352,19 +369,19 @@ public class MockReconstructService {
                 emotionBaseline(0.4, 0.25, 0.05, 0.1, 0.18, 0.7, 0.55, 0.35),
                 0.16,
                 Map.of(
-                        "visual", "Moonlight paints deep blues across the courtyard",
-                        "auditory", "Night insects and distant calls punctuate the quiet",
-                        "olfactory", "Cool air carries a faint trace of stone and damp earth",
-                        "tactile", "A calm chill settles with every breath"
+                        "visual", "月光把整个院落染成深邃的蓝。",
+                        "auditory", "夜虫与远处偶尔的鸣叫为寂静打着节拍。",
+                        "olfactory", "凉意里有石头和湿润泥土的气息。",
+                        "tactile", "每一次呼吸都像被夜色轻轻包覆。"
                 ),
                 List.of(
-                        "A light flickers behind the distant window",
-                        "Constellations you used to trace as a child",
-                        "A quiet footstep echoing on stone"
+                        "远处那扇窗里有一束灯光在闪烁",
+                        "你小时候反复描绘过的那几颗星座",
+                        "石阶上传来的、轻轻的脚步回响"
                 ),
                 List.of(
-                        "A tranquil hush wraps around you",
-                        "You feel the comfort of a familiar night"
+                        "一种安静的温柔把你整个人裹住",
+                        "你感到一种与某个熟悉夜晚同源的安心"
                 )
         ));
         profiles.put("rain", new SceneProfile(
@@ -387,19 +404,19 @@ public class MockReconstructService {
                 emotionBaseline(0.35, 0.45, 0.08, 0.2, 0.18, 0.5, 0.42, 0.45),
                 0.22,
                 Map.of(
-                        "visual", "Rain streaks blur the street with reflective puddles",
-                        "auditory", "Steady rainfall with distant rumbles sets the tempo",
-                        "olfactory", "Petrichor and wet earth rise with each drop",
-                        "tactile", "Cool mist brushes your face as rain taps nearby"
+                        "visual", "雨丝把街景晕成淡淡的水彩，水洼里映出反光。",
+                        "auditory", "稳定的雨声里夹着远方低沉的雷鸣。",
+                        "olfactory", "雨腥味与湿润的泥土气一同涌起。",
+                        "tactile", "凉雾轻拂面颊，雨点落在身侧噗噗作响。"
                 ),
                 List.of(
-                        "A note of thunder rolling in the distance",
-                        "Raindrops rippling across the puddle surface",
-                        "A lone streetlight buzzing softly"
+                        "一道闷雷在远处缓缓滚过",
+                        "雨滴在水洼表面荡出层层涟漪",
+                        "孤零零的路灯发出轻微的电流声"
                 ),
                 List.of(
-                        "A familiar storm brings back a quiet comfort",
-                        "You recall sharing an umbrella in the rain"
+                        "熟悉的雨势带来一种安静的慰藉",
+                        "你想起某次共撑一把伞穿过雨幕的瞬间"
                 )
         ));
         profiles.put("spring", new SceneProfile(
@@ -422,19 +439,19 @@ public class MockReconstructService {
                 emotionBaseline(0.7, 0.15, 0.05, 0.08, 0.2, 0.55, 0.65, 0.25),
                 0.15,
                 Map.of(
-                        "visual", "Soft blooms and pastel light fill the garden",
-                        "auditory", "Birdsong and gentle wind thread through the air",
-                        "olfactory", "Fresh blossoms and damp grass surround you",
-                        "tactile", "A cool morning breeze moves through the trees"
+                        "visual", "粉嫩花朵铺开，光线柔和得像被滤过一层纱。",
+                        "auditory", "鸟鸣与微风交织在空气里。",
+                        "olfactory", "新鲜的花香与带露水的青草气交错。",
+                        "tactile", "清晨的微凉穿过指缝，又被树影抚平。"
                 ),
                 List.of(
-                        "Petals caught in a small breeze",
-                        "A ribbon tied to the bench arm",
-                        "Fresh footprints in the soft soil"
+                        "几片花瓣被风裹着飞过身边",
+                        "长椅扶手上系着的一条丝带",
+                        "松软泥土上一串新鲜的脚印"
                 ),
                 List.of(
-                        "A hopeful warmth rises with the sunlight",
-                        "You feel the excitement of beginnings"
+                        "随着阳光升起，希望也悄悄涨起来",
+                        "你心底涌起一股关于「开始」的雀跃"
                 )
         ));
         profiles.put("autumn", new SceneProfile(
@@ -457,19 +474,19 @@ public class MockReconstructService {
                 emotionBaseline(0.55, 0.4, 0.08, 0.1, 0.18, 0.65, 0.5, 0.5),
                 0.2,
                 Map.of(
-                        "visual", "Golden light filters through rustling leaves",
-                        "auditory", "Dry leaves crackle beneath a gentle breeze",
-                        "olfactory", "A faint scent of wood smoke and crisp air",
-                        "tactile", "Cool air carries the promise of colder days"
+                        "visual", "金色光线从沙沙作响的叶隙间漏下。",
+                        "auditory", "干燥的落叶在微风里发出细碎的脆响。",
+                        "olfactory", "空气里飘着一丝木柴烟与凉爽的味道。",
+                        "tactile", "凉风预告着即将到来的更冷的日子。"
                 ),
                 List.of(
-                        "A single leaf spiraling down from the canopy",
-                        "Warm light spilling from the house window",
-                        "A soft crunch underfoot"
+                        "一片叶子从树冠缓缓盘旋落下",
+                        "屋内透出的暖光从窗里漫开",
+                        "脚下传来落叶被踩碎的轻响"
                 ),
                 List.of(
-                        "A wistful memory of autumn evenings returns",
-                        "You feel a calm acceptance settle in"
+                        "某个秋夜的回忆若有似无地回到心里",
+                        "你心底浮起一种温和的、接受一切的平静"
                 )
         ));
         return Collections.unmodifiableMap(profiles);
