@@ -8,6 +8,8 @@ public class UserProfileResponse {
     private String email;
     private String avatarUrl;
     private String backgroundImageUrl;
+    /** 用户角色，取值集合 {@code {"USER","ADMIN"}}。供前端 fetchProfile 写入 auth store。 */
+    private String role;
     private Boolean verified;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
@@ -16,15 +18,20 @@ public class UserProfileResponse {
     }
 
     public UserProfileResponse(String id, String username, String email, String avatarUrl, Boolean verified, LocalDateTime createdAt, LocalDateTime updatedAt) {
-        this(id, username, email, avatarUrl, null, verified, createdAt, updatedAt);
+        this(id, username, email, avatarUrl, null, "USER", verified, createdAt, updatedAt);
     }
 
     public UserProfileResponse(String id, String username, String email, String avatarUrl, String backgroundImageUrl, Boolean verified, LocalDateTime createdAt, LocalDateTime updatedAt) {
+        this(id, username, email, avatarUrl, backgroundImageUrl, "USER", verified, createdAt, updatedAt);
+    }
+
+    public UserProfileResponse(String id, String username, String email, String avatarUrl, String backgroundImageUrl, String role, Boolean verified, LocalDateTime createdAt, LocalDateTime updatedAt) {
         this.id = id;
         this.username = username;
         this.email = email;
         this.avatarUrl = avatarUrl;
         this.backgroundImageUrl = backgroundImageUrl;
+        this.role = (role == null || role.isBlank()) ? "USER" : role;
         this.verified = verified;
         this.createdAt = createdAt;
         this.updatedAt = updatedAt;
@@ -68,6 +75,14 @@ public class UserProfileResponse {
 
     public void setBackgroundImageUrl(String backgroundImageUrl) {
         this.backgroundImageUrl = backgroundImageUrl;
+    }
+
+    public String getRole() {
+        return role == null ? "USER" : role;
+    }
+
+    public void setRole(String role) {
+        this.role = (role == null || role.isBlank()) ? "USER" : role;
     }
 
     public Boolean getVerified() {

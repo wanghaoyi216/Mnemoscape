@@ -46,6 +46,48 @@ public class GlobalExceptionHandler {
     }
 
     /**
+     * Specialised handler for {@link UpstreamUnavailableException} — preserves
+     * the canonical {@code message="UPSTREAM_UNAVAILABLE"} (so existing client
+     * error-code translations keep working) while attaching a structured
+     * diagnostic payload on the {@code data} field. Operators viewing the
+     * admin dashboard can now see <i>which</i> upstream failed and <i>why</i>
+     * (CONNECT_TIMEOUT / NOT_REGISTERED / HTTP_5XX / ...) instead of a black
+     * 502 banner.
+     *
+     * <p>Without this override the exception would fall through to
+     * {@link #handleBizException} and the {@code data} field would be
+     * {@code null}, forcing operators back to log files for triage.
+     */
+    @ExceptionHandler(UpstreamUnavailableException.class)
+    public ResponseEntity<ApiResponse<java.util.Map<String, String>>> handleUpstreamUnavailable(
+            UpstreamUnavailableException ex, HttpServletRequest request) {
+        String requestId = resolveRequestId(request);
+        java.util.Map<String, String> diag = new java.util.LinkedHashMap<>();
+        diag.put("upstreamName", ex.getUpstreamName());
+        diag.put("failureKind", ex.getFailureKind().name());
+        if (ex.getDetail() != null) {
+            diag.put("detail", ex.getDetail());
+        }
+        Throwable rootCause = ex.getCause();
+        if (rootCause != null) {
+            // Surface the originating exception type so operators can
+            // distinguish "Nacos couldn't resolve service" from "RST received".
+            diag.put("causeType", rootCause.getClass().getSimpleName());
+        }
+        log.warn("Upstream unavailable upstream={} kind={} detail={} requestId={} path={} causeType={}",
+                ex.getUpstreamName(), ex.getFailureKind(), ex.getDetail(),
+                requestId, request.getRequestURI(),
+                rootCause == null ? "none" : rootCause.getClass().getSimpleName());
+        return ResponseEntity.status(ex.getCode())
+                .body(ApiResponse.<java.util.Map<String, String>>builder()
+                        .code(ex.getCode())
+                        .message(ex.getMessage())
+                        .data(diag)
+                        .requestId(requestId)
+                        .build());
+    }
+
+    /**
      * Spring's {@code @Cacheable(sync = true)} loader wraps any throwable from the
      * underlying lookup as {@link Cache.ValueRetrievalException}. Without unwrapping,
      * a perfectly intentional {@link BizException#notFound(String, String)} from

@@ -33,6 +33,31 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-actuator</artifactId>
         </dependency>
+        <!-- Spring Security auto-configuration so the SecurityFilterChain bean
+             defined in SecurityConfig is picked up.  Used for the admin-dashboard
+             dual-layer enforcement: any direct call to /api/v1/admin/** that
+             bypasses the gateway is rejected here with hasRole('ADMIN').
+             (admin-dashboard Requirements 3.2) -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-security</artifactId>
+        </dependency>
+        <!-- Redis client + cache abstraction for the upcoming admin aggregation
+             endpoints (resonance-overview / resonance-top in tasks 8.1–8.2).
+             spring-boot-starter-data-redis brings the Lettuce driver and the
+             RedisConnectionFailureException type that BypassOnFailureCacheManager
+             (in common) catches to gracefully degrade when Redis is unavailable
+             (admin-dashboard Requirements 14.3). spring-boot-starter-cache
+             enables the @Cacheable annotation surface used to memoize per-endpoint
+             responses (admin-dashboard Requirements 14.1, 14.2). -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-redis</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-cache</artifactId>
+        </dependency>
         <dependency>
             <groupId>com.mysql</groupId>
             <artifactId>mysql-connector-j</artifactId>
@@ -54,6 +79,14 @@
             <groupId>org.springframework.cloud</groupId>
             <artifactId>spring-cloud-starter-loadbalancer</artifactId>
         </dependency>
+
+        <!-- Test scope: Spring Boot test starter (Mockito + JUnit5) for the
+             admin-resonance unit tests (admin-dashboard task 8.3). -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 
     <build>
@@ -61,6 +94,16 @@
             <plugin>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
+            </plugin>
+            <!-- Surefire — pass the byte-buddy experimental flag so Mockito's
+                 inline mock maker tolerates JVMs newer than Byte Buddy's
+                 officially supported set (we run on Java 25 in dev). -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <configuration>
+                    <argLine>-Xmx1024m -Dnet.bytebuddy.experimental=true</argLine>
+                </configuration>
             </plugin>
         </plugins>
     </build>

@@ -21,6 +21,14 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-web</artifactId>
         </dependency>
+        <!-- Spring Security auto-configuration so the SecurityFilterChain bean
+             defined in SecurityConfig is picked up.  Used for the admin-dashboard
+             dual-layer enforcement: any direct call to /api/v1/admin/** that
+             bypasses the gateway is rejected here with hasRole('ADMIN'). -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-security</artifactId>
+        </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-actuator</artifactId>

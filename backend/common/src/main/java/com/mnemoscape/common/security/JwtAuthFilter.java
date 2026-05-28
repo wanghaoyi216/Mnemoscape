@@ -71,8 +71,28 @@ public class JwtAuthFilter extends OncePerRequestFilter {
                 return;
             }
 
+            // Resolve the role claim with strict, case-sensitive validation against the
+            // allowed set {"USER", "ADMIN"} (admin-dashboard Requirements 2.3, 2.4).
+            // Missing or unexpected values downgrade to USER and emit a WARN log; the
+            // request is still allowed to continue through the filter chain.
+            String roleClaim = claims.get("role", String.class);
+            String resolvedRole;
+            if ("ADMIN".equals(roleClaim) || "USER".equals(roleClaim)) {
+                resolvedRole = roleClaim;
+            } else {
+                resolvedRole = "USER";
+                if (roleClaim == null) {
+                    log.warn("JWT role claim is missing on path={}; downgrading to USER",
+                            request.getRequestURI());
+                } else {
+                    log.warn("JWT role claim has unexpected value '{}' on path={}; downgrading to USER",
+                            sanitize(roleClaim), request.getRequestURI());
+                }
+            }
+
             request.setAttribute("userId", userId);
             request.setAttribute("username", username);
+            request.setAttribute("role", resolvedRole);
 
             // Tell Spring Security this request is authenticated so
             // .authorizeHttpRequests().anyRequest().authenticated() lets it through.
@@ -80,7 +100,7 @@ public class JwtAuthFilter extends OncePerRequestFilter {
                     new UsernamePasswordAuthenticationToken(
                             userId,
                             null,
-                            List.of(new SimpleGrantedAuthority("ROLE_USER")));
+                            List.of(new SimpleGrantedAuthority("ROLE_" + resolvedRole)));
             SecurityContextHolder.getContext().setAuthentication(authentication);
 
             try {
@@ -101,10 +121,34 @@ public class JwtAuthFilter extends OncePerRequestFilter {
         objectMapper.writeValue(response.getWriter(), ApiResponse.unauthorized(message));
     }
 
+    /**
+     * Truncate and scrub a claim value before logging to defend against
+     * log-injection / log-forging via crafted JWT claims.  The output is
+     * limited to 32 characters and any control characters (CR / LF / TAB
+     * and other C0 / DEL bytes) are replaced with '?'.
+     */
+    private static String sanitize(String value) {
+        if (value == null) {
+            return "null";
+        }
+        int max = 32;
+        String trimmed = value.length() > max ? value.substring(0, max) + "…" : value;
+        StringBuilder sb = new StringBuilder(trimmed.length());
+        for (int i = 0; i < trimmed.length(); i++) {
+            char c = trimmed.charAt(i);
+            if (c < 0x20 || c == 0x7F) {
+                sb.append('?');
+            } else {
+                sb.append(c);
+            }
+        }
+        return sb.toString();
+    }
+
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request) {
         String path = request.getRequestURI();
-        return "OPTIONS".equalsIgnoreCase(request.getMethod())
+        if ("OPTIONS".equalsIgnoreCase(request.getMethod())
                 || path.equals("/api/v1/auth/login")
                 || path.equals("/api/v1/auth/register")
                 || path.equals("/api/v1/auth/refresh")
@@ -114,6 +158,29 @@ public class JwtAuthFilter extends OncePerRequestFilter {
                 || path.startsWith("/swagger-ui")
                 || path.equals("/swagger-ui.html")
                 || path.equals("/ws")
-                || path.startsWith("/ws/");
+                || path.startsWith("/ws/")) {
+            return true;
+        }
+        // admin-dashboard R1.4 / R1.5: the role-promotion endpoint is the
+        // documented bootstrap path used to mint the platform's first ADMIN.
+        // When it carries an {@code X-Bootstrap-Secret} header AND no
+        // {@code Authorization} header we let it skip JWT validation entirely,
+        // so the request can reach Spring Security's
+        // {@code adminOrBootstrapSecret()} authorization manager (which lets
+        // it through to {@code AdminBootstrapService} for constant-time
+        // secret comparison). When an authenticated admin instead drives the
+        // promotion via {@code Authorization: Bearer <jwt>}, JWT validation
+        // runs as usual so {@code SecurityContextHolder} carries the caller's
+        // ROLE_ADMIN authority.
+        if ("POST".equalsIgnoreCase(request.getMethod())
+                && path.matches("^/api/v1/admin/users/[^/]+/role$")) {
+            String bootstrap = request.getHeader("X-Bootstrap-Secret");
+            String auth = request.getHeader("Authorization");
+            if (bootstrap != null && !bootstrap.isBlank()
+                    && (auth == null || auth.isBlank())) {
+                return true;
+            }
+        }
+        return false;
     }
 }

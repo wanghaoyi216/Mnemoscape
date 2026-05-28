@@ -64,6 +64,57 @@ spring:
             allow-credentials: true
             max-age: 3600
       routes:
+        # Admin health aggregator: terminate the request inside the gateway
+        # itself by forwarding to an internal RouterFunction. This route is
+        # listed first so it wins predicate matching against the more
+        # generic Path=/api/v1/admin/** rules other services might add.
+        # Going through a gateway route (instead of binding the handler
+        # directly) ensures the request still traverses every GlobalFilter
+        # in the gateway pipeline, including AdminGuardFilter (-90), so
+        # only ADMIN callers can reach HealthHandler.
+        - id: admin-health
+          uri: forward:/__internal/admin/health
+          predicates:
+            - Path=/api/v1/admin/health
+            - Method=GET
+        # Admin role-promotion (bootstrap + ongoing) lives on auth-service.
+        # Listed before the catch-all /api/v1/admin/stats/** so the more
+        # specific path wins.
+        - id: admin-users-auth
+          uri: lb://auth-service
+          predicates:
+            - Path=/api/v1/admin/users/**
+        # Admin diagnostics endpoint (auth-service). Active probe across all
+        # downstream services to answer "why is the dashboard 502?". Listed
+        # alongside admin-users-auth because it lives in the same service.
+        - id: admin-diagnostics
+          uri: lb://auth-service
+          predicates:
+            - Path=/api/v1/admin/diagnostics/**
+        # Public active-users endpoint that auth-service owns (it Feign-calls
+        # memory-service internally to get the actual time-bucketed counts).
+        # Listed before the memory-service catch-all so this exact path
+        # routes to auth-service, not memory-service.
+        - id: admin-stats-active-users
+          uri: lb://auth-service
+          predicates:
+            - Path=/api/v1/admin/stats/active-users
+        # Resonance admin endpoints. Listed before the memory-service
+        # catch-all for the same reason.
+        - id: admin-stats-resonance
+          uri: lb://resonance-service
+          predicates:
+            - Path=/api/v1/admin/stats/resonance-overview, /api/v1/admin/stats/resonance-top
+        # Catch-all for the remaining admin/stats paths owned by
+        # memory-service: memory-trends / emotion-distribution / heatmap /
+        # top-contributors / fragment-discovery (and the internal
+        # active-user-counts that auth-service Feign-calls).  MUST come AFTER
+        # the more-specific admin-stats-active-users / admin-stats-resonance
+        # routes above so first-match-wins picks the right downstream.
+        - id: admin-stats-memory
+          uri: lb://memory-service
+          predicates:
+            - Path=/api/v1/admin/stats/**
         - id: auth-service
           uri: lb://auth-service
           predicates:

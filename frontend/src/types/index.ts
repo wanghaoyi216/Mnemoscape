@@ -4,6 +4,8 @@ export interface User {
   email: string
   avatarUrl?: string
   verified: boolean
+  /** 角色：未授予管理员的用户一律为 'USER'。后端缺失或非法值前端兜底为 'USER'。 */
+  role: 'USER' | 'ADMIN'
   createdAt?: string
   updatedAt?: string
 }
@@ -14,6 +16,8 @@ export interface AuthResponse {
   accessToken: string
   refreshToken: string
   expiresIn: number
+  /** 后端在登录/刷新响应中携带角色，前端登录后据此决定是否渲染管理员入口。 */
+  role?: 'USER' | 'ADMIN'
 }
 
 export interface MemoryAttachment {

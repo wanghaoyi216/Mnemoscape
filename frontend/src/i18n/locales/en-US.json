@@ -570,5 +570,144 @@
     "server": "Service error. Please try again later.",
     "unavailable": "Service temporarily unavailable.",
     "unknown": "Unknown error. Please try again."
+  },
+  "admin": {
+    "nav": {
+      "entry": "Admin",
+      "home": "Overview",
+      "activeUsers": "Active Users",
+      "memoryTrends": "Memory Trends",
+      "emotion": "Emotion Distribution",
+      "heatmap": "Global Heatmap",
+      "contributors": "Top Contributors",
+      "fragments": "Fragment Discovery",
+      "resonance": "Resonance Overview",
+      "health": "System Health"
+    },
+    "guard": {
+      "notAdmin": "Admin only — redirected to your memories",
+      "loginRequired": "Please sign in with an admin account"
+    },
+    "common": {
+      "empty": "No data yet",
+      "error": "Failed to load",
+      "retry": "Retry",
+      "degradedBadge": "Degraded",
+      "degradedHint": "Some upstream services are unavailable. Showing partial results:",
+      "loading": "Loading…",
+      "lastUpdated": "Last updated",
+      "diagnosticHead": "Diagnostics",
+      "diagUpstream": "Failing service",
+      "diagFailureKind": "Failure kind",
+      "diagDetail": "Detail",
+      "diagCauseType": "Cause type",
+      "diagHint": "Check the System Health panel for live status or run backend/scripts/Diagnose-AdminPanel.ps1 for an end-to-end probe."
+    },
+    "errors": {
+      "INVALID_DIMENSION": "Invalid dimension. Choose DAILY / WEEKLY / MONTHLY / YEARLY.",
+      "INVALID_RANGE": "Invalid range or more than 366 buckets",
+      "UPSTREAM_UNAVAILABLE": "Upstream service unavailable",
+      "ADMIN_AGG_FEIGN": "Cross-service aggregation failed",
+      "ADMIN_AGG_REDIS": "Cache layer unavailable",
+      "ADMIN_REQUIRED": "Administrator permission required",
+      "NETWORK": "Network error. Check your connection and retry.",
+      "BOOTSTRAP_DISABLED": "Bootstrap endpoint disabled",
+      "BOOTSTRAP_REJECTED": "Bootstrap secret rejected"
+    },
+    "activeUsers": {
+      "title": "Active Users",
+      "subtitle": "Unique users who created or modified memories",
+      "dimensions": {
+        "DAILY": "Daily",
+        "WEEKLY": "Weekly",
+        "MONTHLY": "Monthly",
+        "YEARLY": "Yearly"
+      },
+      "legend": {
+        "activeUsers": "Active users"
+      }
+    },
+    "memoryTrends": {
+      "title": "Memory Trends",
+      "subtitle": "New / modified memories per bucket",
+      "legend": {
+        "created": "Created",
+        "modified": "Modified"
+      }
+    },
+    "emotion": {
+      "title": "Emotion Distribution",
+      "subtitle": "Mean emotion vector across PUBLIC memories",
+      "sampleSize": "Sample size {count}",
+      "components": {
+        "joy": "Joy",
+        "sadness": "Sadness",
+        "anger": "Anger",
+        "fear": "Fear",
+        "surprise": "Surprise",
+        "nostalgia": "Nostalgia",
+        "peace": "Peace",
+        "melancholy": "Melancholy"
+      }
+    },
+    "heatmap": {
+      "title": "Global Memory Heatmap",
+      "subtitle": "PUBLIC memories aggregated to a lat/lon grid",
+      "resolution": {
+        "LOW": "Low (5°)",
+        "MEDIUM": "Medium (1°)",
+        "HIGH": "High (0.25°)"
+      },
+      "intensity": "Relative intensity"
+    },
+    "contributors": {
+      "title": "Top Contributors",
+      "subtitle": "Ranked by memories created",
+      "countSuffix": "memories",
+      "usernameUnknown": "Unknown user"
+    },
+    "fragments": {
+      "title": "Fragment Discovery",
+      "subtitle": "Share of fragments that have been discovered",
+      "gauge": {
+        "label": "Overall discovery rate"
+      },
+      "byType": "By fragment type",
+      "types": {
+        "forgotten_detail": "Forgotten detail",
+        "emotion_flashback": "Emotion flashback",
+        "scene_artifact": "Scene artifact",
+        "audio_echo": "Audio echo"
+      }
+    },
+    "resonance": {
+      "title": "Resonance Overview",
+      "subtitle": "Total edges / average score / status breakdown",
+      "kpi": {
+        "totalEdges": "Total edges",
+        "averageScore": "Average score"
+      },
+      "statusBreakdown": "Status breakdown",
+      "status": {
+        "pending": "Pending",
+        "active": "Active",
+        "archived": "Archived"
+      },
+      "top": {
+        "title": "Top {n} resonances",
+        "scoreLabel": "Score"
+      }
+    },
+    "health": {
+      "title": "System Health",
+      "subtitle": "Real-time status of downstream services",
+      "overall": "Overall",
+      "status": {
+        "UP": "UP",
+        "DEGRADED": "DEGRADED",
+        "DOWN": "DOWN"
+      },
+      "latency": "Latency {ms} ms"
+    }
   }
 }

@@ -9,14 +9,17 @@ export const useAuthStore = defineStore('auth', () => {
   const user = ref<User | null>(null)
 
   const isLoggedIn = computed(() => !!token.value)
+  const isAdmin = computed(() => user.value?.role === 'ADMIN')
 
-  function toUser(profile: Partial<User> & { id: string; username: string; email: string; verified?: boolean }) {
+  function toUser(profile: Partial<User> & { id: string; username: string; email: string; verified?: boolean; role?: string }): User {
     return {
       id: profile.id,
       username: profile.username,
       email: profile.email,
       avatarUrl: profile.avatarUrl,
       verified: profile.verified ?? false,
+      // 兜底：后端缺失或非 'ADMIN' 时统一视作 'USER'
+      role: profile.role === 'ADMIN' ? 'ADMIN' : 'USER',
       createdAt: profile.createdAt,
       updatedAt: profile.updatedAt,
     }
@@ -38,6 +41,7 @@ export const useAuthStore = defineStore('auth', () => {
         username: data.data.username,
         email: '',
         verified: false,
+        role: data.data.role === 'ADMIN' ? 'ADMIN' : 'USER',
       }
     }
   }
@@ -71,5 +75,5 @@ export const useAuthStore = defineStore('auth', () => {
     localStorage.removeItem('refreshToken')
   }
 
-  return { token, refreshToken, user, isLoggedIn, login, register, fetchProfile, logout }
+  return { token, refreshToken, user, isLoggedIn, isAdmin, login, register, fetchProfile, logout }
 })

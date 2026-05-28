@@ -143,7 +143,8 @@ public class AuthService {
     }
 
     private AuthResponse buildAuthResponse(User user) {
-        String accessToken = jwtTokenProvider.generateAccessToken(user.getId(), user.getUsername());
+        String role = user.getRole();
+        String accessToken = jwtTokenProvider.generateAccessToken(user.getId(), user.getUsername(), role);
         String refreshToken = jwtTokenProvider.generateRefreshToken(user.getId(), user.getUsername());
         return AuthResponse.builder()
                 .userId(user.getId())
@@ -151,6 +152,7 @@ public class AuthService {
                 .accessToken(accessToken)
                 .refreshToken(refreshToken)
                 .expiresIn(accessTokenExpiration)
+                .role(role)
                 .build();
     }
 
@@ -161,6 +163,7 @@ public class AuthService {
                 user.getEmail(),
                 user.getAvatarUrl(),
                 user.getBackgroundImageUrl(),
+                user.getRole(),
                 user.getVerified(),
                 user.getCreatedAt(),
                 user.getUpdatedAt()

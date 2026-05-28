@@ -1,5 +1,6 @@
 import axios from 'axios'
 import { useAuthStore } from '../stores/auth'
+import i18n from '../i18n'
 
 const client = axios.create({
   baseURL: '/api/v1',
@@ -10,6 +11,11 @@ client.interceptors.request.use((config) => {
   const auth = useAuthStore()
   if (auth.token) {
     config.headers.Authorization = `Bearer ${auth.token}`
+  }
+  // R13.4：把当前 UI 语言透传给后端，让 GlobalExceptionHandler 据此本地化错误消息。
+  // 仅当调用方未显式覆盖时才注入，避免破坏特殊场景（例如 Nominatim 反向地理）。
+  if (config.headers['Accept-Language'] === undefined && config.headers['accept-language'] === undefined) {
+    config.headers['Accept-Language'] = i18n.global.locale.value
   }
   return config
 })

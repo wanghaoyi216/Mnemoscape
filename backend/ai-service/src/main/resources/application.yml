@@ -85,6 +85,15 @@ mnemoscape:
     base-url: ${ASSET_SERVICE_BASE_URL:http://asset-service}
   memory-service:
     base-url: ${MEMORY_SERVICE_BASE_URL:http://memory-service}
+  # admin-dashboard (Requirements 3.2) — JWT secret is needed by the
+  # /api/v1/admin/** SecurityFilterChain to validate bearer tokens for
+  # direct service calls that bypass the gateway. Token-expiration values
+  # are unused on this side (ai-service never issues tokens) but the
+  # JwtTokenProvider constructor still requires them.
+  jwt:
+    secret: ${JWT_SECRET:bW5lbW9zY2FwZS1zZWNyZXQta2V5LWZvci1obWFjLXNoYTI1Ni1hbGdvcml0aG0tMjAyNQ==}
+    access-token-expiration: 3600000
+    refresh-token-expiration: 604800000
 
 # Resilience4j circuit breaker template for downstream AI providers.
 # The MockReconstructService doesn't trip these today, but real DeepSeek

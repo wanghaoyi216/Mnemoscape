@@ -94,6 +94,12 @@ public class AuthGlobalFilter implements GlobalFilter, Ordered {
         if (username != null && !username.isBlank()) {
             requestBuilder.header("X-User-Name", username);
         }
+        // Strict role resolution: only the case-sensitive literal "ADMIN" promotes
+        // to ADMIN; everything else (including "USER", missing claim, or any
+        // unexpected value) is mapped to USER. R2.2 / R2.6: the header is only
+        // injected when the JWT is valid; the 401 path above returns before this
+        // point and therefore never attaches X-User-Role.
+        requestBuilder.header("X-User-Role", resolveRole(claims.get("role", String.class)));
         ServerHttpRequest modified = requestBuilder.build();
         ServerWebExchange forwarded = exchange.mutate().request(modified).build();
 
@@ -139,10 +145,26 @@ public class AuthGlobalFilter implements GlobalFilter, Ordered {
             if (username != null && !username.isBlank()) {
                 builder.header("X-User-Name", username);
             }
+            // Same strict mapping as the authenticated path so downstream services
+            // see a consistent X-User-Role header semantics regardless of which
+            // branch attached the identity.
+            builder.header("X-User-Role", resolveRole(claims.get("role", String.class)));
             return exchange.mutate().request(builder.build()).build();
         } catch (Exception ignored) {
             return exchange;
         }
+    }
+
+    /**
+     * Map the raw JWT {@code role} claim to the case-sensitive header value used
+     * by downstream services. Only the literal string "ADMIN" maps to "ADMIN";
+     * any other value (including null, blank, "user", "Admin", or unknown roles)
+     * maps to "USER". This mirrors the resolution done in
+     * {@code com.mnemoscape.common.security.JwtAuthFilter} so the gateway header
+     * and the in-service security context cannot disagree.
+     */
+    private static String resolveRole(String roleClaim) {
+        return "ADMIN".equals(roleClaim) ? "ADMIN" : "USER";
     }
 
     private String extractBearerToken(HttpHeaders headers) {

@@ -41,6 +41,24 @@ spring:
     port: ${RABBITMQ_PORT:5672}
     username: ${RABBITMQ_USER:guest}
     password: ${RABBITMQ_PASSWORD:guest}
+  data:
+    # Redis connection used by admin-dashboard aggregation caches
+    # (admin.active-users / memory-trends / emotion-distribution / heatmap /
+    #  top-contributors / fragment-discovery — see AdminCacheConfig).
+    # Pre-existing @Cacheable usages in MemoryService / MemoryLookup keep
+    # using the Caffeine cache manager wired via spring.cache below, so this
+    # block only governs the Redis-backed admin caches.
+    redis:
+      host: ${REDIS_HOST:100.66.166.46}
+      port: ${REDIS_PORT:6379}
+      timeout: 3s
+      connect-timeout: 3s
+      lettuce:
+        pool:
+          max-active: 16
+          max-idle: 8
+          min-idle: 2
+          max-wait: 2s
   cache:
     type: caffeine
     caffeine:
@@ -58,6 +76,17 @@ spring:
         ip: ${SPRING_CLOUD_NACOS_DISCOVERY_IP:}
       config:
         enabled: false
+
+# admin-dashboard (Requirements 3.2) — JWT secret is needed by the
+# /api/v1/admin/** SecurityFilterChain to validate bearer tokens for
+# direct service calls that bypass the gateway. Token-expiration values
+# are unused on this side (memory-service never issues tokens) but the
+# JwtTokenProvider constructor still requires them.
+mnemoscape:
+  jwt:
+    secret: ${JWT_SECRET:bW5lbW9zY2FwZS1zZWNyZXQta2V5LWZvci1obWFjLXNoYTI1Ni1hbGdvcml0aG0tMjAyNQ==}
+    access-token-expiration: 3600000
+    refresh-token-expiration: 604800000
 
 springdoc:
   api-docs:

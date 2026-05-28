@@ -129,6 +129,13 @@ function switchLocale(l: Locale) {
           </svg>
           <span>{{ t('nav.chat') }}</span>
         </RouterLink>
+        <RouterLink v-if="auth.isAdmin" to="/admin" class="app-nav__link app-nav__link--admin">
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" aria-hidden="true">
+            <path d="M12 3 4 6v6c0 4.5 3.4 8.4 8 9 4.6-.6 8-4.5 8-9V6l-8-3z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
+            <path d="m9 12 2.2 2.2L15 10.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+          <span>{{ t('admin.nav.entry') }}</span>
+        </RouterLink>
       </nav>
 
       <div class="header-actions">
@@ -241,25 +248,43 @@ function switchLocale(l: Locale) {
 .app-nav {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  padding: 6px;
+  gap: 2px;
+  padding: 4px;
   border: 1px solid var(--border);
   border-radius: var(--radius-full);
   background: rgba(14, 17, 22, 0.6);
   backdrop-filter: blur(12px);
+  /* 当容器宽度紧张时允许内部水平滚动，避免链接被挤压触发文字断行。
+     正常宽屏下 max-content 永远不超过容器，滚动条不出现。 */
+  max-width: 100%;
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.app-nav::-webkit-scrollbar {
+  display: none;
 }
 
 .app-nav__link {
+  /* flex-shrink:0 + nowrap 是核心修复 ——
+     防止浏览器在文字内部断行（中文 nav 被切成"我的记/忆"的根因）。 */
+  flex-shrink: 0;
+  white-space: nowrap;
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  padding: 9px 16px;
+  gap: 6px;
+  padding: 8px 14px;
   border-radius: var(--radius-full);
   color: var(--text-muted);
-  font-size: 0.86rem;
+  font-size: 0.84rem;
   font-weight: 500;
   letter-spacing: 0.005em;
   transition: background-color 180ms ease, color 180ms ease;
+}
+
+.app-nav__link span {
+  /* 双保险：让 span 内文字也不参与换行。 */
+  white-space: nowrap;
 }
 
 .app-nav__link svg {
@@ -329,7 +354,17 @@ function switchLocale(l: Locale) {
 
 
 
-@media (max-width: 1100px) {
+/* ---- Brand: 副标题在中屏就藏起来，把宽度让给 nav ---- */
+@media (max-width: 1280px) {
+  .brand__copy small {
+    display: none;
+  }
+}
+
+/* ---- 中屏断点提早到 1280px：八个 nav 项 + 中文 + 英文 admin 入口 ----
+   都在中屏笔记本上撞到 1100px 的旧断点之前就挤不下，所以直接在 1280px
+   把 nav wrap 到第二行，避免再走那段"凑合挤一行"的丑相。 */
+@media (max-width: 1280px) {
   .app-header__inner {
     flex-wrap: wrap;
     padding-top: 14px;
@@ -339,24 +374,19 @@ function switchLocale(l: Locale) {
   .app-nav {
     order: 3;
     width: 100%;
-    justify-content: space-between;
+    justify-content: flex-start;
   }
 }
 
 @media (max-width: 720px) {
   .app-nav {
     width: 100%;
-    justify-content: center;
-    overflow-x: auto;
+    justify-content: flex-start;
   }
 
   .header-actions {
     width: 100%;
     justify-content: space-between;
-  }
-
-  .brand__copy small {
-    display: none;
   }
 }
 </style>

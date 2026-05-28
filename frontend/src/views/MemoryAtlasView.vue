@@ -1,17 +1,21 @@
 <script setup lang="ts">
 /**
- * 时空记忆地图 · MemoryAtlasView (v6)
+ * 时空记忆地图 · MemoryAtlasView (v9)
  *
- * 改进点（v5 → v6）：
- *   1. 底图改为 **真实栅格瓦片**：CartoDB Voyager raster（与 Google Maps 风格接近，
- *      可全球离线缓存）。地球仪模式下显示完整地球；切到 mercator 平面时显示同一份瓦片。
- *   2. **世界有边界**：maxBounds 限制经度 [-180, 180] / 纬度 [-85, 85]，禁用瓦片 wrap
- *      (renderWorldCopies=false)，地图不再无限滚动 — 与"球"的直觉一致。
- *   3. **默认状态：旋转的地球 + 闪烁星空**：球体后面叠一层 canvas 星空，明暗交替闪
- *      烁，仅在 globe 模式显示。地球缓慢自转，单击地球任意位置才转为平面。
- *   4. **记忆节点 / 流光线条 / 4 级地理 / 时间状态**：均沿用 v5 的设计。
- *   5. **空数据自检**：若用户记忆完全没有坐标，顶部 banner 直接提示「请在记忆创建
- *      时填写地点（如 北京 / 大理 / 东京）」 — 不再让用户看到一张空地图。
+ * v8 → v9 的主要改进（接续第六代会话用户反馈）：
+ *   1. **三种底图样式可切换**：影像 (Esri World Imagery, 全球可达) / 街道 (高德 + Carto
+ *      双源混合, 国内国外都能看到) / 自然分层设色 (Esri World Physical, 海洋深蓝、土地
+ *      黄褐、山脉金棕的卫星模拟色)。右上角 segmented control 单击切换。
+ *   2. **修复地球顶部黑块**：globe 投影低 zoom 下用 MapLibre 的 sky layer 填满"画外区"，
+ *      不再露出棱角的星空 / 棕色三角。
+ *   3. **去掉自动旋转抢控制**：首次交互（drag / click / wheel）立刻停止地球自转，用户
+ *      可以自由拨弄南半球。地球初始 center 从 [105,35] 改为 [50,15] 让欧洲/非洲/亚洲
+ *      都可见，南半球默认可见。
+ *   4. **缩小自动回地球**：flat 模式下 zoom 滚到 < 1.5 自动 returnToGlobe()。
+ *   5. **右下角组件不再互相遮挡**：详情卡出现时其它右下浮卡自动隐藏；状态卡限高
+ *      避免压住空数据 hint。
+ *   6. 沿用 v6/v7/v8 的：MinIO 媒体匹配、ResizeObserver 兜底、空状态智能提示、
+ *      4 级地理钻取、TripsLayer 时间播放、星空闪烁背景。
  */
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
@@ -549,68 +553,121 @@ let starsAnimId = 0
 let containerResizeObserver: ResizeObserver | null = null
 
 /**
- * 真实栅格瓦片底图。
+ * 三种底图样式（v9）。
  *
- * 设计要点：
- *  1. 多组镜像并入 tiles 数组让 MapLibre 自动轮询，单镜像失败不影响整体渲染。
- *  2. 国内网络环境下 carto / OpenStreetMap 官方瓦片经常不可达，所以**优先用国内
- *     可达的镜像**（高德地图 webrd / 天地图 tianditu 影像 / OSM 中国镜像）。海外环境
- *     由 fallback style 兜底。
- *  3. `projection.type` 放在 style 内（MapLibre v5 起从 style 读 projection；放在
- *     `new Map({ projection })` 构造参数里不是稳定 API，部分版本会被忽略）。
+ * 设计原则：
+ *   1. 每种样式的 `tiles` 数组里既包含国内可达源也包含国外可达源，MapLibre 会
+ *      自动按顺序轮询，保证国内国外用户都能看到至少一种瓦片。
+ *   2. `projection.type = 'globe'` 放在 style 内（MapLibre v5+ 推荐方式）。
+ *   3. 都加 `sky` layer 填充"画外区"，避免低 zoom 时北极外露出三角黑块。
+ *   4. `attribution` 必须保留（CartoDB / Esri / OSM / 高德的 ToS 都要求）。
  */
-const REAL_TILES_STYLE: any = {
-  version: 8,
-  glyphs: 'https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf',
-  projection: { type: 'globe' },
-  sources: {
-    'real-raster': {
-      type: 'raster',
-      tiles: [
-        // 高德地图 webrd（国内默认可达，矢量化栅格瓦片，与 Google Maps 风格相近）
-        'https://webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}',
-        'https://webrd02.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}',
-        'https://webrd03.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}',
-        'https://webrd04.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}',
-      ],
-      tileSize: 256,
-      attribution:
-        '© <a href="https://amap.com" target="_blank" rel="noopener">高德地图 AutoNavi</a>',
-      maxzoom: 18,
-    },
-  },
-  layers: [
-    { id: 'background', type: 'background', paint: { 'background-color': '#0b1224' } },
-    { id: 'real-raster', type: 'raster', source: 'real-raster', minzoom: 0, maxzoom: 22 },
-  ],
+
+interface BasemapStyle {
+  id: 'imagery' | 'street' | 'physical'
+  /** 给底图切换器显示的 i18n key 后缀 */
+  labelKey: string
+  /** MapLibre style JSON */
+  style: any
 }
 
-// 兜底栅格瓦片：CartoDB Voyager + OSM 官方双镜像（海外环境用）。
-// MapLibre 会按顺序轮询，任意一个域名能拉到瓦片就能渲染。
-const FALLBACK_TILES_STYLE: any = {
+/** 影像（Esri World Imagery，全球卫星照片，海外网络可达，国内通过 CDN 也可达） */
+const STYLE_IMAGERY: any = {
   version: 8,
   glyphs: 'https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf',
   projection: { type: 'globe' },
   sources: {
-    osm: {
+    imagery: {
       type: 'raster',
       tiles: [
-        'https://a.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png',
-        'https://b.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png',
-        'https://c.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png',
-        'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+        'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
       ],
       tileSize: 256,
       attribution:
-        '© <a href="https://www.openstreetmap.org/copyright" target="_blank" rel="noopener">OpenStreetMap</a> · <a href="https://carto.com/attributions" target="_blank" rel="noopener">CARTO</a>',
+        '© <a href="https://www.esri.com" target="_blank" rel="noopener">Esri</a> World Imagery',
       maxzoom: 19,
     },
   },
   layers: [
-    { id: 'background', type: 'background', paint: { 'background-color': '#0b1224' } },
-    { id: 'osm', type: 'raster', source: 'osm', minzoom: 0, maxzoom: 19 },
+    // sky 必须放在 raster 层之前，作为 globe 投影的"画外区"星空背景，避免低 zoom
+    // 时露出三角黑块。
+    { id: 'sky', type: 'background', paint: { 'background-color': '#050714' } },
+    { id: 'imagery', type: 'raster', source: 'imagery', minzoom: 0, maxzoom: 22 },
   ],
 }
+
+/** 街道（高德 webrd 国内 + Carto Voyager 海外，矢量风格，看路名/道路/POI） */
+const STYLE_STREET: any = {
+  version: 8,
+  glyphs: 'https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf',
+  projection: { type: 'globe' },
+  sources: {
+    street: {
+      type: 'raster',
+      tiles: [
+        // 高德地图 webrd —— 国内可达，与 Google Maps 接近的栅格化矢量瓦片
+        'https://webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}',
+        'https://webrd02.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}',
+        'https://webrd03.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}',
+        'https://webrd04.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}',
+        // Carto Voyager —— 海外可达兜底（高德海外瓦片质量较差，Voyager 接近 Google Maps）
+        'https://a.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png',
+        'https://b.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png',
+        'https://c.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png',
+      ],
+      tileSize: 256,
+      attribution:
+        '© <a href="https://amap.com" target="_blank" rel="noopener">高德地图</a> · <a href="https://carto.com/attributions" target="_blank" rel="noopener">CARTO</a>',
+      maxzoom: 18,
+    },
+  },
+  layers: [
+    { id: 'sky', type: 'background', paint: { 'background-color': '#050714' } },
+    { id: 'street', type: 'raster', source: 'street', minzoom: 0, maxzoom: 22 },
+  ],
+}
+
+/** 自然分层设色（Esri World Physical Map，海洋深蓝、土地黄褐、山脉金棕的卫星模拟色） */
+const STYLE_PHYSICAL: any = {
+  version: 8,
+  glyphs: 'https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf',
+  projection: { type: 'globe' },
+  sources: {
+    physical: {
+      type: 'raster',
+      tiles: [
+        'https://server.arcgisonline.com/ArcGIS/rest/services/World_Physical_Map/MapServer/tile/{z}/{y}/{x}',
+      ],
+      tileSize: 256,
+      attribution:
+        '© <a href="https://www.esri.com" target="_blank" rel="noopener">Esri</a> World Physical Map',
+      // World Physical 只有低层级瓦片（最高 z=8），高 zoom 时叠加 World Shaded Relief。
+      maxzoom: 8,
+    },
+    relief: {
+      type: 'raster',
+      tiles: [
+        'https://server.arcgisonline.com/ArcGIS/rest/services/World_Shaded_Relief/MapServer/tile/{z}/{y}/{x}',
+      ],
+      tileSize: 256,
+      maxzoom: 13,
+    },
+  },
+  layers: [
+    { id: 'sky', type: 'background', paint: { 'background-color': '#050714' } },
+    { id: 'physical', type: 'raster', source: 'physical', minzoom: 0, maxzoom: 8 },
+    { id: 'relief', type: 'raster', source: 'relief', minzoom: 8, maxzoom: 22, paint: { 'raster-opacity': 0.92 } },
+  ],
+}
+
+const BASEMAP_STYLES: Record<BasemapStyle['id'], BasemapStyle> = {
+  physical: { id: 'physical', labelKey: 'physical', style: STYLE_PHYSICAL },
+  imagery: { id: 'imagery', labelKey: 'imagery', style: STYLE_IMAGERY },
+  street: { id: 'street', labelKey: 'street', style: STYLE_STREET },
+}
+
+/** 当前底图样式 —— 默认 physical（地球分层设色，符合"地球"直觉） */
+const currentBasemap = ref<BasemapStyle['id']>('physical')
 
 function rebuildOverlay() {
   if (!overlay) return
@@ -736,8 +793,10 @@ onMounted(async () => {
 
   map = new maplibregl.Map({
     container: containerRef.value,
-    style: REAL_TILES_STYLE,
-    center: [105.0, 35.0],
+    style: BASEMAP_STYLES[currentBasemap.value].style,
+    // v9：默认 center 移到 [50, 15]（欧洲/非洲/亚洲交界），让球体的"前面"显示
+    // 整个东半球而不是只对着中国。用户可以自由拨弄看到南半球。
+    center: [50, 15],
     zoom: 1.6,
     pitch: 0,
     bearing: 0,
@@ -763,18 +822,23 @@ onMounted(async () => {
   // 首屏强制 resize 一次（路由切换后偶尔不发尺寸事件）
   setTimeout(() => { try { map?.resize() } catch {} }, 80)
 
-  // 底图瓦片拉不到时（国内网络常见）→ 自动切到 fallback 多镜像 style。
-  // 任何瓦片相关错误都触发；同时设一个兜底超时：6 秒内 source 还没就绪就强切。
+  // 底图瓦片拉不到时（少数极端环境）→ 自动切换到下一个 basemap 候选。每个 style
+  // 的 tiles 数组本身已经做了多源轮询；这一层兜底是"如果当前样式整体的所有源都
+  // 不可达，自动跳到另一个样式让用户至少看到一张图"。
   let switchedFallback = false
   const trySwitchFallback = () => {
     if (!map || switchedFallback) return
     switchedFallback = true
-    try { map.setStyle(FALLBACK_TILES_STYLE) } catch { /* noop */ }
+    // 当前样式整体不可达 → 按 physical → imagery → street 顺序找下一个未尝试过的
+    const candidates: BasemapStyle['id'][] = ['physical', 'imagery', 'street']
+    const next = candidates.find((c) => c !== currentBasemap.value)
+    if (next) {
+      currentBasemap.value = next
+      try { map.setStyle(BASEMAP_STYLES[next].style) } catch { /* noop */ }
+    }
   }
   map.on('error', (e: any) => {
     if (!map || switchedFallback) return
-    // MapLibre 在瓦片失败时会发 status >= 400 或 networkError，message 多变；
-    // 这里统一兜底：任何被监听到的 error 都视为底图不可用 → 走 fallback。
     const status = e?.error?.status as number | undefined
     const msg = (e?.error?.message || '').toLowerCase()
     if (
@@ -787,13 +851,30 @@ onMounted(async () => {
       trySwitchFallback()
     }
   })
-  // 6 秒兜底：如果首屏一片漆黑（real source 一张瓦片都没加载成功），强切 fallback。
+  // 6 秒兜底：如果首屏一片漆黑（当前 source 一张瓦片都没加载成功），强切下一个样式
   window.setTimeout(() => {
     if (!map || switchedFallback) return
     try {
-      if (!map.isSourceLoaded('real-raster')) trySwitchFallback()
+      // 取当前 style 的第一个非 background source 的 id
+      const style = map.getStyle()
+      const sourceIds = Object.keys(style.sources || {})
+      const firstSourceId = sourceIds[0]
+      if (firstSourceId && !map.isSourceLoaded(firstSourceId)) trySwitchFallback()
     } catch { /* noop */ }
   }, 6000)
+
+  // v9：用户首次交互（drag / wheel / click）后立刻停止地球自转，把控制权交还。
+  // 这样南半球可以通过拖动浏览，不会被自转持续抢回。
+  let userInteracted = false
+  const stopAutoRotateOnInteract = () => {
+    if (userInteracted) return
+    userInteracted = true
+    stopGlobeAutoRotate()
+  }
+  map.on('dragstart', stopAutoRotateOnInteract)
+  map.on('wheel', stopAutoRotateOnInteract)
+  map.on('rotatestart', stopAutoRotateOnInteract)
+  map.on('pitchstart', stopAutoRotateOnInteract)
 
   map.addControl(new maplibregl.NavigationControl({ showCompass: true, visualizePitch: true }), 'top-right')
   map.touchZoomRotate.enableRotation()
@@ -803,6 +884,11 @@ onMounted(async () => {
     currentZoom.value = map.getZoom()
     if (viewMode.value === 'flat' && shouldTilt(currentZoom.value)) {
       switchTo3D()
+    }
+    // v9：缩小到 zoom < 1.5 自动回地球 globe（与"放大滑入平面"的反向操作）。
+    // 触发后立刻 break，防止反复抖动 reset。
+    if (viewMode.value !== 'globe' && currentZoom.value < 1.5) {
+      returnToGlobe()
     }
   })
 
@@ -907,8 +993,24 @@ function returnToGlobe() {
   hintVisible.value = !hintDismissed.value
   selected.value = null
   try { map.setProjection({ type: 'globe' }) } catch { /* noop */ }
-  map.flyTo({ center: [105.0, 35.0], zoom: 1.6, pitch: 0, bearing: 0, duration: 1400, essential: true })
-  window.setTimeout(() => startGlobeAutoRotate(), 1500)
+  map.flyTo({ center: [50, 15], zoom: 1.6, pitch: 0, bearing: 0, duration: 1400, essential: true })
+  // v9：回到地球后 *不* 自动开旋转。用户已经交互过；旋转抢控制权是 v8 的痛点。
+  // 想看自转的话刷新页面就回到初始状态。
+}
+
+/** v9：切换底图样式。三选一：physical / imagery / street */
+function switchBasemap(id: BasemapStyle['id']) {
+  if (!map || currentBasemap.value === id) return
+  currentBasemap.value = id
+  try { map.setStyle(BASEMAP_STYLES[id].style) } catch { /* noop */ }
+  // setStyle 会把 sources / layers 全部 reset，但保留 camera 状态。
+  // overlay (deck.gl) 需要在 style.load 后重新挂上。
+  map.once('style.load', () => {
+    if (!map || !overlay) return
+    try { map.removeControl(overlay as unknown as maplibregl.IControl) } catch { /* noop */ }
+    overlay = new MapboxOverlay({ layers: buildLayers(), interleaved: false })
+    map.addControl(overlay as unknown as maplibregl.IControl)
+  })
 }
 
 function flyToCurrent() {
@@ -1047,8 +1149,24 @@ function timeMeta(mem: MemoryWithCoords): string {
 
     <div ref="containerRef" class="atlas-map" />
 
-    <!-- v8：空状态也放在右下角，避免遮挡地图主体 -->
-    <div v-if="showNoCoordsHint" class="atlas-empty-hint" role="status">
+    <!-- v9：底图样式切换器，放在右上角紧贴 NavigationControl 下方 -->
+    <div class="atlas-basemap" role="tablist" aria-label="底图样式">
+      <button
+        v-for="b in (['physical', 'imagery', 'street'] as const)"
+        :key="b"
+        class="atlas-basemap__btn"
+        :class="{ 'atlas-basemap__btn--on': currentBasemap === b }"
+        :aria-selected="currentBasemap === b"
+        role="tab"
+        type="button"
+        @click="switchBasemap(b)"
+      >
+        {{ b === 'physical' ? '自然' : b === 'imagery' ? '影像' : '街道' }}
+      </button>
+    </div>
+
+    <!-- v8：空状态也放在右下角，避免遮挡地图主体；详情卡打开时退场 -->
+    <div v-if="showNoCoordsHint && !selected" class="atlas-empty-hint" role="status">
       <div class="atlas-empty-hint__icon" aria-hidden="true">🗺️</div>
       <div class="atlas-empty-hint__body">
         <p class="atlas-empty-hint__title">{{ t('atlas.emptyHints.noCoordsTitle') }}</p>
@@ -1065,7 +1183,7 @@ function timeMeta(mem: MemoryWithCoords): string {
       </div>
     </div>
 
-    <div v-else-if="showOneCoordHint" class="atlas-empty-hint atlas-empty-hint--soft" role="status">
+    <div v-else-if="showOneCoordHint && !selected" class="atlas-empty-hint atlas-empty-hint--soft" role="status">
       <div class="atlas-empty-hint__icon" aria-hidden="true">🌊</div>
       <div class="atlas-empty-hint__body">
         <p class="atlas-empty-hint__title">{{ t('atlas.emptyHints.oneCoordTitle') }}</p>
@@ -1079,9 +1197,9 @@ function timeMeta(mem: MemoryWithCoords): string {
       </div>
     </div>
 
-    <!-- v5/v6：入口提示卡 → 右下角浮卡，不再遮挡地球 -->
+    <!-- v5/v6：入口提示卡 → 右下角浮卡，不再遮挡地球；详情卡 / 空状态打开时退场 -->
     <div
-      v-if="viewMode === 'globe' && hintVisible && !showNoCoordsHint && !showOneCoordHint"
+      v-if="viewMode === 'globe' && hintVisible && !showNoCoordsHint && !showOneCoordHint && !selected"
       class="atlas-hint"
       role="status"
     >
@@ -1097,7 +1215,7 @@ function timeMeta(mem: MemoryWithCoords): string {
       </div>
     </div>
 
-    <section class="atlas-status-card" aria-label="地图状态">
+    <section class="atlas-status-card" :class="{ 'atlas-status-card--shifted': selected }" aria-label="地图状态">
       <div class="atlas-status-card__head">
         <span>记忆状态</span>
         <strong>{{ atlasStatus }}</strong>
@@ -1331,6 +1449,40 @@ function timeMeta(mem: MemoryWithCoords): string {
 }
 .atlas-stars--visible { opacity: 1; }
 
+/* ---- v9：底图样式切换器（右上角，NavigationControl 下方） ---- */
+.atlas-basemap {
+  position: absolute;
+  top: 110px;
+  right: 22px;
+  display: inline-flex;
+  padding: 4px;
+  background: rgba(255, 255, 255, 0.92);
+  border: 1px solid rgba(14, 165, 233, 0.25);
+  border-radius: 999px;
+  box-shadow: 0 4px 16px rgba(14, 165, 233, 0.12);
+  backdrop-filter: blur(8px);
+  z-index: 10;
+}
+.atlas-basemap__btn {
+  appearance: none;
+  border: none;
+  background: transparent;
+  color: #475569;
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  padding: 6px 12px;
+  border-radius: 999px;
+  cursor: pointer;
+  transition: background 160ms ease, color 160ms ease;
+}
+.atlas-basemap__btn:hover { color: #0ea5e9; }
+.atlas-basemap__btn--on {
+  background: linear-gradient(135deg, #0ea5e9, #38bdf8);
+  color: #fff;
+  box-shadow: 0 2px 8px rgba(14, 165, 233, 0.35);
+}
+
 .atlas-map {
   position: absolute;
   inset: 0;
@@ -1458,8 +1610,12 @@ function timeMeta(mem: MemoryWithCoords): string {
 .atlas-status-card {
   position: absolute;
   right: 22px;
-  top: 88px;
+  /* v9：状态卡贴在底图切换器下方（top:110+44+8=162），避免被切换器叠盖 */
+  top: 162px;
   width: 260px;
+  /* v9：限高，避免在低分屏挤掉空状态 hint */
+  max-height: calc(100vh - var(--app-header-h, 88px) - 220px);
+  overflow-y: auto;
   padding: 12px 14px;
   border-radius: 8px;
   background: rgba(255, 255, 255, 0.9);
@@ -1467,6 +1623,18 @@ function timeMeta(mem: MemoryWithCoords): string {
   box-shadow: 0 12px 32px rgba(15, 23, 42, 0.16);
   backdrop-filter: blur(16px) saturate(135%);
   z-index: 9;
+  transition: transform 240ms ease, opacity 240ms ease;
+}
+/* v9：详情卡打开时，状态卡左移让出右下角空间 */
+.atlas-status-card--shifted {
+  transform: translateX(-380px);
+}
+@media (max-width: 1280px) {
+  /* 中屏直接淡出，避免左移后压住地图主视野 */
+  .atlas-status-card--shifted {
+    opacity: 0;
+    pointer-events: none;
+  }
 }
 .atlas-status-card__head {
   display: flex;

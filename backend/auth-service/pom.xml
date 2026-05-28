@@ -51,6 +51,43 @@
             <groupId>com.alibaba.cloud</groupId>
             <artifactId>spring-cloud-starter-alibaba-nacos-discovery</artifactId>
         </dependency>
+        <!--
+            OpenFeign + load-balancer for the admin-dashboard active-users
+            aggregation: auth-service owns the public /api/v1/admin/stats/
+            active-users endpoint but delegates the time-bucketed count to
+            memory-service via Feign (admin-dashboard design.md §6.5,
+            Requirements 6.6 / 6.7).
+
+            NOTE: spring-cloud-starter-openfeign by itself is NOT sufficient
+            for service-name based resolution since Spring Cloud 2022 — the
+            companion loadbalancer starter MUST be present, otherwise a call
+            against {@code @FeignClient(name = "memory-service")} fails with
+            "no instances available". Keep both dependencies in sync.
+        -->
+        <dependency>
+            <groupId>org.springframework.cloud</groupId>
+            <artifactId>spring-cloud-starter-openfeign</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.cloud</groupId>
+            <artifactId>spring-cloud-starter-loadbalancer</artifactId>
+        </dependency>
+
+        <!-- ============================== Test scope ==============================
+             Spring Boot test starter (Mockito + JUnit 5 + AssertJ + Spring Test)
+             plus jqwik for the bootstrap idempotence property test
+             (admin-dashboard tasks 2.3 / 2.5 / 2.7 / 6.2 / 6.3 / 6.7 / 6.9). -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>net.jqwik</groupId>
+            <artifactId>jqwik</artifactId>
+            <version>1.8.4</version>
+            <scope>test</scope>
+        </dependency>
     </dependencies>
 
     <build>
@@ -58,6 +95,16 @@
             <plugin>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-maven-plugin</artifactId>
+            </plugin>
+            <!-- Surefire — pass the byte-buddy experimental flag so Mockito's
+                 inline mock maker tolerates the JVMs newer than Byte Buddy's
+                 officially supported set (we run on Java 25 in dev). -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <configuration>
+                    <argLine>-Xmx1024m -Dnet.bytebuddy.experimental=true</argLine>
+                </configuration>
             </plugin>
         </plugins>
     </build>

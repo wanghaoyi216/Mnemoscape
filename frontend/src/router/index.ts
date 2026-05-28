@@ -1,5 +1,6 @@
 import { createRouter, createWebHistory } from 'vue-router'
 import { useAuthStore } from '../stores/auth'
+import { useToastStore } from '../stores/toast'
 
 const routes = [
   {
@@ -84,6 +85,63 @@ const routes = [
     component: () => import('../views/ChatView.vue'),
     meta: { requiresAuth: true },
   },
+  // ── Admin dashboard subtree (R4.1) ────────────────────────────────────────
+  // Top-level entry mounts a nested <router-view> so each panel owns its own
+  // route, allowing operators to deep-link / share specific panels (design.md
+  // §"路由命名"). All children inherit `requiresAuth` + `requiresAdmin` via the
+  // parent meta so the beforeEach guard need only inspect `to.meta.requiresAdmin`.
+  {
+    path: '/admin',
+    component: () => import('../views/admin/AdminEntryView.vue'),
+    meta: { requiresAuth: true, requiresAdmin: true },
+    children: [
+      {
+        path: '',
+        name: 'AdminHome',
+        component: () => import('../views/admin/AdminHomeView.vue'),
+      },
+      {
+        path: 'active-users',
+        name: 'AdminActiveUsers',
+        component: () => import('../views/admin/ActiveUsersView.vue'),
+      },
+      {
+        path: 'memory-trends',
+        name: 'AdminMemoryTrends',
+        component: () => import('../views/admin/MemoryTrendsView.vue'),
+      },
+      {
+        path: 'emotion',
+        name: 'AdminEmotion',
+        component: () => import('../views/admin/EmotionDistView.vue'),
+      },
+      {
+        path: 'heatmap',
+        name: 'AdminHeatmap',
+        component: () => import('../views/admin/HeatmapView.vue'),
+      },
+      {
+        path: 'top-contributors',
+        name: 'AdminContributors',
+        component: () => import('../views/admin/ContributorsView.vue'),
+      },
+      {
+        path: 'fragments',
+        name: 'AdminFragments',
+        component: () => import('../views/admin/FragmentDiscoveryView.vue'),
+      },
+      {
+        path: 'resonance',
+        name: 'AdminResonance',
+        component: () => import('../views/admin/ResonanceOverviewView.vue'),
+      },
+      {
+        path: 'health',
+        name: 'AdminHealth',
+        component: () => import('../views/admin/SystemHealthView.vue'),
+      },
+    ],
+  },
 ]
 
 const router = createRouter({
@@ -93,13 +151,32 @@ const router = createRouter({
 
 router.beforeEach((to, _from, next) => {
   const auth = useAuthStore()
+
+  // Existing guest / requiresAuth behaviour preserved; the admin subtree
+  // also carries `requiresAuth` so anonymous visits get caught here first
+  // and redirected to /login with a `redirect` query (R4.2).
   if (to.meta.requiresAuth && !auth.isLoggedIn) {
-    next('/login')
-  } else if (to.meta.guest && auth.isLoggedIn) {
-    next('/memories')
-  } else {
-    next()
+    return next({ path: '/login', query: { redirect: to.fullPath } })
   }
+  if (to.meta.guest && auth.isLoggedIn) {
+    return next('/memories')
+  }
+
+  // R4.1 / R4.2 / R4.3 — admin guard. The `requiresAuth` branch above already
+  // handles the unauthenticated case, but we re-check here so the guard is
+  // self-contained should anyone ever drop `requiresAuth` from a /admin route.
+  if (to.meta.requiresAdmin) {
+    if (!auth.isLoggedIn) {
+      return next({ path: '/login', query: { redirect: to.fullPath } })
+    }
+    if (auth.user?.role !== 'ADMIN') {
+      // Non-blocking warning toast; redirect to the user's home (R4.3).
+      useToastStore().push({ key: 'admin.guard.notAdmin', tone: 'warning' })
+      return next('/memories')
+    }
+  }
+
+  return next()
 })
 
 export default router

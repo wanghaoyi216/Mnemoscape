@@ -29,6 +29,9 @@ public class User {
     @Column(name = "background_image_url", length = 500)
     private String backgroundImageUrl;
 
+    @Column(nullable = false, length = 16)
+    private String role = "USER";
+
     @Column(nullable = false)
     private Boolean verified = false;
 
@@ -103,6 +106,14 @@ public class User {
 
     public void setBackgroundImageUrl(String backgroundImageUrl) {
         this.backgroundImageUrl = backgroundImageUrl;
+    }
+
+    public String getRole() {
+        return role == null ? "USER" : role;
+    }
+
+    public void setRole(String role) {
+        this.role = (role == null || role.isBlank()) ? "USER" : role.trim().toUpperCase();
     }
 
     public Boolean getVerified() {
@@ -202,6 +213,7 @@ public class User {
         createdAt = LocalDateTime.now();
         updatedAt = LocalDateTime.now();
         if (id == null) id = java.util.UUID.randomUUID().toString();
+        if (role == null || role.isBlank()) role = "USER";
     }
 
     @PreUpdate

@@ -750,5 +750,144 @@
     "server": "服务异常，请稍后重试。",
     "unavailable": "服务暂不可用，请稍后重试。",
     "unknown": "未知错误，请稍后重试。"
+  },
+  "admin": {
+    "nav": {
+      "entry": "管理面板",
+      "home": "总览",
+      "activeUsers": "活跃用户",
+      "memoryTrends": "记忆趋势",
+      "emotion": "情绪分布",
+      "heatmap": "全球热力",
+      "contributors": "贡献者榜",
+      "fragments": "碎片探索",
+      "resonance": "共鸣概览",
+      "health": "系统健康"
+    },
+    "guard": {
+      "notAdmin": "仅管理员可访问该页面，已为你跳转回记忆首页",
+      "loginRequired": "请先登录管理员账号"
+    },
+    "common": {
+      "empty": "暂无数据",
+      "error": "加载失败",
+      "retry": "重试",
+      "degradedBadge": "数据降级",
+      "degradedHint": "部分上游服务暂不可用，以下为可用范围内的聚合结果：",
+      "loading": "数据加载中……",
+      "lastUpdated": "最后更新",
+      "diagnosticHead": "故障诊断",
+      "diagUpstream": "失败的服务",
+      "diagFailureKind": "失败类型",
+      "diagDetail": "细节",
+      "diagCauseType": "原始异常",
+      "diagHint": "可前往「系统健康」面板查看实时状态，或运行 backend/scripts/Diagnose-AdminPanel.ps1 做端到端探测。"
+    },
+    "errors": {
+      "INVALID_DIMENSION": "维度参数无效，请选择 DAILY / WEEKLY / MONTHLY / YEARLY",
+      "INVALID_RANGE": "时间范围无效或超过 366 个桶",
+      "UPSTREAM_UNAVAILABLE": "上游服务暂不可达",
+      "ADMIN_AGG_FEIGN": "跨服务聚合失败",
+      "ADMIN_AGG_REDIS": "缓存层暂不可用",
+      "ADMIN_REQUIRED": "需要管理员权限",
+      "NETWORK": "网络异常，请检查连接后重试",
+      "BOOTSTRAP_DISABLED": "Bootstrap 端点已关闭",
+      "BOOTSTRAP_REJECTED": "Bootstrap secret 校验未通过"
+    },
+    "activeUsers": {
+      "title": "活跃用户",
+      "subtitle": "创建或修改过记忆的独立用户数",
+      "dimensions": {
+        "DAILY": "按日",
+        "WEEKLY": "按周",
+        "MONTHLY": "按月",
+        "YEARLY": "按年"
+      },
+      "legend": {
+        "activeUsers": "活跃用户"
+      }
+    },
+    "memoryTrends": {
+      "title": "记忆趋势",
+      "subtitle": "各时段新增 / 修改记忆数量",
+      "legend": {
+        "created": "新建",
+        "modified": "修改"
+      }
+    },
+    "emotion": {
+      "title": "情绪分布",
+      "subtitle": "公开记忆的情绪向量平均值",
+      "sampleSize": "样本数 {count}",
+      "components": {
+        "joy": "喜悦",
+        "sadness": "悲伤",
+        "anger": "愤怒",
+        "fear": "恐惧",
+        "surprise": "惊奇",
+        "nostalgia": "怀旧",
+        "peace": "平静",
+        "melancholy": "忧郁"
+      }
+    },
+    "heatmap": {
+      "title": "全球记忆热力",
+      "subtitle": "按经纬度网格聚合的公开记忆密度",
+      "resolution": {
+        "LOW": "低（5°）",
+        "MEDIUM": "中（1°）",
+        "HIGH": "高（0.25°）"
+      },
+      "intensity": "相对强度"
+    },
+    "contributors": {
+      "title": "Top 贡献者",
+      "subtitle": "创建记忆数排名",
+      "countSuffix": "条记忆",
+      "usernameUnknown": "未知用户"
+    },
+    "fragments": {
+      "title": "碎片探索率",
+      "subtitle": "已被发现的碎片占比",
+      "gauge": {
+        "label": "总体探索率"
+      },
+      "byType": "按碎片类型",
+      "types": {
+        "forgotten_detail": "被遗忘的细节",
+        "emotion_flashback": "情感闪回",
+        "scene_artifact": "场景遗物",
+        "audio_echo": "声音回响"
+      }
+    },
+    "resonance": {
+      "title": "共鸣概览",
+      "subtitle": "共鸣关系总量 / 平均得分 / 状态分布",
+      "kpi": {
+        "totalEdges": "关系总数",
+        "averageScore": "平均得分"
+      },
+      "statusBreakdown": "状态分布",
+      "status": {
+        "pending": "待审核",
+        "active": "进行中",
+        "archived": "已归档"
+      },
+      "top": {
+        "title": "最强共鸣 Top {n}",
+        "scoreLabel": "得分"
+      }
+    },
+    "health": {
+      "title": "系统健康",
+      "subtitle": "各下游服务实时状态",
+      "overall": "整体",
+      "status": {
+        "UP": "正常",
+        "DEGRADED": "降级",
+        "DOWN": "故障"
+      },
+      "latency": "延迟 {ms} ms"
+    }
   }
 }

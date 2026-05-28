@@ -57,6 +57,13 @@ mnemoscape:
     secret: ${JWT_SECRET:bW5lbW9zY2FwZS1zZWNyZXQta2V5LWZvci1obWFjLXNoYTI1Ni1hbGdvcml0aG0tMjAyNQ==}
     access-token-expiration: 3600000
     refresh-token-expiration: 604800000
+  admin:
+    # Bootstrap secret for the role-promotion endpoint (R1.5 / R1.6).
+    # Default empty = bootstrap channel disabled; AdminBootstrapService logs a
+    # WARN at startup and rejects every non-ADMIN caller with HTTP 403.
+    # Set ADMIN_BOOTSTRAP_SECRET in the deployment env (or .env.workpc) to
+    # enable; rotate or unset after the first ADMIN has been provisioned.
+    bootstrap-secret: ${ADMIN_BOOTSTRAP_SECRET:}
 
 springdoc:
   api-docs:

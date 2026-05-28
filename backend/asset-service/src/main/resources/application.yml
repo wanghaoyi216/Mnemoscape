@@ -31,6 +31,15 @@ minio:
   bucket: ${MINIO_BUCKET:mnemoscape-assets}
   presigned-ttl-seconds: ${MINIO_PRESIGNED_TTL_SECONDS:3600}
 
+# JWT shared with auth-service / api-gateway. Required by SecurityConfig so the
+# admin-scoped SecurityFilterChain can validate bearer tokens on
+# /api/v1/admin/** when callers bypass the gateway (admin-dashboard R3.2).
+mnemoscape:
+  jwt:
+    secret: ${JWT_SECRET:bW5lbW9zY2FwZS1zZWNyZXQta2V5LWZvci1obWFjLXNoYTI1Ni1hbGdvcml0aG0tMjAyNQ==}
+    access-token-expiration: 3600000
+    refresh-token-expiration: 604800000
+
 springdoc:
   api-docs:
     path: /v3/api-docs

@@ -361,7 +361,7 @@ NVIDIA Integrate 上有真正的多模态聊天模型，比如 `meta/llama-3.2-9
                  ? props.getVisionModel()    // "meta/llama-3.2-90b-vision-instruct"
                  : props.getDefaultModel();  // "minimaxai/minimax-m2.7"
   ``` 
-  
+
 - Spring AI 1.0.0-M4 支持 `OpenAiChatOptions.builder().model(...)` 在调用时覆写
 
 **优点**：保留 M2.7 优势 + 必要时多模态。
@@ -475,3 +475,269 @@ NVIDIA Integrate 上有真正的多模态聊天模型，比如 `meta/llama-3.2-9
 3. **Plan UI**：是否保留写死的 4 步模板做"快速展示"，还是完全切到 LLM 动态生成？（首字延迟权衡）
 4. **MockReconstructService 命名**：要保留作降级（改名 `RuleBasedReconstructService`）还是直接删除？
 5. **resonance-service 真实化优先级**：是这一阶段做，还是先做 AI 多模态？
+
+
+---
+
+## 9. v2 状态更新（本次会话补充）
+
+> 生成时间：2026-05-27
+> 范围：在前辈 v1 基础上，本会话围绕 §5 优先级清单逐项推进，并修复了诸多 v1 漏报 / 后续浮现的问题
+> 注意：上面 §0-§8 是 v1 历史快照，请配合本节阅读
+
+### 9.1 一页速览（v2 重排）
+
+| 大模块 | v1 状态 | v2 状态 | 关键变化 |
+|---|---|---|---|
+| 鉴权 (auth-service) | ✅ | ✅ | 加 `GET /friends/{otherUserId}/status` 探针 |
+| 记忆 CRUD | ✅ | ✅ | 创建走异步增强（先返回 → 后台 LLM 重建） |
+| 记忆漂移 | ✅ | ✅ | 不变 |
+| 记忆碎片 | ⚠️ 半 mock | ✅ 真实（+历史兼容） | 规则版改中文 + LLM 路径优先 + 36 条历史英文字典兜底 + 一键重建按钮 |
+| 版本历史 | ⚠️ 半 mock | ✅ 真实 | 加 `versionTypes` / `versionMessages` 双向字典 |
+| 时空地图 (Atlas) | ✅ | ✅ | 加 `--app-header-h` CSS 变量解决 nav 重叠 |
+| 资源 (asset-service) | ✅ | ✅ + 用户隔离 | 上传强制 `users/{userId}/` 前缀，public 资源仍可匿名读 |
+| 共鸣 (resonance-service) | 🔴 全 mock | ✅ 真实 | 接 memory-service `public-pool`，关键词 + 季节/年/地点加权 |
+| 场景重建 (/reconstruct) | 🔴 全 mock | ✅ 双轨 + grounded | LLM 优先 + Rule 兜底 + 接收年/季节/时段/地点等结构化上下文 |
+| AI 对话 (/chat) | ✅ 真实文本 | ✅ + 多模态 + RAG + ReAct | Hybrid Vision (Llama 3.2 11B+90B) + 强制 RAG + 工具事件推到 SSE + 动态 Plan |
+| AI 球前端 | ⚠️ | ✅ | 球纯紫修了、附件入口加了、登录默认开新对话、blob 缩略图永远可见 |
+| 前端 i18n | ⚠️ 30 处混排 | ✅ 全部清完 | placeholder / SceneViewer HUD / 寻找馆长 / atlas 空状态 / NoteComposer / graph 度量 |
+| EntityExtractor | ⚠️ 半实现 | ✅ 双轨 | 新建 `LlmEntityExtractor` + Controller 三档路由 |
+| FRIENDS 隐私 | 🔴 TODO | ✅ 真实 | memory-service 调 auth-service Feign 探针，fail-closed |
+
+剩余 ⚠️ / 🔴 项已全部下沉到 §9.6"未完成"。
+
+---
+
+### 9.2 v2 已完成清单（按 P0/P1/P2/P3 对齐 §5）
+
+#### P0 · 用户立刻能感知
+- [x] **P0-1 AI 球内核改色** · `AiMascotDock.vue`
+  - `.ai-orb__core` opacity 0.8→0.35、inset 18→26px、加 `mix-blend-mode: overlay`
+  - `.ai-orb` box-shadow 紫色 50px 内透换青+金双层；呼吸峰值同步去紫
+  - **附加 root cause 修复**：`discoverMascotAsset()` 的 fallback `files.find(f.type === 'gif')` 会捡资源池里第一个 GIF 当吉祥物（盖到球上），删掉这条 fallback
+- [x] **P0-2 MemoryDetailView 中英混排**：补 `fragmentTypes` (4 项) + `versionTypes` (4 项) + `versionMessages` (5 项) 字典
+- [x] **P0-3「寻找 Curator」译名 → 「寻找馆长」**：3 处替换
+- [x] **P0-4 NoteComposer 整组件 i18n**：8 个 key + 复用 `resonance.beacon.moods` mood 字典
+- [x] **P0-5 SceneViewer HUD 9 处中英混排** + 所有 mock service 输出 enum 都翻译（environments/lighting/terrain 各 6 + 7 + 6 项）
+- [x] **P0 补 1 启动每次开新对话**：`loadConversations()` 不再从 `CONV_ACTIVE_KEY` 恢复，默认调 `startNewChat(true)`
+- [x] **P0 补 2 用户隔离上传图片**：MinIO 对象 key 加 `users/{userId}/` 前缀；gateway 公开路径"尽力解析身份"；download/delete/url 全鉴权
+- [x] **P0 补 3 placeholder 英文遗漏**：ProfileView / ChatView 头像壁纸 placeholder、MemoryAtlasView 空状态 `MAP`/`FLOW` → 🗺️/🌊 emoji + i18n、MemoryGraphView 度量 i18n
+- [x] **P0 补 4 顶部 nav 与 atlas 重叠**：AppHeader ResizeObserver 写 `--app-header-h` CSS 变量，atlas 用 `var(--app-header-h, 88px)` 让位
+
+#### P1 · 功能完整性
+- [x] **P1-6 AI 多模态混合检索（hybrid retrieval）**
+  - 选型：Llama 3.2 11B Vision 主、90B Vision 备（实测稳定的 OpenAI 兼容 chat/completions endpoint；Qwen3.5/Kimi-K2.5 是异步 statuspolling 模式不可用）
+  - **`VisionDescriber` 用 JDK 标准 HttpClient**（避开 Spring RestClient 对 `application/octet-stream` 的 converter 限制，byte[] 原始字节流）
+  - **base64 内联**：MinIO presigned URL 指向 Tailscale 内网，公网视觉模型够不到，所以 ai-service 自己下载图片 → base64 → `data:` URI
+  - **SSE keepalive**：每 5s 发一帧 `:keepalive`，避免视觉前置阻塞期间被代理 reset
+  - 前端 AiMascotDock 加 📎 按钮 + 附件队列 chip + vision 标签胶囊（model id 用 `shortVisionModel(id)` 缩短显示）
+  - 用户消息泡里图片用本地 blob URL 显示（永远可见，独立于 MinIO 网络可达性）
+- [x] **P1-7 封面选择器对话框** · `CoverPickerModal.vue`
+  - 全屏 modal、三 tab（内置 / 资源池 / 上传）、stripQuery 严格去重、上传成功立即推到 dynamicMedia 并自动切到资源池 tab
+- [x] **P1-8 resonance-service 真实化**
+  - memory-service 加 `GET /memories/public-pool`（跨用户公共记忆池查询）
+  - resonance-service 加 OpenFeign + LoadBalancer 依赖、`MemoryServiceClient`
+  - `searchResonances` 用关键词 jaccard + 年/季节/地点加权打分，fail-closed 不退化 mock
+  - `createSpace` 复用 seed memory 的真 `sceneDataUrl`，相似度从 search 结果重算
+- [x] **P1-9 SceneViewer ResizeObserver**：`useThreeScene.ts` init 防 0×0、加 ResizeObserver、dispose 时正确断开
+
+#### P2 · 后端 mock 重构
+- [x] **P2-10 MockReconstructService 双轨化**
+  - 重命名 → `RuleBasedReconstructService`（前辈警告"不要删"仍生效，它是兜底）
+  - 全部英文文案换中文（72 条）+ 描述长度下限从 20→5 字符，与前端 builder 对齐
+  - 新建 `LlmReconstructService.sketch(req)`：Spring AI 输出严格 JSON SceneSketch，强约束枚举白名单
+  - 新建 `ReconstructDispatcher`：模式 `auto`(默认) / `llm` / `rule`，LLM 失败透明降级 + Rule 提供管线壳
+  - **后续强化**：prompt 接收 `title/year/season/timeOfDay/location` 结构化上下文，要求 environment/lighting/fragments 紧扣原文
+- [x] **P2-11 EntityExtractor LLM 化**
+  - 新建 `LlmEntityExtractor`，输出 schema 与现有 `EntityExtractResponse` 对齐
+  - `EntityExtractController` 加三档路由（auto/llm/rule），LLM 失败降规则版
+- [x] **P2-12 MemoryService FRIENDS 隐私接 auth-service**
+  - auth-service 加 `GET /api/v1/friends/{otherUserId}/status` 轻量探针
+  - memory-service 加 Feign client `AuthServiceClient`
+  - `MemoryService.checkAccess` FRIENDS 分支调探针，fail-closed（auth 不可达拒绝读）
+
+#### P3 · 长期改造
+- [x] **P3-13 Plan 由 LLM 动态生成**
+  - `ChatReasoner.generateDynamicPlan(question, zh, userId)` 输出 JSON 数组形式 plan
+  - `ChatController` 加 `planExec` 线程池：PLAN 意图下**异步**跑规划（不阻塞首字延迟）
+  - 新 SSE 事件 `plan_update`：1-3s 内推到前端，覆盖之前 meta 帧硬编码 4 步
+  - 前端 reducer 保留已 done 步骤的状态、新步骤设 pending
+- [x] **P3-14 ReAct 步骤暴露 SSE**
+  - `ChatReasoner.ToolEventListener` 接口（onStart/onEnd）
+  - 强制 RAG（`milvusSearchTool`）和视觉前置（`visionPrePass`）都包成 `tool_start` / `tool_end` 帧
+  - 前端已有 reducer，自动渲染齿轮 → ✓ 动效，可点开看 input/output JSON
+  - **限制**：Spring AI 1.0.0-M4 ChatClient.stream() 仍不暴露真实 function-calling 钩子。当上层升级时只需加更多 `tools.onStart/onEnd` 调用，对外契约不变
+- [x] **P3-15 RAG 接入 ChatReasoner.buildUserPrompt**
+  - `MilvusSearchTool` 拆出 `searchForUser(req, userId)`（显式 userId，不依赖 SecurityContext）
+  - `ChatReasoner.buildRagPrefix(req, userId, tools)`：每次对话主动召回 top-K 命中记忆 prepend 到 prompt（与前端 context 去重）
+  - `ChatController` 从 `X-User-Id` header 取 caller 透传
+
+---
+
+### 9.3 v2 数据流大修：解决"假" fragment + SceneViewer 空白
+
+**根因复盘**：
+1. 记忆**创建时** ai-service 跑过完整 reconstruct，结果 freeze 到 `memory.visualData` JSON 列；但 `MemoryResponse` 没暴露这个字段
+2. SceneViewer **每次进页面都重跑** `/reconstruct`，赌一次 LLM 成功率 + 等 30s
+3. axios 默认 timeout=15s，LLM 重建经常超过 → 前端报 "场景重建当前不可用"
+4. 旧 mock 服务套模板，与用户描述无关
+
+**v2 修复链路**：
+- `MemoryResponse` 暴露 `visualData` / `emotionProfile`
+- `frontend/types/index.ts` 同步加字段
+- **SceneViewer 三级兜底**：
+  1. `memory.visualData`（直接 JSON.parse，0 网络请求）
+  2. `sceneDataUrl` http 链接 fetch
+  3. 现场调 `/reconstruct`（保留 60s timeout 兜底）
+- LLM grounding prompt 强化：禁止"长椅旧照片 / 鸟巢"等套模板话术
+- 新端点 `POST /memories/{id}/regenerate-scene` + 前端"重建场景"按钮，让用户一键脱离假数据
+- **createMemory 异步化**：`@EnableAsync` + `asyncEnrichmentSelf` 自代理，主线程立即返回；AI 重建在后台 10-30s 完成
+- 历史 36 条英文 fragment 文案 → 中文 i18n 字典兜底（`fragmentsPanel.legacyContent`），用 `tm()` 取整段后 JS 端精确匹配
+
+---
+
+### 9.4 v2 新增/重要修改文件清单
+
+#### 后端
+| 文件 | 类型 | 用途 |
+|---|---|---|
+| `ai-service/.../service/RuleBasedReconstructService.java` | 重命名+重写 | 原 MockReconstructService，文案全中文 |
+| `ai-service/.../service/LlmReconstructService.java` | 新建 | LLM 输出 SceneSketch JSON |
+| `ai-service/.../service/ReconstructDispatcher.java` | 新建 | auto/llm/rule 三档路由 + 合并 |
+| `ai-service/.../service/LlmEntityExtractor.java` | 新建 | LLM 版 NER |
+| `ai-service/.../service/VisionDescriber.java` | 新建 | JDK HttpClient + base64 内联视觉 |
+| `ai-service/.../tools/MilvusSearchTool.java` | 修改 | 加 `searchForUser(req, userId)` |
+| `ai-service/.../service/ChatReasoner.java` | 大改 | RAG/Vision/ToolEventListener/动态 plan |
+| `ai-service/.../controller/ChatController.java` | 大改 | SSE keepalive + plan_update + tool 事件桥 |
+| `ai-service/.../config/AiUpstreamProperties.java` | 加字段 | visionModel/visionFallbackModel/visionMaxImages/visionTimeoutMs |
+| `ai-service/.../model/dto/AiChatRequest.java` | 加字段 | `images: List<String>` |
+| `ai-service/.../model/dto/ReconstructRequest.java` | 重写 | 加 title/year/season/timeOfDay/location |
+| `asset-service/.../service/AssetService.java` | 大改 | 用户隔离 USER_PREFIX/uploadForUser/listMinioStaticForUser/checkRead/Write |
+| `asset-service/.../controller/AssetController.java` | 修改 | 端点全部接 RequestContext.userId |
+| `api-gateway/.../filter/AuthGlobalFilter.java` | 修改 | 公开路径"尽力解析身份"模式 |
+| `auth-service/.../controller/FriendController.java` | 加端点 | `GET /friends/{otherUserId}/status` |
+| `memory-service/.../client/AuthServiceClient.java` | 新建 | Feign 调 friend status 探针 |
+| `memory-service/.../client/MemoryServiceClient.java`（在 resonance 包） | 新建 | resonance 调 memory public-pool |
+| `memory-service/.../service/MemoryService.java` | 大改 | 异步 `runEnrichmentAsync` + checkAccess 接 auth-service + `regenerateScene` |
+| `memory-service/.../controller/MemoryController.java` | 加端点 | `/memories/public-pool` + `/memories/{id}/regenerate-scene` |
+| `memory-service/.../repository/MemoryRepository.java` | 加查询 | `findPublicPoolExcludingUser(excludeUserId, Pageable)` |
+| `memory-service/.../repository/MemoryFragmentRepository.java` | 加查询 | `deleteByMemoryId(memoryId)` |
+| `memory-service/.../model/dto/MemoryResponse.java` | 加字段 | `visualData` / `emotionProfile` |
+| `memory-service/MemoryApplication.java` | 加注解 | `@EnableAsync` |
+| `resonance-service/pom.xml` | 加依赖 | `spring-cloud-starter-openfeign` + `spring-cloud-starter-loadbalancer`（**两者必须同时加**） |
+| `resonance-service/.../service/ResonanceService.java` | 重写 | 接 memory-service public-pool，关键词加权 |
+| `resonance-service/.../controller/ResonanceController.java` | 修改 | 加 RequestContext.userId 注入 |
+
+#### 前端
+| 文件 | 类型 | 用途 |
+|---|---|---|
+| `components/common/CoverPickerModal.vue` | 新建 | 三 tab 全屏封面选择器 |
+| `components/ai/AiMascotDock.vue` | 大改 | 附件队列 / vision 胶囊 / plan_update / tool 事件 / 启动开新对话 |
+| `components/layout/AppHeader.vue` | 修改 | ResizeObserver 写 --app-header-h |
+| `views/SceneViewer.vue` | 修改 | 三级 visualData 兜底 + i18n + ResizeObserver |
+| `views/MemoryDetailView.vue` | 修改 | i18n 字典查表 + 重建场景按钮 + tm() 历史字典兜底 |
+| `views/MemoryAtlasView.vue` | 修改 | --app-header-h 让位 + i18n-t 空状态 |
+| `views/MemoryGraphView.vue` | 修改 | 按情绪着色 + i18n metrics |
+| `views/MemoryBuilderView.vue` | 修改 | 接入 CoverPickerModal、地点 LocationPicker 已有 |
+| `composables/useThreeScene.ts` | 修改 | ResizeObserver + 0×0 防御 |
+| `composables/useDynamicMedia.ts` | 不变 | refresh() 在 modal 打开时被调用 |
+| `api/memory.ts` | 加 fn | `regenerateScene(id)` + `reconstruct` 60s timeout |
+| `stores/memory.ts` | 加 fn | `regenerateScene(id)` |
+| `types/index.ts` | 加字段 | `visualData` / `emotionProfile` on MemoryItem |
+| `i18n/locales/zh-CN.json` | 大改 | atlas.emptyHints / scene.environments等 / fragmentsPanel.legacyContent (36 条) / coverPicker / chat.sidebar.*Placeholder |
+| `i18n/locales/en-US.json` | 大改 | 同步全部新字典 + memory.graph 完整翻译 |
+
+---
+
+### 9.5 v2 配置项变更
+
+`backend/ai-service/src/main/resources/application.yml`：
+```yaml
+mnemoscape:
+  ai:
+    upstream:
+      vision-model: ${NVIDIA_VISION_MODEL:meta/llama-3.2-11b-vision-instruct}
+      vision-fallback-model: ${NVIDIA_VISION_FALLBACK_MODEL:meta/llama-3.2-90b-vision-instruct}
+      vision-max-images: ${NVIDIA_VISION_MAX_IMAGES:4}
+      vision-timeout-ms: ${NVIDIA_VISION_TIMEOUT_MS:45000}
+    reconstruct:
+      mode: ${RECONSTRUCT_MODE:auto}     # auto / llm / rule
+    extract:
+      mode: ${EXTRACT_MODE:auto}          # 同上
+```
+
+`.env.example` 同步新增 6 个变量；前端 `frontend/src/api/memory.ts` `reconstruct()` / `regenerateScene()` 单独 60s timeout。
+
+---
+
+### 9.6 仍未完成 / 仍有缺陷的项（给下个迭代）
+
+#### 长期改造（受上游限制）
+- **真 function-calling 钩子推到 SSE**：Spring AI 1.0.0-M4 的 ChatClient.stream() 仍不直接暴露 function 调用 callback。我做的 ReAct UI 是把"强制 RAG / 视觉前置"包装成工具事件，模型自己 function-call 时仍然黑盒。等 Spring AI 升级到能用 advisors 链路再补
+- **真 Milvus 向量检索**：MilvusSearchTool 仍是"基于 memory-service 真实数据 + 关键词 jaccard 加权"的 RAG 替身。架构是对的，把 `searchForUser` 内部实现换成真实 embedding+Milvus 检索即可，对外契约不变
+
+#### 设计书 v1.1 中描述但本会话未做的
+- **管理端大屏可视化**（设计书 §3.4 / 当前完全没有）— 需要新增 admin route + ECharts/AntV 大屏 + 后端聚合接口
+- **emotionVector 前端波形 / 动效**：现在只在 MemoryGraphView 用情绪着色；设计书 §3.4.4 的"全球记忆热力图（3D Heatmap）"没做
+- **聊天系统 @AI助手 / 一键引入 AI 解密**（设计书 §3.2.3）— 当前 ChatView 与 AI 球是分离的
+- **管理端"系统活跃用户多维度切换"看板**（设计书 §3.4.1）— 后端尚无 `dimension=DAILY/WEEKLY/MONTHLY/YEARLY` 聚合端点
+
+#### 体验小问题
+- **intentHints 写死**（前辈 §2.2.2）：仍硬编码 4 条；应该按用户实际记忆动态生成（需 ai-service 提供"推荐问题" API）
+- **LocalResourceWatcher**（设计书 §3.2.2 静态资源 WatchService 热加载）：asset-service 已有 `LocalResourceWatcher.java`，但**未端到端验证** —— 需要确认放新文件到 `resource/` 后前端能瞬间感知
+- **个人页 fakeEmotion**（前辈 §2.1）：仍是写死的 mock，等 ai-service 加情绪聚合接口
+- **聊天历史漫游 / @AI**（前辈 §2.1 chat tab）：未规划
+- **emotion vector 在 MemoryDetailView 的 drift-panel**：drift 是真的，但 emotionProfile 当前没在 detail 页可视化（只在 graph 用）
+
+#### 历史数据兼容
+- **DB 里既有的 fragments**（一部分仍是英文 mock 内容）：用户必须主动点"重建场景"才能刷成中文 grounded 内容。可以做：
+  - 后台批量任务（管理员入口）一次性重建所有 fragments
+  - 或者保留前端 `legacyContent` 字典作长期兜底
+- **DB 里既有的 visualData**（部分为 null 或旧 mock）：SceneViewer 第三级 fallback 会现场调 reconstruct 自动修复
+
+#### 安全 / 数据残留
+- **MinIO bucket 中已残留的旧上传**（用户隔离修复**之前**的对象，无 `users/` 前缀）：当前会被错误地当成"公共内置素材"对所有人可见。我**没有**自动迁移 —— 需要管理员手动到 MinIO console 把不属于"项目预置 133MB resource 同步"的对象处理掉
+
+---
+
+### 9.7 v2 验证状态
+
+#### 编译
+- 后端：`./mvnw -pl ai-service,memory-service,resonance-service,asset-service,api-gateway,auth-service -am compile` → BUILD SUCCESS
+- 前端：`npx vue-tsc --noEmit -p tsconfig.app.json` → 0 errors
+
+#### 用户实测过的（用户报告 ✓）
+- AI 球颜色（球边 + 球心都 OK）
+- 启动开新对话
+- 文本对话 SSE 流
+- 图片上传 + Llama 3.2 11B Vision 视觉前置 + base座 M2.7 中文回答
+- 视觉胶囊不溢出消息泡
+- 用户消息泡里图片可见
+
+#### 用户实测过仍有问题的
+- ~~SceneViewer 一直空白~~ → 通过 visualData 三级兜底 + LLM 60s timeout 修复
+- ~~记忆碎片是英文/无关内容~~ → 通过中文规则版 + LLM grounding + 重建按钮 + legacyContent 字典修复
+
+#### 已修但未实测的
+- FRIENDS 隐私接 auth-service（需双账号联调）
+- regenerate-scene 端点
+- 动态 plan 与 tool 事件 SSE
+- 共鸣 createSpace 真 sceneDataUrl
+
+---
+
+### 9.8 给下个智能体的建议优先级
+
+如果用户没有特别要求，建议按这个顺序：
+
+1. **管理端大屏看板**（设计书 §3.4，目前完全空白）— 用户最容易新感知到的"产品完整度"
+2. **真 Milvus embedding+检索**（替换 MilvusSearchTool 的关键词加权实现）— 让 RAG 更准
+3. **历史 fragments 批量重建工具**（管理员入口）— 把残留旧 mock 数据一次性洗干净
+4. **聊天系统 @AI**（设计书 §3.2.3）— 把 AI 球和 ChatView 联通
+5. **intentHints 动态化** — 给 AI 球加"推荐问题"API
+6. **LocalResourceWatcher 端到端验证 + 前端 WebSocket 推送**
+7. **管理端 dashboard 多维度时间聚合**（DAILY/WEEKLY/MONTHLY/YEARLY）
+
+---
+
+最后一次更新：2026-05-27 · v2 by 第二代智能体（接续 WangHaoYi 项目）
