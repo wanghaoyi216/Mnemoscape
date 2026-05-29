@@ -698,6 +698,9 @@ function startGlobeAutoRotate() {
       autoRotateRaf = 0
       return
     }
+    // v10：交互期间挂起 — 由 stopGlobeAutoRotate / scheduleResumeRotate 控制；
+    //      在进入 frame 时如果发现已被外部 cancel，就让本帧静默退出。
+    if (autoRotateRaf === 0) return
     const c = map.getCenter()
     map.jumpTo({ center: [c.lng + 0.06, c.lat] })
     autoRotateRaf = requestAnimationFrame(rotate)
@@ -708,6 +711,31 @@ function startGlobeAutoRotate() {
 function stopGlobeAutoRotate() {
   if (autoRotateRaf) cancelAnimationFrame(autoRotateRaf)
   autoRotateRaf = 0
+}
+
+/* v10：用户操作（拖动 / 滚轮 / 点击 / 旋转 / 倾斜）会暂停地球自转，
+        闲置 RESUME_AFTER_MS 毫秒后自动恢复。这比 v9 的"首次交互后永不再转"
+        更符合"地球应当一直旋转"的直觉，同时保留用户控制权。 */
+const RESUME_AFTER_MS = 4000
+let resumeRotateTimer: ReturnType<typeof setTimeout> | null = null
+function scheduleResumeRotate() {
+  // 如果地球已经在自转，不需要再排定恢复 —— 避免每帧 jumpTo 触发 moveend 时
+  // 反复 clear/set timer 浪费 CPU。
+  if (autoRotateRaf !== 0) return
+  if (resumeRotateTimer) {
+    clearTimeout(resumeRotateTimer)
+    resumeRotateTimer = null
+  }
+  resumeRotateTimer = setTimeout(() => {
+    resumeRotateTimer = null
+    // 切到 flat / tilt 后或组件已卸载时不要恢复
+    if (!map || viewMode.value !== 'globe') return
+    startGlobeAutoRotate()
+  }, RESUME_AFTER_MS)
+}
+function pauseRotateForInteraction() {
+  stopGlobeAutoRotate()
+  scheduleResumeRotate()
 }
 
 /* ---- 闪烁星空 canvas（globe 模式专属，独立于 MapLibre） ---- */
@@ -863,18 +891,23 @@ onMounted(async () => {
     } catch { /* noop */ }
   }, 6000)
 
-  // v9：用户首次交互（drag / wheel / click）后立刻停止地球自转，把控制权交还。
-  // 这样南半球可以通过拖动浏览，不会被自转持续抢回。
-  let userInteracted = false
-  const stopAutoRotateOnInteract = () => {
-    if (userInteracted) return
-    userInteracted = true
-    stopGlobeAutoRotate()
-  }
-  map.on('dragstart', stopAutoRotateOnInteract)
-  map.on('wheel', stopAutoRotateOnInteract)
-  map.on('rotatestart', stopAutoRotateOnInteract)
-  map.on('pitchstart', stopAutoRotateOnInteract)
+  // v10：地球持续自转；任何用户交互（drag / wheel / click / pinch / rotate / pitch）
+  //      会立即暂停自转，闲置 RESUME_AFTER_MS 毫秒后自动恢复 —— 让"星球一直在转"
+  //      的视觉持续，但绝不和用户操作打架。
+  map.on('mousedown',     pauseRotateForInteraction)
+  map.on('touchstart',    pauseRotateForInteraction)
+  map.on('dragstart',     pauseRotateForInteraction)
+  map.on('wheel',         pauseRotateForInteraction)
+  map.on('rotatestart',   pauseRotateForInteraction)
+  map.on('pitchstart',    pauseRotateForInteraction)
+  map.on('zoomstart',     pauseRotateForInteraction)
+  // dragend / zoomend / rotateend 后再 schedule 一次（trigger 后用户可能继续操作，
+  // 重置定时器让计时重新开始）
+  map.on('dragend',       scheduleResumeRotate)
+  map.on('zoomend',       scheduleResumeRotate)
+  map.on('rotateend',     scheduleResumeRotate)
+  map.on('pitchend',      scheduleResumeRotate)
+  map.on('moveend',       scheduleResumeRotate)
 
   map.addControl(new maplibregl.NavigationControl({ showCompass: true, visualizePitch: true }), 'top-right')
   map.touchZoomRotate.enableRotation()
@@ -921,6 +954,10 @@ onMounted(async () => {
 onBeforeUnmount(() => {
   if (rafHandle) cancelAnimationFrame(rafHandle)
   stopGlobeAutoRotate()
+  if (resumeRotateTimer) {
+    clearTimeout(resumeRotateTimer)
+    resumeRotateTimer = null
+  }
   stopStarLoop()
   rafHandle = 0
   window.removeEventListener('resize', initStars)
@@ -956,6 +993,11 @@ function enterFlat(lng: number, lat: number) {
   if (!map) return
   dismissHint()
   stopGlobeAutoRotate()
+  // v10：清掉可能 pending 的恢复定时器，避免切到 flat 后还冒一个自转回来
+  if (resumeRotateTimer) {
+    clearTimeout(resumeRotateTimer)
+    resumeRotateTimer = null
+  }
   enteredFlat.value = true
   viewMode.value = 'flat'
   map.flyTo({
@@ -994,8 +1036,10 @@ function returnToGlobe() {
   selected.value = null
   try { map.setProjection({ type: 'globe' }) } catch { /* noop */ }
   map.flyTo({ center: [50, 15], zoom: 1.6, pitch: 0, bearing: 0, duration: 1400, essential: true })
-  // v9：回到地球后 *不* 自动开旋转。用户已经交互过；旋转抢控制权是 v8 的痛点。
-  // 想看自转的话刷新页面就回到初始状态。
+  // v10：回到地球时重新启用自转（flyTo 完成的 moveend 会重新调度 resume，
+  //      但 flyTo 本身是 user-driven 的 move，会被 mousedown listener 拦下；
+  //      这里多调度一次更稳：1.4s flyTo + 4s idle ≈ 5.4s 后地球开始转）。
+  scheduleResumeRotate()
 }
 
 /** v9：切换底图样式。三选一：physical / imagery / street */

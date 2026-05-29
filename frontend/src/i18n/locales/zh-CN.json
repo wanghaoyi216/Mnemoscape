@@ -751,6 +751,54 @@
     "unavailable": "服务暂不可用，请稍后重试。",
     "unknown": "未知错误，请稍后重试。"
   },
+  "support": {
+    "fab": "联系客服",
+    "title": "客服在线",
+    "subtitle": "把问题告诉我们，工作人员会第一时间回复",
+    "newTicket": "新工单",
+    "myTickets": "我的工单",
+    "back": "返回列表",
+    "createTitle": "提交新问题",
+    "subjectLabel": "主题",
+    "subjectPlaceholder": "用一句话描述问题（例如：登录后无法看到记忆图谱）",
+    "descriptionLabel": "详细描述",
+    "descriptionPlaceholder": "请尽量详细描述（可附图片，回到工单后再上传）",
+    "priorityLabel": "优先级",
+    "submit": "提交",
+    "submitting": "提交中…",
+    "emptyTickets": "暂无工单。点击「新工单」开始一段对话。",
+    "ticketStatus": {
+      "OPEN": "待处理",
+      "IN_PROGRESS": "处理中",
+      "RESOLVED": "已解决",
+      "CLOSED": "已关闭"
+    },
+    "priority": {
+      "LOW": "低",
+      "NORMAL": "普通",
+      "HIGH": "高",
+      "URGENT": "紧急"
+    },
+    "messages": {
+      "you": "你",
+      "support": "客服",
+      "noMessages": "等待客服回复中……",
+      "placeholder": "输入消息（支持 emoji 与图片）",
+      "send": "发送",
+      "image": "图片",
+      "emoji": "表情",
+      "imageTooLarge": "图片大小不能超过 5MB",
+      "uploading": "上传中…"
+    },
+    "close": "关闭工单",
+    "closeConfirm": "确定关闭此工单吗？关闭后无法继续聊天。",
+    "closed": "工单已关闭",
+    "errors": {
+      "createFailed": "工单提交失败，请稍后重试。",
+      "sendFailed": "消息发送失败，请检查网络后重试。",
+      "uploadFailed": "图片上传失败：{msg}"
+    }
+  },
   "admin": {
     "nav": {
       "entry": "管理面板",
@@ -762,7 +810,11 @@
       "contributors": "贡献者榜",
       "fragments": "碎片探索",
       "resonance": "共鸣概览",
-      "health": "系统健康"
+      "health": "系统健康",
+      "usersManagement": "用户管理",
+      "memoriesManagement": "记忆管理",
+      "resonanceManagement": "关系管理",
+      "supportInbox": "客服工单"
     },
     "guard": {
       "notAdmin": "仅管理员可访问该页面，已为你跳转回记忆首页",
@@ -888,6 +940,189 @@
         "DOWN": "故障"
       },
       "latency": "延迟 {ms} ms"
+    },
+    "usersMgmt": {
+      "title": "用户管理",
+      "subtitle": "查看 / 搜索 / 修改用户角色与状态",
+      "search": "搜索用户名 / 邮箱",
+      "filters": {
+        "all": "全部",
+        "role": "角色",
+        "verified": "已验证",
+        "unverified": "未验证"
+      },
+      "columns": {
+        "username": "用户名",
+        "email": "邮箱",
+        "role": "角色",
+        "verified": "状态",
+        "createdAt": "注册时间",
+        "actions": "操作"
+      },
+      "actions": {
+        "promote": "升管理员",
+        "demote": "降普通用户",
+        "verify": "标记已验证",
+        "unverify": "撤销验证",
+        "delete": "删除",
+        "view": "查看"
+      },
+      "batch": {
+        "selected": "已选 {n} 项",
+        "delete": "批量删除",
+        "deleteConfirm": "确定删除这 {n} 个用户？此操作不可撤销。",
+        "clearSelection": "取消选择"
+      },
+      "confirm": {
+        "deleteOne": "确定删除用户 {name}？此操作不可撤销。",
+        "promote": "把 {name} 设置为管理员？",
+        "demote": "把 {name} 降为普通用户？",
+        "verify": "标记 {name} 已通过验证？",
+        "unverify": "撤销 {name} 的验证状态？"
+      },
+      "toast": {
+        "deleted": "已删除 {n} 个用户",
+        "deleteFailed": "{n} 个用户删除失败",
+        "roleChanged": "角色已更新",
+        "verifiedChanged": "状态已更新",
+        "operationFailed": "操作失败：{msg}"
+      }
+    },
+    "memoriesMgmt": {
+      "title": "记忆管理",
+      "subtitle": "审核 / 调整记忆隐私 / 锁定 / 删除",
+      "search": "搜索标题",
+      "filters": {
+        "userId": "归属用户 ID",
+        "privacy": "隐私级别",
+        "locked": "锁定状态",
+        "all": "全部",
+        "yes": "已锁定",
+        "no": "未锁定"
+      },
+      "columns": {
+        "title": "标题",
+        "owner": "归属",
+        "privacy": "隐私",
+        "locked": "锁",
+        "year": "年份",
+        "location": "地点",
+        "createdAt": "创建时间",
+        "actions": "操作"
+      },
+      "actions": {
+        "lock": "锁定",
+        "unlock": "解锁",
+        "makePrivate": "设为私密",
+        "makeFriends": "设为好友可见",
+        "makePublic": "设为公开",
+        "delete": "删除",
+        "viewDetail": "查看详情"
+      },
+      "batch": {
+        "selected": "已选 {n} 项",
+        "delete": "批量删除",
+        "deleteConfirm": "确定删除这 {n} 条记忆？将连同碎片 / 版本一并清理，不可撤销。",
+        "lock": "批量锁定",
+        "unlock": "批量解锁",
+        "privacy": "批量改隐私",
+        "clearSelection": "取消选择"
+      },
+      "confirm": {
+        "deleteOne": "确定删除记忆「{title}」？"
+      },
+      "toast": {
+        "deleted": "已删除 {n} 条记忆",
+        "updated": "已更新 {n} 条",
+        "operationFailed": "操作失败：{msg}"
+      }
+    },
+    "resonanceMgmt": {
+      "title": "共鸣关系管理",
+      "subtitle": "查看 / 调整共鸣边的状态，批量删除冗余关系",
+      "filters": {
+        "all": "全部状态",
+        "pending": "待审核",
+        "accepted": "已接受",
+        "rejected": "已拒绝",
+        "archived": "已归档"
+      },
+      "columns": {
+        "memoryAId": "记忆 A",
+        "memoryBId": "记忆 B",
+        "score": "得分",
+        "status": "状态",
+        "createdAt": "创建时间",
+        "actions": "操作"
+      },
+      "actions": {
+        "accept": "标为已接受",
+        "reject": "标为已拒绝",
+        "archive": "归档",
+        "delete": "删除"
+      },
+      "batch": {
+        "selected": "已选 {n} 项",
+        "delete": "批量删除",
+        "status": "批量改状态",
+        "clearSelection": "取消选择"
+      }
+    },
+    "supportInbox": {
+      "title": "客服工单",
+      "subtitle": "查看 / 处理用户工单，回复消息",
+      "stats": {
+        "open": "待处理",
+        "inProgress": "处理中",
+        "resolved": "已解决",
+        "closed": "已关闭",
+        "total": "总数"
+      },
+      "filters": {
+        "search": "搜索主题 / 内容",
+        "status": "状态",
+        "priority": "优先级",
+        "userId": "用户 ID",
+        "all": "全部"
+      },
+      "status": {
+        "OPEN": "待处理",
+        "IN_PROGRESS": "处理中",
+        "RESOLVED": "已解决",
+        "CLOSED": "已关闭"
+      },
+      "priority": {
+        "LOW": "低",
+        "NORMAL": "普通",
+        "HIGH": "高",
+        "URGENT": "紧急"
+      },
+      "columns": {
+        "subject": "主题",
+        "user": "用户",
+        "priority": "优先级",
+        "status": "状态",
+        "lastMessageAt": "最近消息",
+        "actions": "操作"
+      },
+      "actions": {
+        "open": "打开",
+        "resolve": "标为已解决",
+        "close": "关闭工单",
+        "delete": "删除"
+      },
+      "detail": {
+        "ticketTitle": "工单 #{id}",
+        "from": "提交人",
+        "subject": "主题",
+        "description": "描述",
+        "messages": "对话记录",
+        "replyPlaceholder": "回复客户……",
+        "send": "发送",
+        "uploadImage": "图片",
+        "emoji": "表情",
+        "noMessages": "暂无消息"
+      }
     }
   }
 }

@@ -6,6 +6,56 @@
 
 @import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Playfair+Display:ital,wght@0,500;0,600;0,700;1,500&family=JetBrains+Mono:wght@400;500&display=swap");
 
+/* ────────────────────────────────────────────────────────────────────
+   v3：用户要求全站文字采用「ComicShannsMono + 华文行楷」组合。
+   - ComicShannsMonoNerdFont(Mono/Propo) 是用户已经安装到本机
+     %LOCALAPPDATA%\Microsoft\Windows\Fonts\ 的 Nerd Font。
+   - 华文行楷 (STXingkai) 是 macOS 默认中文字体；Windows 自带的最接近的
+     是「华文楷体 / STKaiti」(simkai.ttf)、「楷体 / KaiTi」、「仿宋 / FangSong」。
+     用户机器上已有 simfang.ttf（仿宋）作为最终兜底。
+   - 用 src: local() 列表 — 浏览器找到第一个本地存在的就用，找不到就走下一个。
+   - 为字体声明取了通用别名 "Mnemoscape Display"：项目里所有引用 var(--font-art)
+     的地方都会得到 ComicShannsMono 排英文 + STXingkai 排中文的混排效果。
+   ──────────────────────────────────────────────────────────────────── */
+@font-face {
+  font-family: "Mnemoscape Mono";
+  src: local("ComicShannsMonoNerdFont-Regular"),
+       local("ComicShannsMono Nerd Font"),
+       local("ComicShannsMono"),
+       local("ComicShanns Mono"),
+       local("Comic Mono"),
+       local("JetBrains Mono"),
+       local("Consolas");
+  font-display: swap;
+  font-style: normal;
+  font-weight: 400;
+}
+@font-face {
+  font-family: "Mnemoscape Mono";
+  src: local("ComicShannsMonoNerdFont-Bold"),
+       local("ComicShannsMono Nerd Font Bold"),
+       local("ComicShannsMono Bold"),
+       local("ComicShanns Mono Bold"),
+       local("JetBrains Mono Bold");
+  font-display: swap;
+  font-style: normal;
+  font-weight: 700;
+}
+@font-face {
+  font-family: "Mnemoscape Hand";
+  src: local("华文行楷"),
+       local("STXingkai"),
+       local("STXingKai"),
+       local("华文楷体"),
+       local("STKaiti"),
+       local("KaiTi"),
+       local("楷体"),
+       local("FangSong"),
+       local("仿宋");
+  font-display: swap;
+  unicode-range: U+4E00-9FFF, U+3000-303F, U+FF00-FFEF;
+}
+
 :root {
   color-scheme: dark;
 
@@ -74,10 +124,17 @@
   --page-width: min(1280px, calc(100vw - 48px));
   --page-width-wide: min(1480px, calc(100vw - 48px));
 
-  /* Type families — 中文优先级靠前，本地无 Noto 时优雅回退到系统中文字体 */
-  --font-sans: "Inter", "Noto Sans SC", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
-  --font-display: "Playfair Display", "Noto Serif SC", "Songti SC", "STSong", Georgia, serif;
-  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  /* Type families — v3 切到 ComicShannsMono + 华文行楷组合
+     - --font-sans / --font-display：英文走 ComicShannsMono（自带 Nerd 图标），
+       中文走 Mnemoscape Hand（华文行楷 / 兜底楷体仿宋）；浏览器对每个字符
+       会按 src/unicode-range 自己选合适的 face。
+     - --font-mono：保留 ComicShannsMono 等宽形态，给代码块用。
+     - --font-art：纯艺术显示用（落款 / brand），强制行楷优先。
+  */
+  --font-sans: "Mnemoscape Mono", "Mnemoscape Hand", "Inter", "Noto Sans SC", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+  --font-display: "Mnemoscape Mono", "Mnemoscape Hand", "Playfair Display", "Noto Serif SC", "Songti SC", "STSong", Georgia, serif;
+  --font-mono: "Mnemoscape Mono", "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  --font-art: "Mnemoscape Hand", "Mnemoscape Mono", "Playfair Display", "STSong", serif;
 }
 
 /* ============================== Reset ============================== */
@@ -104,14 +161,100 @@ body {
   min-height: 100vh;
   color: var(--text);
   background: transparent;
+  /* v8 → v9：字体放大 (15 → 17px) + 整体加粗 (默认 500)；
+     行高保持舒适，letter-spacing 略放宽配合 ComicShannsMono 偏窄的字身。 */
   font-family: var(--font-sans);
-  font-size: 15px;
-  line-height: 1.6;
-  letter-spacing: -0.005em;
+  font-size: 17px;
+  font-weight: 500;
+  line-height: 1.62;
+  letter-spacing: 0.005em;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
   font-feature-settings: "ss01", "cv01", "cv11";
+}
+
+/* ────────────────────────────────────────────────────────────────────
+   v9：动态彩色渐变文字
+   - 通过 .text-aurora 工具类把文字"染"上一层流动的渐变（emerald→gold→
+     accent→primary 循环），用 background-clip: text 让渐变只作用在字形本身。
+   - 默认所有的标题 (h1–h6) / 强调 (strong / b) / 链接 (a) / 段落开头标题
+     (.section-title / brand) 自动套上这层效果 —— 视觉上不喧宾夺主、
+     强调字保持清晰并带"星空使者"质感。
+   - 输入框 / 按钮 / 表格内容 / code 块刻意排除：因为它们要求纯色才有最大对比度。
+   ──────────────────────────────────────────────────────────────────── */
+
+@keyframes auroraShift {
+  0%   { background-position: 0%   50%; }
+  50%  { background-position: 100% 50%; }
+  100% { background-position: 0%   50%; }
+}
+
+.text-aurora,
+:where(h1, h2, h3, h4, h5, h6, strong, b, .section-title, .brand strong, .brand__copy strong) {
+  /* v10：七彩动态渐变 — 红橙黄绿青蓝紫一次性铺满文字宽度，再让位置动起来。
+     用 hue-rotate 难达到"所有色同时可见"的效果；直接列 7 色 stop 才行。 */
+  background-image: linear-gradient(
+    100deg,
+    #ff5f6d 0%,
+    #ffb86c 16%,
+    #f7e96b 32%,
+    #58e36a 48%,
+    #4ecde6 64%,
+    #5b8def 80%,
+    #b06bff 96%,
+    #ff5f6d 100%
+  );
+  background-size: 220% 220%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+  animation: auroraShift 6s linear infinite;
+  font-weight: 800;
+  text-shadow: 0 0 0 transparent;
+}
+
+/* 链接和按钮里的文字也享受渐变 — 但禁用区分明显
+   v12 例外：导航类链接 (.app-nav__link, .admin-subnav__link, RouterLink active 状态) 必须保持纯色，
+   因为渐变 + active pill 背景叠加会让 -webkit-text-fill-color: transparent 把文字"吃掉"。 */
+:where(a:not(.button):not(.app-nav__link):not(.admin-subnav__link):not(.cs-tab):not(.cs-back), .ai-md-body a) {
+  background-image: linear-gradient(
+    100deg,
+    #ff5f6d 0%,
+    #ffb86c 16%,
+    #f7e96b 32%,
+    #58e36a 48%,
+    #4ecde6 64%,
+    #5b8def 80%,
+    #b06bff 96%,
+    #ff5f6d 100%
+  );
+  background-size: 220% 220%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+  font-weight: 700;
+  animation: auroraShift 5s linear infinite;
+}
+
+/* 防止渐变把表单元素和按钮内文字也吃掉 —— 这些必须保持纯色对比 */
+:where(input, textarea, select, button, .button, code, pre, kbd, samp, .mono, .datestamp) {
+  -webkit-text-fill-color: initial;
+  background-clip: initial;
+  -webkit-background-clip: initial;
+  background-image: none;
+  color: var(--text);
+}
+:where(input::placeholder, textarea::placeholder) {
+  color: var(--text-muted);
+}
+
+/* AI 球聊天泡内 markdown 标题用更明显的渐变（重要场景 + 用户期望感最强） */
+.ai-md-body :where(h1, h2, h3, h4) {
+  background-size: 200% 200%;
+  animation-duration: 6s;
 }
 
 a {
@@ -373,21 +516,32 @@ select:disabled {
 }
 
 .text-gradient {
-  background: linear-gradient(
-    135deg,
-    #ffffff 0%,
-    #e0f8ef 28%,
-    #d7f8ee 55%,
-    #f6d39a 100%
+  /* v12：把老的 white→cream "shimmer" 改成 v10 的七彩动态渐变 ——
+     这条类被所有 .display-title (页面大标题) 套用，旧版颜色在新黑底主题下
+     几乎看不见（用户报告"标题应该是文字啊"指的就是这里）。
+     现在统一切到与全局 h1-h6 一致的红橙黄绿青蓝紫七色循环。 */
+  background-image: linear-gradient(
+    100deg,
+    #ff5f6d 0%,
+    #ffb86c 16%,
+    #f7e96b 32%,
+    #58e36a 48%,
+    #4ecde6 64%,
+    #5b8def 80%,
+    #b06bff 96%,
+    #ff5f6d 100%
   );
+  background-size: 220% 220%;
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
-  background-size: 200% 200%;
-  animation: gradient-shimmer 8s var(--ease-in-out-quart) infinite;
+  -webkit-text-fill-color: transparent;
+  font-weight: 800;
+  animation: auroraShift 6s linear infinite;
 }
 
 @keyframes gradient-shimmer {
+  /* 旧动画名保留以防外部仍有引用，但与 auroraShift 同义 */
   0%, 100% { background-position: 0% 50%; }
   50% { background-position: 100% 50%; }
 }
@@ -697,12 +851,13 @@ select:disabled {
   align-items: center;
   justify-content: center;
   gap: 10px;
-  min-height: 46px;
+  min-height: 48px;
   border: 1px solid transparent;
   border-radius: var(--radius-sm);
-  padding: 0 22px;
-  font-weight: 600;
-  font-size: 0.92rem;
+  padding: 0 24px;
+  /* v10：跟随顶 nav 一起加粗放大；min-height 同步 +2px。 */
+  font-weight: 700;
+  font-size: 1.04rem;
   letter-spacing: 0.01em;
   white-space: nowrap;
   transition:
@@ -977,15 +1132,15 @@ select:disabled {
 }
 
 .user-chip__avatar {
-  width: 32px;
-  height: 32px;
+  width: 36px;
+  height: 36px;
   border-radius: 50%;
   display: grid;
   place-items: center;
   background: linear-gradient(135deg, var(--primary), var(--gold));
   color: #052017;
-  font-weight: 700;
-  font-size: 0.86rem;
+  font-weight: 800;
+  font-size: 1.02rem;
 }
 
 .user-chip__meta {
@@ -995,14 +1150,22 @@ select:disabled {
 }
 
 .user-chip__meta strong {
-  font-size: 0.86rem;
-  font-weight: 600;
+  font-size: 1.02rem;
+  font-weight: 800;
   letter-spacing: -0.005em;
+  /* v12：user-chip 是导航类元素，不参与七彩渐变 — 否则用户名会被 transparent 化 */
+  background-image: none;
+  -webkit-background-clip: initial;
+  background-clip: initial;
+  -webkit-text-fill-color: currentColor;
+  color: var(--text);
+  animation: none;
 }
 
 .user-chip__meta small {
   color: var(--text-muted);
-  font-size: 0.7rem;
+  font-size: 0.86rem;
+  font-weight: 600;
   letter-spacing: 0.04em;
 }
 

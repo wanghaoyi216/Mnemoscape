@@ -10,10 +10,14 @@ import org.springframework.web.socket.config.annotation.WebSocketHandlerRegistry
 public class WebSocketConfig implements WebSocketConfigurer {
     private final ResonanceWebSocketHandler resonanceHandler;
     private final ChatWebSocketHandler chatHandler;
+    private final SupportWebSocketHandler supportHandler;
 
-    public WebSocketConfig(ResonanceWebSocketHandler resonanceHandler, ChatWebSocketHandler chatHandler) {
+    public WebSocketConfig(ResonanceWebSocketHandler resonanceHandler,
+                           ChatWebSocketHandler chatHandler,
+                           SupportWebSocketHandler supportHandler) {
         this.resonanceHandler = resonanceHandler;
         this.chatHandler = chatHandler;
+        this.supportHandler = supportHandler;
     }
 
     @Override
@@ -21,6 +25,8 @@ public class WebSocketConfig implements WebSocketConfigurer {
         registry.addHandler(resonanceHandler, "/ws/resonance")
                 .setAllowedOrigins("*");
         registry.addHandler(chatHandler, "/ws/chat")
+                .setAllowedOrigins("*");
+        registry.addHandler(supportHandler, "/ws/support")
                 .setAllowedOrigins("*");
     }
 }

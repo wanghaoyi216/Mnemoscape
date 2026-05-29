@@ -4,6 +4,8 @@ import { useI18n } from 'vue-i18n'
 import { useRoute } from 'vue-router'
 import AppHeader from './components/layout/AppHeader.vue'
 import AiMascotDock from './components/ai/AiMascotDock.vue'
+import CustomerSupportWidget from './components/support/CustomerSupportWidget.vue'
+import ToastContainer from './components/common/ToastContainer.vue'
 import { useHealthCheck } from './composables/useHealthCheck'
 import { useDynamicMedia } from './composables/useDynamicMedia'
 import { useAuthStore } from './stores/auth'
@@ -64,6 +66,8 @@ onMounted(() => {
       </router-view>
     </main>
     <AiMascotDock v-if="auth.isLoggedIn" />
+    <CustomerSupportWidget v-if="auth.isLoggedIn" />
+    <ToastContainer />
     <footer v-if="route.name !== 'MemoryAtlas'" class="app-footer" role="contentinfo">
       <div class="page-shell app-footer__inner">
         <div class="app-footer__brand">

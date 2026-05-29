@@ -374,14 +374,21 @@ public class ChatReasoner {
         return null;
     }
 
-    /** 把用户问题 + 记忆 digest + locale 拼成模型 prompt。 */
+    /** 把用户问题 + 记忆 digest + locale 拼成模型 prompt。
+     *
+     *  v3 变更：把 context 从"权威记忆数据"降级为"可能滞后的辅助提示"，并在
+     *  prompt 里显式提醒模型「真实数据请用 milvusSearchTool 实时取」。这是用户
+     *  v7 反馈"删了记忆 AI 还在引用旧条目"的直接修复 —— 之前 prompt 让模型把
+     *  context 当事实，但前端 context 来源是登录时拉的一批快照，不实时。
+     */
     private String buildUserPrompt(AiChatRequest req) {
         boolean zh = req.getLocale() == null || req.getLocale().startsWith("zh");
         StringBuilder sb = new StringBuilder();
         sb.append(zh ? "用户语种: zh\n" : "User locale: en\n");
         if (req.getContext() != null && !req.getContext().isEmpty()) {
-            sb.append(zh ? "以下是用户授权的近 N 条记忆摘要 (JSON-like):\n"
-                         : "Authorized recent memory digests (JSON-like):\n");
+            sb.append(zh
+                    ? "[辅助索引 — 可能过时，仅供你判断对话主题；真实数据请通过 milvusSearchTool / memoryDetailTool 实时拉取]\n"
+                    : "[Stale hints — for topic awareness only; ALWAYS re-fetch real data via milvusSearchTool / memoryDetailTool]\n");
             int i = 0;
             for (AiChatRequest.MemoryDigest d : req.getContext()) {
                 sb.append("[")
@@ -393,11 +400,13 @@ public class ChatReasoner {
                   .append(", snippet=").append(safe(d.getSnippet()))
                   .append("\n");
             }
+            sb.append('\n');
         } else {
-            sb.append(zh ? "(暂无记忆 context — 必要时用 milvusSearchTool 主动检索)\n"
-                         : "(no memory context — call milvusSearchTool when needed)\n");
+            sb.append(zh
+                    ? "(暂无辅助索引 — 直接调用 milvusSearchTool 检索用户记忆库)\n\n"
+                    : "(no hints — call milvusSearchTool to look into the user's memories directly)\n\n");
         }
-        sb.append("\n").append(zh ? "用户问题:\n" : "User question:\n").append(req.getQuestion());
+        sb.append(zh ? "用户问题:\n" : "User question:\n").append(req.getQuestion());
         return sb.toString();
     }
 

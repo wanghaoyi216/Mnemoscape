@@ -16,7 +16,7 @@ import org.springframework.data.repository.query.Param;
 import java.time.LocalDateTime;
 import java.util.List;
 
-public interface MemoryRepository extends JpaRepository<Memory, String> {
+public interface MemoryRepository extends JpaRepository<Memory, String>, org.springframework.data.jpa.repository.JpaSpecificationExecutor<Memory> {
     Page<Memory> findByUserIdOrderByCreatedAtDesc(String userId, Pageable pageable);
     List<Memory> findByUserIdOrderByCreatedAtDesc(String userId);
     List<Memory> findByIsLockedFalse();

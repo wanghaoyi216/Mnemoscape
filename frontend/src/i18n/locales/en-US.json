@@ -571,6 +571,54 @@
     "unavailable": "Service temporarily unavailable.",
     "unknown": "Unknown error. Please try again."
   },
+  "support": {
+    "fab": "Contact Support",
+    "title": "Support Online",
+    "subtitle": "Tell us your issue — we'll get back as soon as possible",
+    "newTicket": "New ticket",
+    "myTickets": "My tickets",
+    "back": "Back to list",
+    "createTitle": "Submit a new ticket",
+    "subjectLabel": "Subject",
+    "subjectPlaceholder": "One-line summary (e.g. cannot view atlas after login)",
+    "descriptionLabel": "Description",
+    "descriptionPlaceholder": "Describe the issue. You can attach images after creating the ticket.",
+    "priorityLabel": "Priority",
+    "submit": "Submit",
+    "submitting": "Submitting…",
+    "emptyTickets": "No tickets yet. Click \"New ticket\" to start a conversation.",
+    "ticketStatus": {
+      "OPEN": "Open",
+      "IN_PROGRESS": "In progress",
+      "RESOLVED": "Resolved",
+      "CLOSED": "Closed"
+    },
+    "priority": {
+      "LOW": "Low",
+      "NORMAL": "Normal",
+      "HIGH": "High",
+      "URGENT": "Urgent"
+    },
+    "messages": {
+      "you": "You",
+      "support": "Support",
+      "noMessages": "Awaiting support reply…",
+      "placeholder": "Type a message (supports emoji & images)",
+      "send": "Send",
+      "image": "Image",
+      "emoji": "Emoji",
+      "imageTooLarge": "Image must be smaller than 5 MB",
+      "uploading": "Uploading…"
+    },
+    "close": "Close ticket",
+    "closeConfirm": "Close this ticket? You won't be able to send more messages.",
+    "closed": "Ticket closed",
+    "errors": {
+      "createFailed": "Failed to submit ticket. Please retry.",
+      "sendFailed": "Failed to send message. Check your connection and retry.",
+      "uploadFailed": "Image upload failed: {msg}"
+    }
+  },
   "admin": {
     "nav": {
       "entry": "Admin",
@@ -582,7 +630,11 @@
       "contributors": "Top Contributors",
       "fragments": "Fragment Discovery",
       "resonance": "Resonance Overview",
-      "health": "System Health"
+      "health": "System Health",
+      "usersManagement": "Users",
+      "memoriesManagement": "Memories",
+      "resonanceManagement": "Edges",
+      "supportInbox": "Support"
     },
     "guard": {
       "notAdmin": "Admin only — redirected to your memories",
@@ -708,6 +760,189 @@
         "DOWN": "DOWN"
       },
       "latency": "Latency {ms} ms"
+    },
+    "usersMgmt": {
+      "title": "User Management",
+      "subtitle": "View / search / change user roles and status",
+      "search": "Search username / email",
+      "filters": {
+        "all": "All",
+        "role": "Role",
+        "verified": "Verified",
+        "unverified": "Unverified"
+      },
+      "columns": {
+        "username": "Username",
+        "email": "Email",
+        "role": "Role",
+        "verified": "Status",
+        "createdAt": "Joined",
+        "actions": "Actions"
+      },
+      "actions": {
+        "promote": "Promote",
+        "demote": "Demote",
+        "verify": "Verify",
+        "unverify": "Unverify",
+        "delete": "Delete",
+        "view": "View"
+      },
+      "batch": {
+        "selected": "{n} selected",
+        "delete": "Delete selected",
+        "deleteConfirm": "Delete {n} users? This cannot be undone.",
+        "clearSelection": "Clear selection"
+      },
+      "confirm": {
+        "deleteOne": "Delete user {name}? Cannot be undone.",
+        "promote": "Promote {name} to admin?",
+        "demote": "Demote {name} to regular user?",
+        "verify": "Mark {name} as verified?",
+        "unverify": "Revoke {name}'s verified status?"
+      },
+      "toast": {
+        "deleted": "Deleted {n} users",
+        "deleteFailed": "{n} users failed to delete",
+        "roleChanged": "Role updated",
+        "verifiedChanged": "Status updated",
+        "operationFailed": "Operation failed: {msg}"
+      }
+    },
+    "memoriesMgmt": {
+      "title": "Memory Management",
+      "subtitle": "Audit / adjust privacy / lock / delete memories",
+      "search": "Search title",
+      "filters": {
+        "userId": "Owner user ID",
+        "privacy": "Privacy",
+        "locked": "Locked",
+        "all": "All",
+        "yes": "Locked",
+        "no": "Unlocked"
+      },
+      "columns": {
+        "title": "Title",
+        "owner": "Owner",
+        "privacy": "Privacy",
+        "locked": "Lock",
+        "year": "Year",
+        "location": "Location",
+        "createdAt": "Created",
+        "actions": "Actions"
+      },
+      "actions": {
+        "lock": "Lock",
+        "unlock": "Unlock",
+        "makePrivate": "Set Private",
+        "makeFriends": "Set Friends",
+        "makePublic": "Set Public",
+        "delete": "Delete",
+        "viewDetail": "View detail"
+      },
+      "batch": {
+        "selected": "{n} selected",
+        "delete": "Delete selected",
+        "deleteConfirm": "Delete {n} memories? Fragments and versions will be removed too.",
+        "lock": "Lock selected",
+        "unlock": "Unlock selected",
+        "privacy": "Change privacy",
+        "clearSelection": "Clear selection"
+      },
+      "confirm": {
+        "deleteOne": "Delete memory \"{title}\"?"
+      },
+      "toast": {
+        "deleted": "Deleted {n} memories",
+        "updated": "Updated {n} items",
+        "operationFailed": "Operation failed: {msg}"
+      }
+    },
+    "resonanceMgmt": {
+      "title": "Resonance Management",
+      "subtitle": "View / adjust resonance edge status, bulk delete",
+      "filters": {
+        "all": "All statuses",
+        "pending": "Pending",
+        "accepted": "Accepted",
+        "rejected": "Rejected",
+        "archived": "Archived"
+      },
+      "columns": {
+        "memoryAId": "Memory A",
+        "memoryBId": "Memory B",
+        "score": "Score",
+        "status": "Status",
+        "createdAt": "Created",
+        "actions": "Actions"
+      },
+      "actions": {
+        "accept": "Mark accepted",
+        "reject": "Mark rejected",
+        "archive": "Archive",
+        "delete": "Delete"
+      },
+      "batch": {
+        "selected": "{n} selected",
+        "delete": "Delete selected",
+        "status": "Change status",
+        "clearSelection": "Clear selection"
+      }
+    },
+    "supportInbox": {
+      "title": "Support Tickets",
+      "subtitle": "Review / respond to user tickets",
+      "stats": {
+        "open": "Open",
+        "inProgress": "In progress",
+        "resolved": "Resolved",
+        "closed": "Closed",
+        "total": "Total"
+      },
+      "filters": {
+        "search": "Search subject / content",
+        "status": "Status",
+        "priority": "Priority",
+        "userId": "User ID",
+        "all": "All"
+      },
+      "status": {
+        "OPEN": "Open",
+        "IN_PROGRESS": "In progress",
+        "RESOLVED": "Resolved",
+        "CLOSED": "Closed"
+      },
+      "priority": {
+        "LOW": "Low",
+        "NORMAL": "Normal",
+        "HIGH": "High",
+        "URGENT": "Urgent"
+      },
+      "columns": {
+        "subject": "Subject",
+        "user": "User",
+        "priority": "Priority",
+        "status": "Status",
+        "lastMessageAt": "Last message",
+        "actions": "Actions"
+      },
+      "actions": {
+        "open": "Open",
+        "resolve": "Mark resolved",
+        "close": "Close ticket",
+        "delete": "Delete"
+      },
+      "detail": {
+        "ticketTitle": "Ticket #{id}",
+        "from": "From",
+        "subject": "Subject",
+        "description": "Description",
+        "messages": "Conversation",
+        "replyPlaceholder": "Reply to customer…",
+        "send": "Send",
+        "uploadImage": "Image",
+        "emoji": "Emoji",
+        "noMessages": "No messages yet"
+      }
     }
   }
 }

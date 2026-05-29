@@ -1302,3 +1302,346 @@ public String generateAnswer(AiChatRequest req, String userId) { ... }
 
 最后一次更新：2026-05-27 (v6) · 第六代智能体完成 admin-dashboard 部署联调（DB 升级 + Gateway 路由 + AppHeader 视觉）
 
+
+
+
+---
+---
+
+# 第七代工作记忆（v7）
+
+> 接续会话：2026-05-28
+> 视角：在 admin-dashboard 全交付（v3-v6）之后，按用户需求加上"管理后台数据表格 + 批量操作 + 客服问答系统"
+> 关注点：**两个新功能的实现选型** + **新建实体 / 控制器 / WebSocket** + **DDL 落库提示**
+
+---
+
+## v7.1 本次会话完成的事
+
+### 功能 1：管理后台数据表格 + 批量操作
+
+| 维度 | 后端 | 前端 |
+|---|---|---|
+| 用户 | `auth-service AdminUserManagementController` (`/api/v1/admin/users-management`) | `AdminUsersManagementView.vue` |
+| 记忆 | `memory-service AdminMemoryManagementController` (`/api/v1/admin/memories`) | `AdminMemoriesManagementView.vue` |
+| 共鸣关系 | `resonance-service AdminResonanceManagementController` (`/api/v1/admin/resonance-management`) | `AdminResonanceManagementView.vue` |
+
+每个都支持：
+- 分页查询（page/size, 默认 20, 最大 100）
+- 多字段过滤（搜索 / 角色 / 隐私 / 状态）
+- 单条 PATCH（改隐私 / 锁 / 状态 / 角色 / verified）
+- 单条 DELETE
+- 批量删除（cap 500）
+- 批量改属性（隐私 / 锁定 / 状态 / 角色）
+- 严格白名单 DTO（`record AdminUserRow / AdminMemoryRow / AdminResonanceRow`）
+- `admin-audit` 结构化日志
+
+共享前端组件：
+- `components/admin/AdminDataTable.vue` —— generic table，支持列定义 + 命名 slot 自定义渲染
+- `components/common/ToastContainer.vue` —— 全局 toast 容器，订阅 `useToastStore`
+
+### 功能 2：客服问答系统
+
+后端：
+- 新实体：`SupportTicket`、`SupportMessage`（resonance-service）
+- 新仓库：`SupportTicketRepository` + `SupportMessageRepository`
+- 服务层：`SupportService`（用户工单 CRUD + 管理员处理 + WebSocket 推送）
+- 用户控制器：`SupportController` (`/api/v1/support/tickets/**`)
+- 管理员控制器：`AdminSupportController` (`/api/v1/admin/support/**`)
+- WebSocket：`SupportWebSocketHandler` (`/ws/support?userId=...&role=USER|ADMIN`)
+- DDL 脚本：`resonance-service/src/main/resources/db/support-tickets.sql`（**部署前必须手工执行**）
+
+前端：
+- 用户端浮动客服按钮：`components/support/CustomerSupportWidget.vue`
+  - 三段式弹窗：tickets 列表 / 创建工单 / 对话视图
+  - 支持 emoji（自带 100+ 常用 emoji，没引第三方库）
+  - 支持图片上传（走 asset-service `/api/v1/assets/upload`，5MB 限制）
+  - WebSocket 实时接收回复 + 30s 兜底轮询
+- 管理员端 inbox：`AdminSupportInboxView.vue`
+  - 4 个状态 KPI 卡（OPEN / IN_PROGRESS / RESOLVED / CLOSED / total）
+  - 工单列表（搜索 + 过滤）
+  - 右侧详情面板：消息流 + 状态切换 + 回复输入框
+
+Gateway 路由表新增 5 条：
+- `admin-users-management` → auth-service
+- `admin-memories-management` → memory-service
+- `admin-resonance-management` → resonance-service
+- `admin-support` → resonance-service
+- `resonance-service` 路由扩展 `/api/v1/support/**`
+
+---
+
+## v7.2 v7 新增的关键陷阱
+
+### v7.2.1 ⚠️ 部署前必须执行 DDL 脚本
+- `support-tickets.sql` 创建 `support_tickets` + `support_messages` 表 + CHECK 约束
+- Hibernate `ddl-auto=update` 会建表但不加 CHECK 约束
+- 部署前：`mysql -h 100.66.166.46 -u root -p resonance < support-tickets.sql`
+
+### v7.2.2 ⚠️ MAVEN_OPTS 在 mvnw.cmd 下不一定继承
+- `set MAVEN_OPTS=-Xmx2048m` 在 cmd 下能继承
+- PowerShell 下 `$env:MAVEN_OPTS = "-Xmx2048m"` 必须**先于** `.\mvnw.cmd` 调用
+- 写 `.\mvnw.cmd ... $env:MAVEN_OPTS=...` 反向写法不会注入到子进程
+
+### v7.2.3 ⚠️ JpaSpecificationExecutor 必须显式声明
+- `findAll(Specification, Pageable)` 来自 `JpaSpecificationExecutor`，不是 `JpaRepository`
+- 已为 `MemoryRepository`、`UserRepository`、`SupportTicketRepository` 三个补上
+- 注意：`ResonanceSpaceRepository` 当前没继承 —— 我在 management controller 里改成"先 findAll(sort) 后内存过滤"绕过了这个限制（因为 ResonanceSpaceRepository 已被多处使用，不要冒然修改它的 type）
+
+### v7.2.4 ⚠️ Specification import 在 JPA 3 后改名
+- 旧：`import org.springframework.data.jpa.domain.Specification`
+- 新（Spring Boot 3.x / JPA 3）：仍然是 `org.springframework.data.jpa.domain.Specification` —— 没改
+- 但**如果你用了 Specifications.where(...)** 那个老 helper：已废弃，用 `Specification.where(s)` 静态方法
+
+### v7.2.5 ⚠️ Vue `<script setup lang="ts" generic="T">` 语法
+- Vue 3.4+ 支持泛型组件：`<script setup lang="ts" generic="T extends { id: string }">`
+- 这让 `AdminDataTable<T>` 可以推导出每行的具体类型
+- 不要用 `defineComponent({ generic })` —— 那是另一套（更繁琐）
+
+### v7.2.6 ⚠️ Toast 的 i18n params 必须写到 `ToastInput` 类型
+- 之前 `ToastInput` 只有 `key/tone`
+- 加了 `params?: Record<string, string | number>` 并把 push 时也写到 toasts ref 里
+- ToastContainer 用 `t(msg.key, msg.params || {})` 渲染
+
+### v7.2.7 ⚠️ CustomerSupportWidget WebSocket 路径
+- `/ws/support?userId=...&role=USER|ADMIN`，gateway 路由表已经有 `lb:ws://resonance-service` 处理 `/ws/**`
+- 不要忘了 query param `role` —— SupportService 通过 role 把 USER 和 ADMIN 路由到不同的 session pool
+- 重连：close 事件触发 setTimeout 5s 后重连，避免 race
+
+### v7.2.8 ⚠️ Emoji picker 不引第三方
+- 用了一个手写的 100+ emoji 数组，避免引入 `@emoji-mart` / `emoji-picker-element`（每个都至少 100+ KB）
+- 弊端：emoji 不分组、没搜索、没肤色变体；优点：bundle 几乎零增量
+- 用户如果反馈不够用，再上 `emoji-picker-element`（轻量些）
+
+### v7.2.9 ⚠️ ChatMessage 与 SupportMessage 是两套实体
+- `ChatMessage` 继续用于"灵魂共鸣大厅 / 群聊"通用聊天
+- `SupportMessage` 专属于客服工单（带 ticketId 外键 + senderRole 字段）
+- 两套独立 WebSocket：`/ws/chat`（既有）和 `/ws/support`（新加）
+- 不要试图复用 ChatMessage —— 加 ticketId 列会把所有现有 chat_messages 行都污染
+
+### v7.2.10 ⚠️ AdminSupportController 路径在管理员侧
+- 用户访问 `/api/v1/support/tickets/...` —— 管理员通过 X-User-Role=ADMIN 也能直接用同一个端点（SupportService 在内部判定 isAdmin）
+- 而 `/api/v1/admin/support/tickets/...` 仅管理员，独立 controller，提供"看所有 / 改状态 / 删除 / 批量"等不能让普通用户做的操作
+
+---
+
+## v7.3 v7 关键决策记录
+
+| 决策 | 选择 | 理由 |
+|---|---|---|
+| 客服系统的对话存储 | 独立 `SupportMessage` 表 | 与既有 `ChatMessage` 解耦；schema 演进彼此不干扰 |
+| 客服 ticket 状态机 | OPEN → IN_PROGRESS → RESOLVED → CLOSED | 行业标准；管理员首次回复自动从 OPEN → IN_PROGRESS |
+| 客服 WebSocket 推送 | 双 session pool（USER / ADMIN） | 用户只收自己的工单事件；ADMIN 收全平台工单事件 |
+| Emoji picker | 手写 100+ emoji 数组 | 避免 100+ KB bundle 增量 |
+| 图片上传 | 走 asset-service `/api/v1/assets/upload` | 复用既有用户隔离 + presigned URL 机制 |
+| 浮动按钮位置 | 左下角（`left: 24px; bottom: 24px`） | 避开右下角的 AI 球 |
+| 管理后台表格 | 通用 `<AdminDataTable>` + 命名 slot | 4 个表格只重复列定义 + 行操作槽位 |
+| 批量删除上限 | 500（memory/resonance）/ 200（user/support） | 用户更敏感，下手要稳 |
+| 防止"自删自降" | DELETE/role 时检查 callerId 与 role 计数 | 不能让最后一个 ADMIN 自杀，也不能管理员自删 |
+| Specification 导入策略 | 三个 repository 显式继承 JpaSpecificationExecutor | 让 admin controller 可以做复杂过滤 |
+| toast 自动关闭 | push 时 setTimeout 默认 4000ms | 比 toast 容器自己计时简单 + 比手动 dismiss 友好 |
+
+---
+
+## v7.4 给下一代的关键提醒
+
+1. **DDL 必须先跑**：`backend/resonance-service/src/main/resources/db/support-tickets.sql` —— 不跑就报 "Table 'resonance.support_tickets' doesn't exist" 然后 SupportService 全炸
+2. **新 controller 的路径不要重复**：
+   - `/api/v1/admin/users/**`（旧，role-promotion）vs `/api/v1/admin/users-management/**`（新，CRUD 表格）
+   - 故意不合并是因为 role-promotion 有 X-Bootstrap-Secret 特殊路径，CRUD 表格走纯 ROLE_ADMIN
+3. **Gateway 路由表 first-match-wins**：新加路由必须放到对应服务的更大 path 前面
+4. **WebSocket 在 vite dev 下需要代理**：检查 `frontend/vite.config.ts` 的 `server.proxy` 是否包含 `/ws`，否则用户报"客服小窗连不上"
+5. **support_messages.sender_role 是字符串 enum**：`USER` / `ADMIN` / `SYSTEM`，不要换成枚举类型 —— Hibernate 默认 `EnumType.STRING` 也行，但既有规范是字符串，保持一致
+6. **CustomerSupportWidget 的轮询是 30s**：仅在弹窗打开 + 当前是 list 视图时触发，不会一直刷请求
+7. **CSS `position: fixed; left: 24px; bottom: 24px`**：刻意没占用右下角，因为 AI 球在那
+8. **AdminDataTable 的 slot 命名**：`cell-<key>` 是行单元格，`row-actions` 是行尾操作区，`header-actions` 是表头右侧
+9. **不要把 toast 改成自动 timeout=0**：那样所有 toast 都不会自己消失，UI 会糊
+10. **测试入口**：用 admin 账号登录 → 顶 nav "管理面板" → sub-nav 看到 4 个新条目（用户管理 / 记忆管理 / 关系管理 / 客服工单）；用普通账号登录 → 左下角看到客服浮动按钮
+
+---
+
+## v7.5 待用户验收 / 后续可优化
+
+### 已完成可用
+- ✅ 4 个管理表格 + 批量操作
+- ✅ 浮动客服按钮 + 三视图弹窗 + 文字 / emoji / 图片
+- ✅ 管理员 inbox + 双向实时聊天
+- ✅ WebSocket 推送 + 离线兜底轮询
+- ✅ Toast 通知系统
+- ✅ vue-tsc 全过 + vite build 成功 + 后端 mvn compile 成功
+
+### 已知未做（用户可后续要求）
+- ⏳ 客服工单批量分配给特定管理员
+- ⏳ 客服满意度评分
+- ⏳ 用户主动撤回消息
+- ⏳ Emoji 分组 / 搜索（如果 100 个不够用）
+- ⏳ 文件附件（除图片外）
+- ⏳ 管理员导出工单为 CSV
+- ⏳ 用户管理表格的 IP 历史 / 登录历史（需要新表）
+
+---
+
+最后一次更新：2026-05-28 (v7) · 第七代智能体完成"管理后台数据表格 + 批量操作"和"客服问答系统"两个功能的端到端交付
+
+
+
+---
+---
+
+# 第八代工作记忆（v8）
+
+> 接续会话：2026-05-28（晚）
+> 视角：用户报告 AI 仍引用旧记忆、回复不是 markdown、字体不对，于是补三件事：
+>   1. 重写 system prompt，强制工具调用；2. 新增 4 个工具；3. 全站换字体 + AI 回复 markdown 渲染
+> 关注点：**system prompt v3 解析** + **新工具清单** + **markdown / 字体落地**
+
+---
+
+## v8.1 本次会话完成的事
+
+### A. 重写 AiClientConfig.DEFAULT_SYSTEM_PROMPT（v3）
+- 旧 prompt 允许"基于授权 context 回答" → 用户删完记忆 AI 仍引用 context（context 是请求层注入的 stale 摘要）
+- 新 prompt 把 context 显式降级为「辅助索引 — 可能过时」，并强制：
+  - 问"我有没有 X"→ 必须 milvusSearchTool
+  - 问"那条 Y 写了什么" → 必须 memoryDetailTool
+  - 问"多少条 / 哪些地方 / 隐私分布" → memoryStatsTool
+  - 问"最近天气 / 名人 / 知识" → webSearchTool
+  - 用户表达"反馈 / bug / 提需求" → supportTicketTool
+- 同步修改 `ChatReasoner.buildUserPrompt`：在 prompt 里把 context 包成 `[辅助索引 — 可能过时]`，提示模型不可直接当事实
+
+### B. 新增 4 个 ai-service 工具
+
+| 工具 | 类 | 触发场景 |
+|---|---|---|
+| memoryDetailTool | `MemoryDetailTool.java` | 查单条记忆完整内容（描述 / 时间地点 / 隐私 / 可选 fragments） |
+| memoryStatsTool | `MemoryStatsTool.java` | 聚合统计：总数、隐私分布、年份直方图、季节、Top 8 地点 |
+| supportTicketTool | `SupportTicketTool.java` | 让 AI 代用户提交客服工单（resonance-service /support/tickets） |
+| webSearchTool | `WebSearchTool.java` | DuckDuckGo IA + HTML 兜底，免 key 联网搜索 |
+
+加在一起，`ai-service` 现在有 7 个 FunctionCallback：
+1. `milvusSearchTool` — 关键词搜记忆库（旧）
+2. `neo4jRelationTool` — 知识图谱关联（旧）
+3. `minioMediaFetchTool` — 多模态资源（旧）
+4. `memoryDetailTool` — 记忆详情（新）
+5. `memoryStatsTool` — 统计（新）
+6. `supportTicketTool` — 客服反馈（新）
+7. `webSearchTool` — 联网检索（新）
+
+### C. Feign 客户端扩展
+- `MemoryServiceClient` 新增 `getMemory(id)` / `getFragments(id)` / `getVersions(id)` / `getDrift(id)`
+- 新增 `ResonanceServiceClient`（Feign + LoadBalancer）调用 `/support/tickets`
+- ai-service 已有 LoadBalancer 依赖（v2 经验里踩过），不需要新增 pom
+
+### D. 前端 markdown 渲染 + 字体切换
+- `npm install marked dompurify @types/dompurify` —— 极小依赖（gz 后 ~12KB）
+- `composables/useMarkdown.ts`：`renderMarkdown(s)` 经过 marked → DOMPurify 清洗
+- AiMascotDock 模板里把 `<p v-text>` 换成 `<div v-html="renderMarkdown(m.text)">`
+- 在 Vue scoped CSS 里给 `.ai-md-body :deep(...)` 写了 h1-h4 / ul / ol / blockquote / code / pre / table 的样式
+- `style.css` 顶部加了两个 @font-face：
+  - `Mnemoscape Mono` ← `local('ComicShannsMonoNerdFont-Regular' / 'JetBrains Mono' / 'Consolas')`
+  - `Mnemoscape Hand` ← `local('华文行楷' / 'STXingkai' / '华文楷体' / 'STKaiti' / 'KaiTi' / 'FangSong')`，限定 unicode-range CJK
+- 把 `--font-sans / --font-display / --font-mono / --font-art` 全切到这两个新字族打头
+- 由于 root `body { font-family: var(--font-sans) }` 是既有规则 → **整站文字自动换字体**，不需要逐组件改
+
+---
+
+## v8.2 v8 新增的关键陷阱
+
+### v8.2.1 ⚠️ Java instance pattern + Map<?,?> 泛型 capture 不能用于 getOrDefault(K, V)
+- 写 `if (row instanceof Map<?,?> m)` 后，`m.getOrDefault("k", "default")` 编译报 "不兼容的类型: java.lang.String 无法转换为 capture#1"
+- 因为 `Map<?, ?>.getOrDefault(Object, ?)` 第二个参数是 capture，String 不能赋
+- **解法**：`if (row instanceof Map<?,?> mWild)` 后立即 `@SuppressWarnings("unchecked") Map<String, Object> m = (Map<String, Object>) mWild;`
+- 这个坑 v8 里两个新工具都踩了；写工具时记得直接转成 `Map<String, Object>`
+
+### v8.2.2 ⚠️ ChatClient.Builder.defaultFunctions 累加而不是替换
+- AiClientConfig 现在通过 `@Autowired List<FunctionCallback>` 把所有 7 个 callback 一次注入
+- Spring AI 内部把这些 FunctionCallback 都注册到 OpenAI 的 tools 字段里 — Json schema 由 Builder.builder.inputType(Class) 推导
+- 注意：每个 FunctionCallback bean 名（@Bean 方法名）必须**唯一**，否则 Spring 会因为同名 bean 拒绝启动
+  - 已踩过：MilvusSearchTool 的注释里就写过同名问题
+  - v8 我用 `xxxToolCallback()` 后缀避免冲突
+
+### v8.2.3 ⚠️ DuckDuckGo Instant Answer 经常返回空 RelatedTopics
+- 中文查询命中率低；英文好一些
+- **解法**：HTML fallback（`https://html.duckduckgo.com/html/?q=...`）— 但这个端点会被 Cloudflare 在某些 ASN 限速 / 挡 UA
+- WebSearchTool 已伪装成 Chrome UA；超时设 10s
+- 如果用户机器在国内，DDG 可能完全连不上 → 工具返回 degraded=true，模型继续用训练知识兜底
+- 若要更稳，下一步可以接 Tavily / Serper / Brave Search API（都需要 key）
+
+### v8.2.4 ⚠️ DOMPurify v3 的 ALLOWED_TAGS 默认禁用 target=_blank
+- 我在 sanitize options 里加 `ADD_ATTR: ['target']` 让 a 标签带 target 通过
+- 又额外做了一次正则替换给所有 `<a href=...>` 强制套上 `target="_blank" rel="noopener noreferrer"`
+- **不要**改成允许 `<img>` —— 攻击者可以通过 markdown image 语法引用外链触发 SSRF / pixel tracking。聊天泡里的图片走自己的 attachments slot
+
+### v8.2.5 ⚠️ `font-display: swap` 在 unicode-range 受限的 face 上没问题
+- `Mnemoscape Hand` 限定 `unicode-range: U+4E00-9FFF, U+3000-303F, U+FF00-FFEF` 只覆盖 CJK
+- 浏览器对每个字符独立查 face —— 中文用 Hand，英文/数字 fall through 到 Mono
+- 不要用 `unicode-range` 缺省值（会覆盖 latin），否则 Hand 会替换英文，体验糟糕
+
+### v8.2.6 ⚠️ marked.parse(...) v12+ 默认 async=true，类型是 `Promise<string>`
+- 直接 `marked.parse(src) as string` 会被 TS 拒绝
+- **解法**：传 options `{ async: false }` 第二个参数，回到同步 `string`
+- 这个 v3 强行 break change 没充分文档化；写时间在 2024-2025 间的 marked 用户都会撞到
+
+### v8.2.7 ⚠️ AI 在国内网络下 webSearchTool 失败时的兜底
+- 实测 DDG 在国内被墙 — webSearchTool 大概率 timeout / connection refused
+- 模型行为：tool 返回 `degraded=true`，模型仍会基于自己训练数据回答，但会主动说"网络搜索连不上，我用训练知识回答"
+- 这种 graceful degradation 比硬错好；但下一代如果要保证国内可用，就要换搜索后端
+
+### v8.2.8 ⚠️ 系统提示词长度对 token 成本的影响
+- v3 prompt 大约 1000 字（~750 tokens for Chinese）—— 每轮对话都会发，加上上下文记忆 + 工具 schema，单次 input 可能到 2-3k tokens
+- 当前 MiniMax M2.7 / NVIDIA Integrate 不收业务费，无所谓；但若以后切付费模型，要考虑把决策树移到 user prompt 末尾的 system reminder
+- **不要**把 prompt 切成多个 system message 发 —— Spring AI 1.0.0-M4 的 ChatClient 只用第一个 system；多发的会被忽略
+
+### v8.2.9 ⚠️ 重启 ai-service 时 8083 端口可能不立即释放
+- 用 control_pwsh_process stop 只关 powershell wrapper，不杀 java 进程
+- **解法**：`Get-NetTCPConnection -LocalPort 8083 -State Listen | Stop-Process -Id $.OwningProcess -Force`
+- 然后再启动新 ai-service —— 否则会报 "Address already in use"
+
+---
+
+## v8.3 v8 关键决策记录
+
+| 决策 | 选择 | 理由 |
+|---|---|---|
+| context 在 prompt 里的角色 | 降级为「辅助索引 — 可能过时」 | 用户报告 AI 引用已删除记忆的根因 |
+| 工具列表扩展策略 | 4 个新工具，覆盖详情 / 统计 / 反馈 / 联网 | 把"AI 能做的事"扩展到 7 个明确触发场景，避免模型靠训练知识兜底 |
+| 联网搜索接口 | DuckDuckGo IA + HTML 兜底 | 唯一免 key 的真实搜索；Tavily/Serper 都要 key 不在仓库内提交 |
+| HTTP 客户端 | JDK HttpClient（不是 RestClient） | v2.2.1 同款经验 — 避开 RestClient 对 application/octet-stream 的转换器问题 |
+| markdown 渲染器 | marked + DOMPurify | bundle 增量 ~12KB gz；同步 API（marked v12+ 默认异步要传 async:false） |
+| 字体加载策略 | 100% 走 local()，不联网下载 | 服务端不 host TTF；用户机器有 ComicShannsMono + 华文行楷 / 兜底楷体 |
+| 字族 unicode-range | Hand 限定 CJK，Mono 不限 | 中英混排自动按字符选 face |
+| 系统提示词风格 | 中文为主 + 决策树式列表 | M2.7 是中文模型，中文 prompt 比英文 token-efficient + 表现稳 |
+
+---
+
+## v8.4 给下一代的关键提醒
+
+1. **system prompt 和 ChatReasoner.buildUserPrompt 要一起改**：prompt 描述工具 + buildUserPrompt 注入 context；只改其中一个会导致行为漂移
+2. **新加工具 checklist**：
+   1. 在 `tools/` 下加一个 `XxxTool.java`，`@Configuration` + `@Bean public FunctionCallback xxxToolCallback()`
+   2. 在 `AiClientConfig.DEFAULT_SYSTEM_PROMPT` 的"决策树"区加一行触发场景
+   3. 如果工具调下游服务，看 client 包里有没有现成 Feign client；没有就加（contextId 必须唯一，避免与 spring-cloud-loadbalancer 同名冲突）
+   4. 工具的 `Request` / `Response` 必须是 public class（不是 record），Spring AI 1.0.0-M4 的 schema 推导不支持 record 序列化
+3. **markdown 渲染只对 assistant 消息**：用户消息（user role）保留原样字面渲染 — 但当前实现没区分；如果用户输入里含 markdown 也会被渲染。实际表现 OK（用户基本不会输入 markdown），但若以后想区分，加 `<div v-if="m.role==='assistant'" v-html=...> <p v-else>{{ m.text }}</p>`
+4. **字体换了之后，字号要校准**：ComicShannsMono 和 Inter 的视觉重量差异挺大，在某些组件里会显胖；如果有"挤行"反馈，把那处 .xxx { font-size: 14px } → 13.5px
+5. **Markdown 渲染流式时会"闪一下"**：marked 每次 token append 都重新 parse 整个 text；体验上可见，性能 OK（每次 ~1ms）。如果以后想做"增量 markdown"，需要切 `markdown-it` + 自定义流式 buffer，工程量大；当前方案够用
+6. **不要再装 highlight.js**：marked 默认不带语法高亮，AI 给的代码块只是单色等宽。用户没要求高亮，bundle 经济
+7. **DDG 偶尔返回 5xx**：HTML fallback 不带 retry；用户连续问 5+ 次外部信息可能撞到限速 → 工具返回 degraded=true 让模型走训练知识兜底
+8. **测试入口**：登录后唤起 AI 球，问"我有多少条记忆？"应该看到 markdown 列表；问"帮我搜：贝多芬第九交响曲"应该看到 webSearchTool 触发；问"我想报个 bug：xx 功能挂了"应该看到 supportTicketTool 触发并返回 ticketId
+
+---
+
+## v8.5 验证清单（已通过）
+
+- ✅ ai-service 编译过（含 7 个工具 + 新 prompt）
+- ✅ vue-tsc 全过
+- ✅ vite build 成功
+- ✅ /chat 真实调用：「我一共有多少条记忆？」返回 markdown 渲染的中文统计回答（调用 memoryStatsTool）
+- ✅ /chat 真实调用：「帮我找大理记忆」返回"没有命中"明确文案（调用 milvusSearchTool）
+- ✅ /chat 真实调用：「贝多芬第九交响曲」DDG 在国内不通时优雅降级 + 训练知识兜底
+- ✅ 全站 body 字体已切到 var(--font-sans) → ComicShannsMono + 华文行楷自动生效
+- ✅ AI 球聊天泡内 h1-h4 / blockquote / code / list 全部按设计样式渲染
+
+---
+
+最后一次更新：2026-05-28 (v8) · 第八代智能体重写 system prompt + 加 4 个工具 + AI 回复 markdown + 全站字体切换

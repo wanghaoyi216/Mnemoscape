@@ -14,7 +14,7 @@
  *
  * 该组件与多模态结果呈现的 Minio 卡片预留接口（assistant 消息上的 attachments）。
  */
-import { computed, nextTick, onMounted, onUnmounted, reactive, ref, shallowRef } from 'vue'
+import { computed, nextTick, onMounted, onUnmounted, onUpdated, reactive, ref, shallowRef } from 'vue'
 import { useI18n } from 'vue-i18n'
 // NOTE: 仅保留 `images` 作为「装饰性 / 预热」的静态资源（设计书 3.8：
 // media-catalog 只能在非业务场景使用）。聊天附件不再来自 media-catalog，
@@ -25,6 +25,7 @@ import client from '../../api/client'
 import { useMemoryStore } from '../../stores/memory'
 import { useAuthStore } from '../../stores/auth'
 import { useDynamicMedia } from '../../composables/useDynamicMedia'
+import { renderMarkdown, ensureMermaidRendered } from '../../composables/useMarkdown'
 
 /** 从 SSE `tool_end` 的 `minioMediaFetchTool` 输出里把 media[] 转成
  *  聊天卡片附件。MinIO 的 presigned URL 含 X-Amz-Signature，
@@ -385,6 +386,13 @@ async function scrollToBottom() {
   const el = transcriptEl.value
   if (el) el.scrollTop = el.scrollHeight
 }
+
+/* v12：每次 transcript DOM 更新后，把新出现的 ```mermaid``` 块异步渲染成 SVG。
+   onUpdated 的频次 ~= SSE token 的频次；ensureMermaidRendered 内部对已渲染的
+   节点用 data-mermaid-rendered 跳过，所以不会重复跑。 */
+onUpdated(() => {
+  void ensureMermaidRendered(transcriptEl.value)
+})
 
 function toggleOpen() {
   open.value = !open.value
@@ -1178,13 +1186,13 @@ shallowRef([images.goldenAfternoon.src, images.memoryCorona.src, images.resonanc
                   <span v-if="m.visionModel" class="ai-vision-badge__model">· {{ shortVisionModel(m.visionModel) }}</span>
                 </div>
 
-                <!-- Streamed text -->
-                <p v-if="m.text" class="ai-msg__text">
-                  <template v-for="(line, idx) in m.text.split('\n')" :key="idx">
-                    <span>{{ line }}</span><br v-if="idx < m.text.split('\n').length - 1" />
-                  </template>
+                <!-- Streamed text — markdown rendered (v3 后)。
+                     用 v-html 渲染 marked + DOMPurify 清洗过的 HTML；
+                     插入流末尾的光标用一个独立 <span> 拼，避免动到 sanitized html。 -->
+                <div v-if="m.text" class="ai-msg__text ai-msg__text--md">
+                  <div class="ai-md-body" v-html="renderMarkdown(m.text)"></div>
                   <span v-if="m.streaming" class="ai-msg__caret">▍</span>
-                </p>
+                </div>
 
                 <!-- Multimodal attachments -->
                 <div v-if="m.attachments && m.attachments.length" class="ai-attachments">
@@ -1747,9 +1755,11 @@ shallowRef([images.goldenAfternoon.src, images.memoryCorona.src, images.resonanc
   background: rgba(20,24,32,0.7);
   border: 1px solid rgba(255,255,255,0.08);
   border-radius: 14px;
-  padding: 12px 14px;
-  line-height: 1.55;
-  font-size: 0.86rem;
+  padding: 14px 16px;
+  line-height: 1.62;
+  font-size: 1rem;
+  font-weight: 500;
+  letter-spacing: 0.005em;
 }
 .ai-msg--user .ai-msg__bubble {
   background: linear-gradient(135deg, rgba(54,216,180,0.18), rgba(192,132,252,0.16));
@@ -1757,6 +1767,150 @@ shallowRef([images.goldenAfternoon.src, images.memoryCorona.src, images.resonanc
 }
 
 .ai-msg__text { margin: 0; white-space: pre-wrap; word-break: break-word; }
+/* v3: AI 回答采用 markdown 渲染，给容器内的 markdown 元素一套与气泡风格搭配的样式。
+   全站字体已经是 ComicShannsMono + 华文行楷（root --font-sans），这里只调字号 / 间距。
+   v9 调整：所有字号上调一档；标题继承全站 .text-aurora 的渐变 + 7px 加粗。
+   v12 调整：泡内字号偏小，七彩渐变在小字上易模糊"看着像没渲染"。改成实心彩色
+            （亮青/金/绿三档），与全站渐变风格相呼应但保证清晰可读。 */
+.ai-msg__text--md { white-space: normal; }
+.ai-md-body { display: block; }
+.ai-md-body :deep(p) { margin: 0 0 10px; line-height: 1.62; font-weight: 500; }
+.ai-md-body :deep(p:last-child) { margin-bottom: 0; }
+.ai-md-body :deep(h1),
+.ai-md-body :deep(h2),
+.ai-md-body :deep(h3),
+.ai-md-body :deep(h4) {
+  margin: 16px 0 10px;
+  font-family: var(--font-art), var(--font-sans);
+  font-weight: 800;
+  letter-spacing: 0.02em;
+  line-height: 1.3;
+  /* v12：覆盖全局七彩渐变，改用实心色 + text-shadow 提升小字清晰度。
+     这是聊天泡专属重置 —— 全站其他位置的标题仍然保留全局七彩渐变效果。 */
+  background-image: none;
+  -webkit-background-clip: initial;
+  background-clip: initial;
+  -webkit-text-fill-color: currentColor;
+  animation: none;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.45);
+}
+.ai-md-body :deep(h1) {
+  font-size: 1.45rem;
+  color: #5ee5d9; /* 亮青 */
+  border-bottom: 2px solid rgba(54, 216, 180, 0.32);
+  padding-bottom: 6px;
+}
+.ai-md-body :deep(h2) {
+  font-size: 1.28rem;
+  color: #fcd76a; /* 金黄 */
+}
+.ai-md-body :deep(h3) {
+  font-size: 1.16rem;
+  color: #b6f077; /* 嫩绿 */
+}
+.ai-md-body :deep(h4) {
+  font-size: 1.06rem;
+  color: #93c5fd; /* 浅蓝 */
+}
+.ai-md-body :deep(ul),
+.ai-md-body :deep(ol) {
+  margin: 8px 0 12px 4px;
+  padding: 0 0 0 22px;
+  list-style-position: outside;
+}
+.ai-md-body :deep(ul) { list-style-type: disc; }
+.ai-md-body :deep(ol) { list-style-type: decimal; }
+.ai-md-body :deep(li) {
+  margin: 5px 0;
+  line-height: 1.62;
+  font-weight: 500;
+  padding-left: 4px;
+}
+.ai-md-body :deep(li::marker) { color: var(--gold); font-weight: 700; }
+.ai-md-body :deep(li > ul),
+.ai-md-body :deep(li > ol) { margin: 4px 0 4px 0; }
+.ai-md-body :deep(blockquote) {
+  margin: 10px 0;
+  padding: 8px 16px;
+  border-left: 4px solid rgba(54, 216, 180, 0.6);
+  background: rgba(54, 216, 180, 0.08);
+  color: var(--text-soft);
+  border-radius: 0 8px 8px 0;
+  font-style: italic;
+  font-size: 0.98rem;
+}
+.ai-md-body :deep(blockquote p) { margin: 0; }
+.ai-md-body :deep(code):not(pre code) {
+  font-family: "Mnemoscape Mono", var(--font-mono);
+  background: rgba(0, 0, 0, 0.45);
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 0.92em;
+  font-weight: 600;
+  color: #fcd76a;
+  border: 1px solid rgba(252, 215, 106, 0.22);
+}
+.ai-md-body :deep(pre) {
+  background: rgba(0, 0, 0, 0.55);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  padding: 12px 14px;
+  border-radius: 10px;
+  overflow-x: auto;
+  margin: 10px 0;
+  position: relative;
+}
+.ai-md-body :deep(pre code) {
+  background: transparent;
+  padding: 0;
+  color: #e8e8f0;
+  font-size: 0.92em;
+  font-weight: 500;
+  font-family: "Mnemoscape Mono", var(--font-mono);
+  display: block;
+  line-height: 1.55;
+}
+/* Mermaid 图表容器 — 由 useMarkdown 处理后用 .mermaid 标记，
+   AiMascotDock onUpdated 钩子会识别并 mermaid.run() 渲染。 */
+.ai-md-body :deep(.mermaid) {
+  margin: 10px 0;
+  padding: 12px;
+  background: rgba(255, 255, 255, 0.03);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 10px;
+  text-align: center;
+  overflow-x: auto;
+}
+.ai-md-body :deep(.mermaid svg) {
+  max-width: 100%;
+  height: auto;
+}
+.ai-md-body :deep(a) {
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  font-weight: 600;
+}
+.ai-md-body :deep(strong) {
+  font-weight: 800;
+}
+.ai-md-body :deep(em) { color: var(--text-soft); font-style: italic; }
+.ai-md-body :deep(hr) {
+  border: none;
+  border-top: 1px dashed rgba(255, 255, 255, 0.18);
+  margin: 14px 0;
+}
+.ai-md-body :deep(table) {
+  width: 100%;
+  margin: 10px 0;
+  border-collapse: collapse;
+  font-size: 0.94em;
+}
+.ai-md-body :deep(th),
+.ai-md-body :deep(td) {
+  padding: 8px 12px;
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  text-align: left;
+}
+.ai-md-body :deep(th) { background: rgba(255, 255, 255, 0.06); font-weight: 700; color: #5ee5d9; }
 .ai-msg__caret {
   display: inline-block;
   animation: caret 1s steps(2) infinite;

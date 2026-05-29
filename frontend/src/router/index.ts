@@ -140,6 +140,26 @@ const routes = [
         name: 'AdminHealth',
         component: () => import('../views/admin/SystemHealthView.vue'),
       },
+      {
+        path: 'users-management',
+        name: 'AdminUsersManagement',
+        component: () => import('../views/admin/AdminUsersManagementView.vue'),
+      },
+      {
+        path: 'memories-management',
+        name: 'AdminMemoriesManagement',
+        component: () => import('../views/admin/AdminMemoriesManagementView.vue'),
+      },
+      {
+        path: 'resonance-management',
+        name: 'AdminResonanceManagement',
+        component: () => import('../views/admin/AdminResonanceManagementView.vue'),
+      },
+      {
+        path: 'support',
+        name: 'AdminSupport',
+        component: () => import('../views/admin/AdminSupportInboxView.vue'),
+      },
     ],
   },
 ]

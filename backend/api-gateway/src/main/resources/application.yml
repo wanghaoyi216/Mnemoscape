@@ -91,6 +91,30 @@ spring:
           uri: lb://auth-service
           predicates:
             - Path=/api/v1/admin/diagnostics/**
+        # Admin user-management table (paginated list / role / verified /
+        # delete). Lives in auth-service alongside the existing
+        # /api/v1/admin/users/**. Listed before stats catch-all to avoid
+        # being intercepted.
+        - id: admin-users-management
+          uri: lb://auth-service
+          predicates:
+            - Path=/api/v1/admin/users-management/**
+        # Admin memory-management table (paginated list / batch ops on
+        # memories). Lives in memory-service.
+        - id: admin-memories-management
+          uri: lb://memory-service
+          predicates:
+            - Path=/api/v1/admin/memories/**
+        # Admin resonance-management table + admin support tickets. Both
+        # live in resonance-service. Listed before resonance stats catch-all.
+        - id: admin-resonance-management
+          uri: lb://resonance-service
+          predicates:
+            - Path=/api/v1/admin/resonance-management/**
+        - id: admin-support
+          uri: lb://resonance-service
+          predicates:
+            - Path=/api/v1/admin/support/**
         # Public active-users endpoint that auth-service owns (it Feign-calls
         # memory-service internally to get the actual time-bucketed counts).
         # Listed before the memory-service catch-all so this exact path
@@ -130,7 +154,7 @@ spring:
         - id: resonance-service
           uri: lb://resonance-service
           predicates:
-            - Path=/api/v1/resonances/**, /api/v1/chat/**
+            - Path=/api/v1/resonances/**, /api/v1/chat/**, /api/v1/support/**
         - id: resonance-ws
           uri: lb:ws://resonance-service
           predicates:

@@ -41,6 +41,48 @@ let map: maplibregl.Map | null = null
 let overlay: MapboxOverlay | null = null
 let resizeObserver: ResizeObserver | null = null
 
+/* v10：地球持续自转，用户操作时暂停，闲置 4s 后自动恢复 —— 与 MemoryAtlasView
+   保持一致的"星球永远在转"体验。 */
+const RESUME_AFTER_MS = 4000
+let autoRotateRaf = 0
+let resumeRotateTimer: ReturnType<typeof setTimeout> | null = null
+
+function startGlobeAutoRotate(): void {
+  const rotate = () => {
+    if (!map) {
+      autoRotateRaf = 0
+      return
+    }
+    if (autoRotateRaf === 0) return
+    const c = map.getCenter()
+    map.jumpTo({ center: [c.lng + 0.06, c.lat] })
+    autoRotateRaf = requestAnimationFrame(rotate)
+  }
+  if (autoRotateRaf) cancelAnimationFrame(autoRotateRaf)
+  autoRotateRaf = requestAnimationFrame(rotate)
+}
+function stopGlobeAutoRotate(): void {
+  if (autoRotateRaf) cancelAnimationFrame(autoRotateRaf)
+  autoRotateRaf = 0
+}
+function scheduleResumeRotate(): void {
+  // 已经在自转就别再 schedule，否则 jumpTo 触发的 moveend 每帧都会 reset 定时器
+  if (autoRotateRaf !== 0) return
+  if (resumeRotateTimer) {
+    clearTimeout(resumeRotateTimer)
+    resumeRotateTimer = null
+  }
+  resumeRotateTimer = setTimeout(() => {
+    resumeRotateTimer = null
+    if (!map) return
+    startGlobeAutoRotate()
+  }, RESUME_AFTER_MS)
+}
+function pauseRotateForInteraction(): void {
+  stopGlobeAutoRotate()
+  scheduleResumeRotate()
+}
+
 const panelState = computed<'idle' | 'loading' | 'empty' | 'error' | 'ready'>(() => {
   if (loading.value && !data.value) return 'loading'
   if (error.value) return 'error'
@@ -145,7 +187,23 @@ onMounted(() => {
     if (!map) return
     overlay = new MapboxOverlay({ layers: [buildLayer()], interleaved: false })
     map.addControl(overlay as unknown as maplibregl.IControl)
+    // v10：load 完成立即开始自转
+    startGlobeAutoRotate()
   })
+
+  // v10：用户交互（拖 / 滚 / 旋转 / 倾斜 / 缩放）时暂停自转，闲置 4s 后恢复
+  map.on('mousedown',   pauseRotateForInteraction)
+  map.on('touchstart',  pauseRotateForInteraction)
+  map.on('dragstart',   pauseRotateForInteraction)
+  map.on('wheel',       pauseRotateForInteraction)
+  map.on('rotatestart', pauseRotateForInteraction)
+  map.on('pitchstart',  pauseRotateForInteraction)
+  map.on('zoomstart',   pauseRotateForInteraction)
+  map.on('dragend',     scheduleResumeRotate)
+  map.on('zoomend',     scheduleResumeRotate)
+  map.on('rotateend',   scheduleResumeRotate)
+  map.on('pitchend',    scheduleResumeRotate)
+  map.on('moveend',     scheduleResumeRotate)
 
   map.addControl(
     new maplibregl.NavigationControl({ showCompass: true, visualizePitch: true }),
@@ -156,6 +214,12 @@ onMounted(() => {
 })
 
 onBeforeUnmount(() => {
+  // v10：先停自转 + 清定时器，再卸载 map / overlay
+  stopGlobeAutoRotate()
+  if (resumeRotateTimer) {
+    clearTimeout(resumeRotateTimer)
+    resumeRotateTimer = null
+  }
   try {
     resizeObserver?.disconnect()
   } catch {

@@ -16,7 +16,13 @@ export default defineConfig(({ mode }) => {
           changeOrigin: true,
         },
         '/ws': {
-          target: `ws://${backendHost}:8084`,
+          // Forward WebSocket handshakes through the gateway (port 8080) so the
+          // gateway's `resonance-ws` route (lb:ws://resonance-service) handles
+          // both /ws/chat, /ws/resonance, and the new /ws/support endpoints.
+          // Earlier this targeted port 8084 (asset-service) which never had a
+          // ws handler; chat seemed to "work" only because the UI fell back
+          // gracefully on connection failure.
+          target: `ws://${backendHost}:8080`,
           changeOrigin: true,
           ws: true,
         },

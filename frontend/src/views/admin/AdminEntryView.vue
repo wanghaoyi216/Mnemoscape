@@ -33,6 +33,10 @@ const items: SubNavItem[] = [
   { name: 'AdminFragments',     path: '/admin/fragments',        labelKey: 'admin.nav.fragments' },
   { name: 'AdminResonance',     path: '/admin/resonance',        labelKey: 'admin.nav.resonance' },
   { name: 'AdminHealth',        path: '/admin/health',           labelKey: 'admin.nav.health' },
+  { name: 'AdminUsersManagement',     path: '/admin/users-management',     labelKey: 'admin.nav.usersManagement' },
+  { name: 'AdminMemoriesManagement',  path: '/admin/memories-management',  labelKey: 'admin.nav.memoriesManagement' },
+  { name: 'AdminResonanceManagement', path: '/admin/resonance-management', labelKey: 'admin.nav.resonanceManagement' },
+  { name: 'AdminSupport',             path: '/admin/support',              labelKey: 'admin.nav.supportInbox' },
 ]
 
 const activeName = computed(() => route.name)
@@ -123,22 +127,29 @@ const activeName = computed(() => route.name)
   flex-shrink: 0;
   padding: 8px 16px;
   border-radius: var(--radius-full);
-  color: var(--text-muted);
-  font-size: 0.85rem;
-  font-weight: 500;
+  color: rgba(245, 248, 252, 0.88);
+  font-size: 0.95rem;
+  font-weight: 700;
   letter-spacing: 0.005em;
   transition: background-color 180ms ease, color 180ms ease;
   white-space: nowrap;
+  /* v12：与 .app-nav__link 同源修复 — 强制不参与全局七彩渐变 */
+  background-image: none;
+  -webkit-background-clip: initial;
+  background-clip: initial;
+  -webkit-text-fill-color: currentColor;
+  animation: none;
 }
 
 .admin-subnav__link:hover {
-  color: var(--text);
-  background: rgba(255, 255, 255, 0.04);
+  color: #ffffff;
+  background: rgba(255, 255, 255, 0.06);
 }
 
 .admin-subnav__link--active,
 .admin-subnav__link.router-link-exact-active {
   color: #052017;
+  -webkit-text-fill-color: #052017;
   background: linear-gradient(135deg, var(--primary), #b6f077);
   box-shadow: 0 6px 18px rgba(54, 216, 180, 0.32);
 }

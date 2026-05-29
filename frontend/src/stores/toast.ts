@@ -19,6 +19,10 @@ export interface ToastInput {
   key: string
   /** 视觉语调 */
   tone: ToastTone
+  /** 可选 i18n 参数，如 { n: 5 } */
+  params?: Record<string, string | number>
+  /** 自动关闭毫秒数；默认 4000；0 表示不自动关闭。 */
+  durationMs?: number
 }
 
 /**
@@ -46,7 +50,17 @@ export const useToastStore = defineStore('toast', () => {
    */
   function push(input: ToastInput): number {
     const id = nextId++
-    toasts.value.push({ id, key: input.key, tone: input.tone })
+    toasts.value.push({
+      id,
+      key: input.key,
+      tone: input.tone,
+      params: input.params,
+      durationMs: input.durationMs,
+    })
+    const ttl = input.durationMs === undefined ? 4000 : input.durationMs
+    if (ttl > 0) {
+      setTimeout(() => dismiss(id), ttl)
+    }
     return id
   }
 
