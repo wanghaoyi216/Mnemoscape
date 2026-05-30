@@ -102,7 +102,7 @@ foreach ($service in $services) {
   # Start process with custom window title and inherited environment variables
   Start-Process powershell `
     -WorkingDirectory $backendRoot `
-    -ArgumentList "-NoExit", "-Command", "`$host.ui.RawUI.WindowTitle = 'Mnemoscape-$service'; Write-Host 'Starting $service in remote workpc mode...' -ForegroundColor Cyan; .\mvnw.cmd -pl $service -am spring-boot:run"
+    -ArgumentList "-NoExit", "-Command", "`$host.ui.RawUI.WindowTitle = 'Mnemoscape-$service'; Write-Host 'Starting $service in remote workpc mode...' -ForegroundColor Cyan; .\mvnw.cmd -pl $service spring-boot:run"
   Start-Sleep -Seconds 1
 }
 

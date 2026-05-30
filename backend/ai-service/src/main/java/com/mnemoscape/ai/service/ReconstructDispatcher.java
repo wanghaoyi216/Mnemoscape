@@ -166,7 +166,7 @@ public class ReconstructDispatcher {
 
     private List<SceneFragment> buildFragments(List<LlmReconstructService.LlmFragment> sketchFrags,
                                                 List<SceneFragment> fbFrags) {
-        if (sketchFrags == null || sketchFrags.isEmpty()) return fbFrags == null ? List.of() : fbFrags;
+        if (sketchFrags == null || sketchFrags.isEmpty()) return new ArrayList<>();
         List<SceneFragment> out = new ArrayList<>();
         for (LlmReconstructService.LlmFragment f : sketchFrags) {
             if (f == null || f.content == null || f.content.isBlank()) continue;
@@ -197,7 +197,6 @@ public class ReconstructDispatcher {
         String[] keys = {"joy", "sadness", "anger", "fear", "surprise", "nostalgia", "peace", "melancholy"};
         for (String k : keys) {
             Double v = sketch == null ? null : sketch.get(k);
-            if (v == null && fb != null) v = fb.get(k);
             if (v == null) v = 0.0;
             out.put(k, clamp(v, 0.0, 1.0));
         }

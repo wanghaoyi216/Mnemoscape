@@ -104,6 +104,9 @@ public class AiClientConfig {
      *
      * <p>{@code @Autowired(required = false)} 让本服务在没有任何 FunctionCallback
      * （例如本地纯单测）时仍可启动。
+     *
+     * <p><b>仅供同步路径（{@code POST /chat} 的 .call()）使用</b>。流式路径必须用
+     * {@link #mnemoscapeStreamingChatClientBuilder} —— 见其 Javadoc 解释为何不能带工具。
      */
     @Bean
     public ChatClient.Builder mnemoscapeChatClientBuilder(
@@ -116,5 +119,26 @@ public class AiClientConfig {
                     functionCallbacks.toArray(new FunctionCallback[0]));
         }
         return builder;
+    }
+
+    /**
+     * 流式专用 ChatClient.Builder —— <b>故意不挂任何 FunctionCallback</b>。
+     *
+     * <p><b>为什么</b>：Spring AI 1.0.0-M4 的 {@code ChatClient.stream()} 在
+     * 注册了 default functions 时，<b>不是真流式</b>：底层为了侦测 / 执行可能的
+     * tool call，会先把模型整段响应在服务端缓冲完，再一次性把 token 回放出来。
+     * 表现就是"几十秒一个字都没有，然后突然一大段"，还夹杂大量空 content delta。
+     *
+     * <p>本项目的"记忆 grounding"并不依赖模型自发 function-calling —— {@code ChatReasoner}
+     * 已经在请求层做了"强制 RAG"（把 top-K 命中记忆 prepend 进 prompt）和"视觉前置"。
+     * 所以流式路径用一个无工具的纯净 client，既拿回真正的逐字流式，又不丢任何能力。
+     *
+     * <p>同步路径（{@code POST /chat} 的 {@code .call()}）仍用带工具的
+     * {@link #mnemoscapeChatClientBuilder}，因为非流式 call 下 M4 的工具调用是正常的。
+     */
+    @Bean
+    public ChatClient.Builder mnemoscapeStreamingChatClientBuilder(ChatModel chatModel) {
+        return ChatClient.builder(chatModel)
+                .defaultSystem(DEFAULT_SYSTEM_PROMPT);
     }
 }

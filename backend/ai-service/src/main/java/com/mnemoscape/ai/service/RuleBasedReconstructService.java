@@ -48,13 +48,13 @@ public class RuleBasedReconstructService {
 
         SceneAudioData audioData = buildAudioData(profile);
         List<SceneObject> objects = buildObjects(profile, random);
-        List<SceneFragment> fragments = buildFragments(profile, random);
+        List<SceneFragment> fragments = buildFragments(profile, random, normalized);
         SceneData sceneData = buildSceneData(profile, objects, audioData, fragments);
 
         SceneReconstructionResponse response = new SceneReconstructionResponse();
         response.setSceneData(sceneData);
         response.setAudioData(audioData);
-        response.setEmotionVector(buildEmotionVector(profile, random));
+        response.setEmotionVector(buildEmotionVector(normalized));
         response.setSensoryDetails(new LinkedHashMap<>(profile.sensoryDetails()));
         response.setFragments(fragments);
         response.setSceneDataUrl(buildSceneDataUrl(sceneKey, normalized));
@@ -167,51 +167,39 @@ public class RuleBasedReconstructService {
         return new SceneAudioData(ambient, positional);
     }
 
-    private Map<String, Double> buildEmotionVector(SceneProfile profile, Random random) {
+    private Map<String, Double> buildEmotionVector(String description) {
         Map<String, Double> vector = new LinkedHashMap<>();
-        for (Map.Entry<String, Double> entry : profile.emotionBaseline().entrySet()) {
-            double value = entry.getValue() + (random.nextDouble() - 0.5) * profile.emotionVariance();
-            vector.put(entry.getKey(), clamp(round(value), 0.0, 1.0));
+        String[] keys = {"joy", "sadness", "anger", "fear", "surprise", "nostalgia", "peace", "melancholy"};
+        for (String k : keys) {
+            vector.put(k, 0.0);
         }
         return vector;
     }
 
-    private List<SceneFragment> buildFragments(SceneProfile profile, Random random) {
-        List<String> details = new ArrayList<>(profile.forgottenDetails());
-        List<String> flashbacks = new ArrayList<>(profile.emotionFlashbacks());
+    private List<SceneFragment> buildFragments(SceneProfile profile, Random random, String description) {
         List<SceneFragment> fragments = new ArrayList<>();
-
-        int detailCount = 1 + random.nextInt(2);
-        for (int i = 0; i < detailCount && !details.isEmpty(); i++) {
-            String content = details.remove(random.nextInt(details.size()));
-            fragments.add(new SceneFragment(
-                    "forgotten_detail",
-                    content,
-                    new Position3d(
-                            round(-5 + random.nextDouble() * 10),
-                            round(random.nextDouble() * 3),
-                            round(-5 + random.nextDouble() * 10)
-                    ),
-                    2.0,
-                    false
-            ));
+        if (description != null && !description.isBlank() && !description.contains("一段尚未展开的记忆")) {
+            String[] sentences = description.split("[,.?!，。？！；;\\n]+");
+            int detailCount = 0;
+            for (int i = 0; i < sentences.length && detailCount < 5; i++) {
+                String s = sentences[i].trim();
+                if (s.length() > 4) {
+                    String type = (i % 2 == 0) ? "forgotten_detail" : "emotion_flashback";
+                    fragments.add(new SceneFragment(
+                            type,
+                            s.length() > 30 ? s.substring(0, 30) : s,
+                            new Position3d(
+                                    round(-5 + random.nextDouble() * 10),
+                                    round(random.nextDouble() * 3),
+                                    round(-5 + random.nextDouble() * 10)
+                            ),
+                            type.equals("emotion_flashback") ? 3.0 : 2.0,
+                            false
+                    ));
+                    detailCount++;
+                }
+            }
         }
-
-        if (!flashbacks.isEmpty()) {
-            String flashback = flashbacks.get(random.nextInt(flashbacks.size()));
-            fragments.add(new SceneFragment(
-                    "emotion_flashback",
-                    flashback,
-                    new Position3d(
-                            round(-5 + random.nextDouble() * 10),
-                            round(1.0 + random.nextDouble() * 2),
-                            round(-5 + random.nextDouble() * 10)
-                    ),
-                    3.0,
-                    false
-            ));
-        }
-
         return fragments;
     }
 

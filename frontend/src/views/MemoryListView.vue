@@ -25,6 +25,7 @@ const store = useMemoryStore()
 const { t, locale } = useI18n()
 const privacyFilter = ref('')
 const query = ref('')
+const guideOpen = ref(true)
 
 const totalMemories = computed(() => store.memories.length)
 const lockedMemories = computed(() => store.memories.filter((memory) => memory.isLocked).length)
@@ -93,6 +94,45 @@ function formatDate(value?: string) {
           <strong class="metric-card__value">{{ publicMemories }}</strong>
         </div>
       </div>
+    </section>
+
+    <!-- 时空手账与导览手册 (Museum Guide) -->
+    <section class="section-card museum-guide" style="margin-top: 24px;">
+      <div class="museum-guide__header" @click="guideOpen = !guideOpen" role="button" tabindex="0" @keydown.enter="guideOpen = !guideOpen">
+        <div class="stack" style="gap: 4px;">
+          <h2 class="museum-guide__title">{{ t('memory.list.guide.title') }}</h2>
+          <p class="subtitle" style="margin: 0; font-size: 0.86rem;">{{ t('memory.list.guide.subtitle') }}</p>
+        </div>
+        <button type="button" class="button button--ghost guide-toggle-btn" :aria-label="guideOpen ? t('memory.list.guide.toggleCollapse') : t('memory.list.guide.toggleExpand')">
+          <span>{{ guideOpen ? t('memory.list.guide.toggleCollapse') : t('memory.list.guide.toggleExpand') }}</span>
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" class="guide-toggle-icon" :class="{ 'guide-toggle-icon--collapsed': !guideOpen }">
+            <path d="M18 15l-6-6-6 6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" />
+          </svg>
+        </button>
+      </div>
+
+      <transition name="guide-panel">
+        <div v-show="guideOpen" class="museum-guide__content" style="margin-top: 20px; border-top: 1px solid var(--border); padding-top: 20px;">
+          <div class="guide-grid">
+            <div class="guide-col">
+              <h3 class="guide-col__title">{{ t('memory.list.guide.reconstruction.title') }}</h3>
+              <p class="guide-col__desc">{{ t('memory.list.guide.reconstruction.desc') }}</p>
+            </div>
+            <div class="guide-col">
+              <h3 class="guide-col__title">{{ t('memory.list.guide.drift.title') }}</h3>
+              <p class="guide-col__desc">{{ t('memory.list.guide.drift.desc') }}</p>
+            </div>
+            <div class="guide-col">
+              <h3 class="guide-col__title">{{ t('memory.list.guide.fragments.title') }}</h3>
+              <p class="guide-col__desc">{{ t('memory.list.guide.fragments.desc') }}</p>
+            </div>
+            <div class="guide-col">
+              <h3 class="guide-col__title">{{ t('memory.list.guide.resonance.title') }}</h3>
+              <p class="guide-col__desc">{{ t('memory.list.guide.resonance.desc') }}</p>
+            </div>
+          </div>
+        </div>
+      </transition>
     </section>
 
     <section class="stack" style="margin-top: 32px;">
@@ -463,5 +503,106 @@ function formatDate(value?: string) {
   .collection-toolbar {
     grid-template-columns: 1fr;
   }
+}
+
+/* ============== 时空手账与导览手册 ============== */
+.museum-guide {
+  transition: border-color var(--duration-base) var(--ease-out-quart),
+              box-shadow var(--duration-base) var(--ease-out-quart);
+}
+
+.museum-guide:hover {
+  border-color: rgba(54, 216, 180, 0.24);
+  box-shadow: var(--shadow-md), 0 0 20px rgba(54, 216, 180, 0.05);
+}
+
+.museum-guide__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  cursor: pointer;
+  user-select: none;
+  gap: 16px;
+}
+
+.museum-guide__title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-size: 1.25rem;
+  font-weight: 700;
+  color: var(--text);
+  letter-spacing: -0.01em;
+}
+
+.guide-toggle-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 32px !important;
+  padding: 0 10px !important;
+  font-size: 0.8rem !important;
+  border-radius: var(--radius-full);
+}
+
+.guide-toggle-icon {
+  transition: transform var(--duration-base) var(--ease-out-quart);
+}
+
+.guide-toggle-icon--collapsed {
+  transform: rotate(180deg);
+}
+
+.guide-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 20px;
+}
+
+.guide-col {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 14px;
+  border-radius: var(--radius-md);
+  background: rgba(14, 17, 22, 0.35);
+  border: 1px solid var(--border);
+  transition: border-color 0.22s ease, background 0.22s ease;
+}
+
+.guide-col:hover {
+  border-color: var(--border-strong);
+  background: rgba(14, 17, 22, 0.55);
+}
+
+.guide-col__title {
+  margin: 0;
+  font-family: var(--font-sans);
+  font-size: 0.94rem;
+  font-weight: 700;
+  color: var(--text);
+}
+
+.guide-col__desc {
+  margin: 0;
+  font-size: 0.82rem;
+  line-height: 1.6;
+  color: var(--text-soft);
+}
+
+/* Panel transition */
+.guide-panel-enter-active,
+.guide-panel-leave-active {
+  transition: all 300ms cubic-bezier(0.16, 1, 0.3, 1);
+  max-height: 500px;
+  overflow: hidden;
+}
+
+.guide-panel-enter-from,
+.guide-panel-leave-to {
+  opacity: 0;
+  max-height: 0;
+  padding-top: 0 !important;
+  margin-top: 0 !important;
+  transform: translateY(-8px);
 }
 </style>

@@ -5,14 +5,14 @@ import { useI18n } from 'vue-i18n'
 import { useResonanceStore } from '../stores/resonance'
 import { useAuthStore } from '../stores/auth'
 import { useWebSocket } from '../composables/useWebSocket'
-import { useThreeScene } from '../composables/useThreeScene'
+import { usePremiumThree } from '../composables/usePremiumThree'
 import { useBeaconLayer } from '../composables/useBeaconLayer'
+import { useMemoryStore } from '../stores/memory'
 import NoteComposer from '../components/resonance/NoteComposer.vue'
 import NoteBubble from '../components/resonance/NoteBubble.vue'
-import GhostIndicator from '../components/resonance/GhostIndicator.vue'
 import BeaconCard from '../components/resonance/BeaconCard.vue'
 import { images } from '../assets/media-catalog'
-import type { MemoryNote, WebSocketMessage } from '../types'
+import type { MemoryNote, WebSocketMessage, SceneData } from '../types'
 
 const { t } = useI18n()
 const heroBg = images.resonanceTwins.src
@@ -20,8 +20,9 @@ const heroBg = images.resonanceTwins.src
 const route = useRoute()
 const resonanceStore = useResonanceStore()
 const auth = useAuthStore()
+const memoryStore = useMemoryStore()
 const containerRef = ref<HTMLElement | null>(null)
-const { init, scene, camera } = useThreeScene(containerRef)
+const { init, loadScene, getCameraPosition, getLookingAt, syncGhost, removeGhost, placeNoteMesh, scene, camera } = usePremiumThree(containerRef)
 const { connected, connect, send, on } = useWebSocket()
 const ghosts = ref<Map<string, { userId: string; position: number[]; lookingAt: { x: number; y: number; z: number } }>>(new Map())
 const showComposer = ref(false)
@@ -32,15 +33,37 @@ const activeBeacon = ref<MemoryNote | null>(null)
 const proximityHint = ref(false)
 let joinTimer = 0
 let proximityTimer = 0
+let moveInterval = 0
+let lastSentPosition = [0, 0, 0]
 
 const spaceId = route.params.id as string
 const noteCount = computed(() => resonanceStore.notes.length)
 
-// 信标图层 — 挂在 useThreeScene 的同一个 scene 上，dispose 自动跟随
+// 信标图层 — 挂在 usePremiumThree 的同一个 scene 上，dispose 自动跟随
 const beaconLayer = useBeaconLayer({ scene, camera, containerRef, proximityRadius: 2.6 })
 beaconLayer.onNearbyTrigger((note) => {
   activeBeacon.value = note
 })
+
+const sceneKeyMap: Record<string, string> = {
+  snowy_landscape: 'winter',
+  night_courtyard: 'night',
+  rainy_street: 'rain',
+  flower_garden: 'spring',
+  autumn_path: 'autumn',
+}
+
+function getSceneKey(env?: string): string {
+  if (!env) return 'summer'
+  return sceneKeyMap[env] || 'summer'
+}
+
+function normalizeScene(payload: unknown): SceneData | null {
+  if (!payload || typeof payload !== 'object') return null
+  const candidate = payload as { sceneData?: SceneData }
+  if (candidate.sceneData) return candidate.sceneData
+  return payload as SceneData
+}
 
 onMounted(async () => {
   await resonanceStore.fetchSpace(spaceId)
@@ -49,24 +72,54 @@ onMounted(async () => {
   init()
   connect(auth.token)
 
+  // 载入真实记忆的 3D 模型
+  const space = resonanceStore.currentSpace
+  if (space && space.memoryId1) {
+    try {
+      await memoryStore.fetchOne(space.memoryId1)
+      const visualData = memoryStore.current?.visualData
+      if (visualData && typeof visualData === 'string') {
+        const parsed = JSON.parse(visualData)
+        const data = normalizeScene(parsed)
+        if (data) {
+          const key = getSceneKey(data.environment)
+          loadScene(data, key)
+        }
+      }
+    } catch (e) {
+      console.warn('Failed to parse and load seed memory 3D scene data:', e)
+    }
+  }
+
   on('GHOST_JOIN', (msg: WebSocketMessage) => {
+    if (msg.userId === auth.user?.username) return
     ghosts.value.set(msg.userId!, {
       userId: msg.userId!,
       position: msg.position || [0, 1.8, 0],
       lookingAt: msg.lookingAt || { x: 0, y: 0, z: -1 },
     })
+    syncGhost(msg.userId!, msg.position || [0, 1.8, 0])
   })
 
   on('GHOST_MOVE', (msg: WebSocketMessage) => {
+    if (msg.userId === auth.user?.username) return
     const ghost = ghosts.value.get(msg.userId!)
     if (ghost) {
       ghost.position = msg.position || ghost.position
       ghost.lookingAt = msg.lookingAt || ghost.lookingAt
+    } else {
+      ghosts.value.set(msg.userId!, {
+        userId: msg.userId!,
+        position: msg.position || [0, 1.8, 0],
+        lookingAt: msg.lookingAt || { x: 0, y: 0, z: -1 },
+      })
     }
+    syncGhost(msg.userId!, msg.position || [0, 1.8, 0])
   })
 
   on('GHOST_LEFT', (msg: WebSocketMessage) => {
     ghosts.value.delete(msg.userId!)
+    removeGhost(msg.userId!)
   })
 
   on('NOTE_PLACED', () => {
@@ -82,13 +135,37 @@ onMounted(async () => {
   }, 800)
 
   joinTimer = window.setTimeout(() => {
+    const initPos = getCameraPosition()
     send({
       type: 'JOIN',
       resonanceId: spaceId,
       userId: auth.user?.username || 'anonymous',
-      position: [0, 1.8, 0],
+      position: initPos,
     })
+    lastSentPosition = [...initPos]
   }, 500)
+
+  // 150ms 频率相机移动侦测器，平滑广播 MOVE 消息
+  moveInterval = window.setInterval(() => {
+    if (!connected.value) return
+    const currentPos = getCameraPosition()
+    const currentLook = getLookingAt()
+
+    const distSq = Math.pow(currentPos[0] - lastSentPosition[0], 2) +
+                   Math.pow(currentPos[1] - lastSentPosition[1], 2) +
+                   Math.pow(currentPos[2] - lastSentPosition[2], 2)
+
+    if (distSq > 0.0025) { // 0.05 * 0.05 = 0.0025
+      send({
+        type: 'MOVE',
+        resonanceId: spaceId,
+        userId: auth.user?.username || 'anonymous',
+        position: currentPos,
+        lookingAt: currentLook,
+      })
+      lastSentPosition = [...currentPos]
+    }
+  }, 150)
 })
 
 // store 里的 notes 一旦更新（首次拉取、其他用户广播过来），都增量同步到 3D 图层
@@ -105,6 +182,9 @@ onUnmounted(() => {
   if (proximityTimer) {
     window.clearInterval(proximityTimer)
   }
+  if (moveInterval) {
+    window.clearInterval(moveInterval)
+  }
 })
 
 function handlePlaceNote(content: string, mood: string) {
@@ -116,6 +196,7 @@ function handlePlaceNote(content: string, mood: string) {
     mood,
     position: [composerPosition.value.x, composerPosition.value.y, composerPosition.value.z],
   })
+  placeNoteMesh(composerPosition.value.x, composerPosition.value.z)
   showComposer.value = false
 }
 
@@ -197,12 +278,7 @@ function handleCanvasClick(ev: MouseEvent) {
         aria-hidden="true"
       ></div>
 
-      <GhostIndicator
-        v-for="[id, ghost] in ghosts"
-        :key="id"
-        :userId="ghost.userId"
-        :position="ghost.position"
-      />
+
 
       <NoteBubble
         v-for="note in resonanceStore.notes"

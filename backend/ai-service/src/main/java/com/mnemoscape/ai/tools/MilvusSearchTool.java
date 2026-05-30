@@ -18,23 +18,24 @@ import java.util.Map;
 import java.util.function.Function;
 
 /**
- * 真实"向量检索"工具。
+ * 向量检索工具（真实稠密向量 + 关键词降级双轨）。
  *
- * <p>当前部署里 Milvus 仍是规划态（只有 .env 配置项，没有实际嵌入服务），
- * 因此这个工具的实现是"基于 memory-service 真实数据 + 关键词加权打分"的
- * RAG 替身：
+ * <p><b>检索路径（{@link #searchForUser}）</b>：
+ * <ol>
+ *   <li><b>真实向量检索</b>：用 {@link com.mnemoscape.ai.service.EmbeddingClient}
+ *       把 query 编码成向量，再用 {@link com.mnemoscape.ai.service.MilvusVectorStore}
+ *       做 COSINE 相似度召回（按 {@code user_id} 过滤，多租户隔离）。</li>
+ *   <li><b>关键词降级</b>：Embedding / Milvus 任一不可用或失败时，自动退回
+ *       "基于 memory-service 真实数据 + 关键词加权打分"的老实现 —— 检索能力
+ *       不中断，只是召回精度退化。</li>
+ * </ol>
  *
+ * <p>两条路径都：
  * <ul>
- *   <li>从 SecurityContext 拿 userId（注入到 memory-service 的 X-User-Id），
+ *   <li>从 SecurityContext（或显式 userId 入参）拿身份，
  *       <b>绝不接受用户提示词里的 userId 覆盖</b>，避免越权。</li>
- *   <li>调用 memory-service {@code GET /memories} 拿到该用户授权的全部记忆。</li>
- *   <li>用 query 中提取的关键词与 title/location/description 做匹配打分，
- *       返回 topK 条 + 相似度近似值。</li>
+ *   <li>返回 topK 条命中 + 相似度，对外契约一致。</li>
  * </ul>
- *
- * <p>当真实 Milvus 上线时，仅替换实现内部逻辑（输入输出契约不变）。
- * 这种"真实数据 + 真实工具调用 + 待替换打分"的结构，比硬编码 Mock 要诚实得多：
- * 至少模型拿到的是用户的真实记忆而不是 stub。
  */
 @Configuration
 public class MilvusSearchTool {
@@ -70,9 +71,18 @@ public class MilvusSearchTool {
     }
 
     private final MemoryServiceClient memoryClient;
+    /** 真实向量检索依赖；为空（纯单测 / 未装配）时自动退回关键词检索。 */
+    private final com.mnemoscape.ai.service.EmbeddingClient embeddingClient;
+    private final com.mnemoscape.ai.service.MilvusVectorStore vectorStore;
 
-    public MilvusSearchTool(MemoryServiceClient memoryClient) {
+    public MilvusSearchTool(MemoryServiceClient memoryClient,
+                            @org.springframework.beans.factory.annotation.Autowired(required = false)
+                            com.mnemoscape.ai.service.EmbeddingClient embeddingClient,
+                            @org.springframework.beans.factory.annotation.Autowired(required = false)
+                            com.mnemoscape.ai.service.MilvusVectorStore vectorStore) {
         this.memoryClient = memoryClient;
+        this.embeddingClient = embeddingClient;
+        this.vectorStore = vectorStore;
     }
 
     /** 暴露为 FunctionCallback bean，由 ChatClient 通过 OpenAI tool-calling 调用。
@@ -119,6 +129,49 @@ public class MilvusSearchTool {
             return resp;
         }
         int topK = req.topK == null ? 5 : Math.max(1, Math.min(20, req.topK));
+
+        // 1) 优先尝试真实稠密向量检索（Embedding + Milvus）。
+        //    任一环节不可用 / 抛错 / 返回 null → 透明退回关键词加权检索。
+        Response vectorResp = tryVectorSearch(req, userId, topK);
+        if (vectorResp != null) {
+            return vectorResp;
+        }
+
+        // 2) 关键词加权降级（老实现）。
+        return keywordSearch(req, userId, topK);
+    }
+
+    /**
+     * 真实向量检索路径。返回 null 表示"不可用 / 失败"，调用方应降级到关键词检索；
+     * 返回非 null（哪怕 hits 为空）表示向量检索成功执行（空 = 真没命中）。
+     */
+    private Response tryVectorSearch(Request req, String userId, int topK) {
+        if (embeddingClient == null || vectorStore == null) return null;
+        if (!vectorStore.isEnabled() || !embeddingClient.isConfigured()) return null;
+        if (req.query == null || req.query.isBlank()) return null;
+        try {
+            float[] qv = embeddingClient.embedQuery(req.query);
+            List<com.mnemoscape.ai.service.MilvusVectorStore.SearchHit> hits =
+                    vectorStore.search(qv, userId, topK);
+            if (hits == null) return null; // Milvus 不可用 → 降级
+            Response resp = new Response();
+            for (com.mnemoscape.ai.service.MilvusVectorStore.SearchHit h : hits) {
+                resp.hits.add(new Hit(h.memoryId, h.title, h.location, h.year, h.snippet, h.score));
+            }
+            resp.message = "vector";
+            log.info("[milvusSearchTool] vector search returned {} hits (userId={})",
+                    resp.hits.size(), userId);
+            return resp;
+        } catch (Exception e) {
+            log.warn("[milvusSearchTool] vector search failed, falling back to keyword: {}", e.toString());
+            return null;
+        }
+    }
+
+    /** 关键词加权检索：从 memory-service 拉用户记忆后按关键词命中打分。 */
+    @SuppressWarnings("unchecked")
+    private Response keywordSearch(Request req, String userId, int topK) {
+        Response resp = new Response();
         List<String> kws = extractKeywords(req.query);
 
         try {

@@ -283,6 +283,28 @@
         "PRIVATE": "Private",
         "FRIENDS": "Friends",
         "PUBLIC": "Public"
+      },
+      "guide": {
+        "title": "🗺️ Museum Guide & Spacetime Log",
+        "subtitle": "Reconstruction is suggestion — discover and curate your lifetime galleries",
+        "toggleExpand": "Expand Guide",
+        "toggleCollapse": "Collapse Guide",
+        "reconstruction": {
+          "title": "🛰️ Memory Reconstruction",
+          "desc": "Describe your memory on the creation page. The AI engine will deconstruct its visuals, sounds, and emotions to weave a dedicated 3D space you can walk through."
+        },
+        "drift": {
+          "title": "🌫️ Memory Drift",
+          "desc": "Simulated Ebbinghaus forgetting curve. Over time, unlocked memory galleries will fade, blur, and drift. Click 'Lock' to preserve, or 'Rewrite' to update."
+        },
+        "fragments": {
+          "title": "🔍 Hidden Fragments",
+          "desc": "AI hides forgotten details and sensory flashbacks inside your 3D gallery. Retrace your steps in walkthrough mode and press 'E' near them to rediscover."
+        },
+        "resonance": {
+          "title": "🤝 Memory Resonance",
+          "desc": "Choose a memory as a baseline. The similarity engine will match other users with echoing emotional structures to co-generate a shared 3D resonance starspace."
+        }
       }
     },
     "builder": {
@@ -514,13 +536,102 @@
   },
   "profile": {
     "title": "Profile",
+    "eyebrow": "Soul Archive",
+    "lead": "View your credentials, memory ecosystem health, and emotional chaotic trajectories. All data comes from your current authenticated session.",
+    "note": "Profile data is loaded from your active session; future updates will extend this to avatars, preferences, subscriptions, and multi-device sync.",
     "stats": {
       "memories": "Memories",
       "fragments": "Fragments",
       "resonances": "Resonances"
+    },
+    "metrics": {
+      "status": "Account Status",
+      "verified": "Verified",
+      "pending": "Pending Verification",
+      "email": "Email",
+      "memories": "Total Memories"
+    },
+    "avatar": {
+      "custom": "Custom Avatar",
+      "default": "Default Avatar"
+    },
+    "tags": {
+      "privacy": "Memory Privacy",
+      "history": "Revision History",
+      "resonance": "Resonance Access"
+    },
+    "avatar3d": {
+      "eyebrow": "Soul Portrait",
+      "title": "My 3D Soul Avatar",
+      "subtitle": "Describe yourself in words, and AI will sculpt a unique 3D soul avatar that represents you in resonance spaces.",
+      "editBtn": "Re-sculpt",
+      "empty": {
+        "title": "Your soul avatar hasn't been sculpted yet",
+        "text": "Describe yourself in a few sentences — your personality, hobbies, inner world — and AI will generate a unique 3D soul avatar for you.",
+        "createBtn": "✨ Start sculpting"
+      },
+      "info": {
+        "titleLabel": "Soul Title",
+        "storyLabel": "Soul Story",
+        "tagsLabel": "Personality Tags",
+        "descLabel": "Self Description",
+        "public": "🌐 Public",
+        "private": "🔒 Private",
+        "updatedAt": "Last updated: "
+      },
+      "builder": {
+        "eyebrow": "AI Soul Sculpting Engine",
+        "title": "Describe yourself",
+        "subtitle": "The more specific, the better — your personality, hobbies, inner world, favorite time of day, how you feel about the world… AI will sculpt your unique 3D soul avatar from this.",
+        "exampleLabel": "Reference examples",
+        "exampleBtn": "Example {n}",
+        "descLabel": "Self description",
+        "descPlaceholder": "I'm someone who loves reading late at night, with a quiet starfield inside…",
+        "publicLabel": "Show my soul avatar publicly",
+        "publicHint": "(Others can see it in resonance spaces)",
+        "generate": "✨ Generate my soul avatar",
+        "regenerate": "🔄 Regenerate",
+        "saving": "AI is sculpting…",
+        "delete": "Delete avatar",
+        "deleteConfirm": "Delete your 3D soul avatar? This cannot be undone.",
+        "hints": {
+          "tooShort": "Too short — at least 10 characters needed",
+          "minimal": "Add more detail for a more accurate portrait",
+          "good": "Good! AI can already sense your character",
+          "excellent": "✓ Rich description — AI will sculpt your most accurate soul avatar"
+        },
+        "error": {
+          "saveFailed": "Generation failed. Please try again.",
+          "deleteFailed": "Deletion failed. Please try again."
+        }
+      }
+    },
+    "attractor": {
+      "eyebrow": "Emotional Archaeology",
+      "title": "Emotional Chaotic Attractor",
+      "subtitle": "Plot your five-dimensional emotional index into the Lorenz equation to chart a unique soul trajectory.",
+      "intro": "This is your emotional chaotic trajectory. The AI reads the emotional distribution (joy, sorrow, fear, calm, nostalgia) across all your memories and uses the Lorenz dynamical equations to map out a unique 'soul trajectory'. Joy makes it light and vibrant, nostalgia blooms and unfolds the curves, and peace brings it to a quiet, elegant convergence.",
+      "mockNote": "Your emotional trajectory is computed in real time based on your active memories. If no memories exist yet, a default cosmic nebula is rendered.",
+      "dim": {
+        "joy": "Joy",
+        "sorrow": "Sorrow",
+        "fear": "Fear",
+        "calm": "Calm",
+        "nostalgia": "Nostalgia"
+      }
     }
   },
   "chat": {
+    "ai": {
+      "name": "Echo Envoy",
+      "icebreakerBtn": "Ask Echo Envoy",
+      "icebreakerHint": "Let AI read your conversation and suggest an icebreaker / topic",
+      "icebreakerError": "Echo Envoy is offline right now, try again later.",
+      "suggestionTitle": "Echo Envoy's icebreaker",
+      "useSuggestion": "Use this",
+      "mentionTip": "Mention @AI in a group to summon me",
+      "mentionHint": "Start a message with @AI or @Echo and I'll reply using recent group context"
+    },
     "tabs": {
       "chats": "Chats",
       "discover": "Discover",
@@ -620,6 +731,12 @@
     }
   },
   "admin": {
+    "hud": {
+      "toggle": "Cinematic HUD Mode",
+      "exit": "Exit HUD Mode",
+      "title": "Quantum Memory Global Controller HUD",
+      "description": "Real-time 3D spatial topology, network resonance mapping, AI reconstruction factors and memory micro-nebula health telemetry"
+    },
     "nav": {
       "entry": "Admin",
       "home": "Overview",
@@ -634,7 +751,8 @@
       "usersManagement": "Users",
       "memoriesManagement": "Memories",
       "resonanceManagement": "Edges",
-      "supportInbox": "Support"
+      "supportInbox": "Support",
+      "maintenance": "Maintenance"
     },
     "guard": {
       "notAdmin": "Admin only — redirected to your memories",
@@ -886,6 +1004,32 @@
         "delete": "Delete selected",
         "status": "Change status",
         "clearSelection": "Clear selection"
+      }
+    },
+    "maintenance": {
+      "title": "Maintenance",
+      "limit": "Limit",
+      "done": "Operation dispatched",
+      "failed": "Operation failed",
+      "vector": {
+        "title": "Vector backfill",
+        "desc": "Re-index existing memories into the Milvus vector store. Run once after first enabling vector search, or after changing the embedding model / dimension — otherwise the store stays empty and AI search / resonance fall back to keyword matching.",
+        "run": "Run backfill",
+        "result": "Dispatched {dispatched} of {total} memories."
+      },
+      "visual": {
+        "title": "visualData cleanup",
+        "desc": "Scan memories whose visualData is empty or still uses the old English template, and regenerate their 3D scene data so SceneViewer no longer shows stale fake scenes.",
+        "run": "Run cleanup",
+        "result": "Scanned {scanned}, dispatched {dispatched} rebuild jobs."
+      },
+      "orphan": {
+        "title": "MinIO legacy orphan migration",
+        "desc": "Early uploads have no users/ prefix and get exposed as public assets to everyone. This tool moves such legacy private objects under the legacy-orphan/ prefix. Preview first, then apply.",
+        "preview": "Preview candidates",
+        "apply": "Apply migration",
+        "dryRun": "Preview (not moved)",
+        "result": "Scanned {scanned} objects, {candidates} candidates, {migrated} migrated."
       }
     },
     "supportInbox": {

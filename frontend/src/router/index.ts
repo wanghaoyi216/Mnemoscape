@@ -160,6 +160,11 @@ const routes = [
         name: 'AdminSupport',
         component: () => import('../views/admin/AdminSupportInboxView.vue'),
       },
+      {
+        path: 'maintenance',
+        name: 'AdminMaintenance',
+        component: () => import('../views/admin/AdminMaintenanceView.vue'),
+      },
     ],
   },
 ]

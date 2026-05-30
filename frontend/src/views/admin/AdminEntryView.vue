@@ -37,6 +37,7 @@ const items: SubNavItem[] = [
   { name: 'AdminMemoriesManagement',  path: '/admin/memories-management',  labelKey: 'admin.nav.memoriesManagement' },
   { name: 'AdminResonanceManagement', path: '/admin/resonance-management', labelKey: 'admin.nav.resonanceManagement' },
   { name: 'AdminSupport',             path: '/admin/support',              labelKey: 'admin.nav.supportInbox' },
+  { name: 'AdminMaintenance',         path: '/admin/maintenance',          labelKey: 'admin.nav.maintenance' },
 ]
 
 const activeName = computed(() => route.name)

@@ -22,6 +22,9 @@ export interface MemoryWithCoords extends MemoryItem {
 
 export const useAtlasStore = defineStore('atlas', () => {
   const myLocation = ref<AtlasLocation | null>(null)
+  /** 浏览器 Geolocation API 返回的真实当前位置（用户授权后）。优先级高于后端
+   *  "最近一条记忆" 的近似值。 */
+  const browserLocation = ref<AtlasLocation | null>(null)
   const memories = ref<MemoryWithCoords[]>([])
   const route = ref<RouteSegment[]>([])
   const others = ref<OthersPoint[]>([])
@@ -29,6 +32,14 @@ export const useAtlasStore = defineStore('atlas', () => {
   const loading = ref(false)
   const error = ref('')
   const lastFetched = ref(0)
+
+  /**
+   * 当前位置：浏览器实时定位优先；用户未授权 / 不支持时回退到后端的
+   * "最近一条带坐标的记忆" 近似值（latest-memory）。
+   */
+  const effectiveLocation = computed<AtlasLocation | null>(() =>
+    browserLocation.value ?? myLocation.value,
+  )
 
   /** 时间范围：用于时间轴 slider [min, max]（秒） */
   const timeRange = computed<[number, number]>(() => {
@@ -88,8 +99,33 @@ export const useAtlasStore = defineStore('atlas', () => {
     }
   }
 
+  /**
+   * 请求浏览器实时地理定位（HTML5 Geolocation）。用户授权后写入 browserLocation，
+   * 它会通过 effectiveLocation 自动取代后端的 latest-memory 近似值。
+   * 拒绝 / 不支持 / 超时都静默失败，回退到后端近似值。
+   */
+  function requestBrowserLocation(): void {
+    if (typeof navigator === 'undefined' || !navigator.geolocation) return
+    navigator.geolocation.getCurrentPosition(
+      (pos) => {
+        browserLocation.value = {
+          coords: [pos.coords.longitude, pos.coords.latitude],
+          name: null,
+          source: 'browser-geolocation',
+          accuracyMeters: pos.coords.accuracy ?? 0,
+        }
+      },
+      () => {
+        // 用户拒绝 / 定位失败 —— 保持 null，effectiveLocation 回退到 latest-memory。
+        browserLocation.value = null
+      },
+      { enableHighAccuracy: true, timeout: 8000, maximumAge: 300000 },
+    )
+  }
+
   function reset() {
     myLocation.value = null
+    browserLocation.value = null
     memories.value = []
     route.value = []
     others.value = []
@@ -98,8 +134,8 @@ export const useAtlasStore = defineStore('atlas', () => {
   }
 
   return {
-    myLocation, memories, route, others,
+    myLocation, browserLocation, effectiveLocation, memories, route, others,
     loading, error, lastFetched, timeRange,
-    fetchAll, reset,
+    fetchAll, requestBrowserLocation, reset,
   }
 })

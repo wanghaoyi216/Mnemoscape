@@ -81,8 +81,9 @@ const nodes = computed<TimelineNode[]>(() => {
     const a = anchorOf(m)
     return { m, ms: a.ms, precision: a.precision, display: a.display }
   })
-  // 按时间从新到旧（顶端是最新）
-  raw.sort((a, b) => b.ms - a.ms)
+  // 按事件时间从旧到新：最早的记忆在顶端，最近的记忆沉到底部（时光「长河」
+  // 自上游流向下游的直觉）。
+  raw.sort((a, b) => a.ms - b.ms)
   return raw.map((row, i) => ({
     memory: row.m,
     anchorMs: row.ms,

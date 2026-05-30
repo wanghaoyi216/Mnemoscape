@@ -140,8 +140,7 @@ public interface MemoryRepository extends JpaRepository<Memory, String>, org.spr
             ROUND(FLOOR(memory_lng / :step) * :step + (:step / 2), 6) AS lngBucket,
             COUNT(*) AS rawCount
         FROM memories
-        WHERE privacy_level = 'PUBLIC'
-          AND memory_lat IS NOT NULL
+        WHERE memory_lat IS NOT NULL
           AND memory_lng IS NOT NULL
         GROUP BY latBucket, lngBucket
         """, nativeQuery = true)
@@ -193,7 +192,7 @@ public interface MemoryRepository extends JpaRepository<Memory, String>, org.spr
         SELECT
             f.fragmentType                                          AS fragmentType,
             COUNT(f.id)                                             AS totalFragments,
-            SUM(CASE WHEN f.isDiscovered = true THEN 1 ELSE 0 END)  AS discoveredFragments
+            COUNT(CASE WHEN f.isDiscovered = true THEN f.id ELSE NULL END) AS discoveredFragments
         FROM com.mnemoscape.memory.model.entity.MemoryFragment f
         GROUP BY f.fragmentType
         """)
@@ -203,15 +202,14 @@ public interface MemoryRepository extends JpaRepository<Memory, String>, org.spr
      * Fragment-discovery overall aggregation for
      * {@code /admin/stats/fragment-discovery} without {@code groupBy} (R11.1).
      *
-     * <p>{@code fragmentType} on the returned projection is {@code null} for this overall
+     * <p>{@code fragmentType} on the returned projection is a constant for this overall
      * variant; the controller branches on the presence of {@code groupBy} to decide which
      * projection to render.</p>
      */
     @Query("""
         SELECT
-            CAST(NULL AS string)                                    AS fragmentType,
             COUNT(f.id)                                             AS totalFragments,
-            SUM(CASE WHEN f.isDiscovered = true THEN 1 ELSE 0 END)  AS discoveredFragments
+            COUNT(CASE WHEN f.isDiscovered = true THEN f.id ELSE NULL END) AS discoveredFragments
         FROM com.mnemoscape.memory.model.entity.MemoryFragment f
         """)
     FragmentDiscoveryRow aggregateFragmentOverall();

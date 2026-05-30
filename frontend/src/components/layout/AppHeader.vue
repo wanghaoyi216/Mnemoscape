@@ -245,16 +245,15 @@ function switchLocale(l: Locale) {
   font-weight: 800;
   letter-spacing: -0.01em;
   background-image: linear-gradient(
-    100deg,
-    #ff5f6d 0%, #ffb86c 16%, #f7e96b 32%, #58e36a 48%,
-    #4ecde6 64%, #5b8def 80%, #b06bff 96%, #ff5f6d 100%
+    135deg,
+    var(--primary) 0%, #7ee7c7 45%, var(--gold) 100%
   );
-  background-size: 220% 220%;
+  background-size: 200% 200%;
   -webkit-background-clip: text;
   background-clip: text;
   -webkit-text-fill-color: transparent;
   color: transparent;
-  animation: auroraShift 6s linear infinite;
+  animation: auroraShift 22s linear infinite;
 }
 
 .app-nav {

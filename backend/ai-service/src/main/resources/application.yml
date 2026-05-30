@@ -81,6 +81,24 @@ mnemoscape:
     # 同样三档：auto = LLM 优先 + 失败降规则；llm = 强制 LLM；rule = 强制规则版
     extract:
       mode: ${EXTRACT_MODE:auto}
+    # ---------------- 真实向量检索（Embedding + Milvus）----------------
+    # enabled=false 时所有向量逻辑短路，MilvusSearchTool 走关键词加权降级。
+    # Embedding 走 NVIDIA Integrate 的 /v1/embeddings（检索专用 embedding，
+    # 区分 input_type=query/passage）；Milvus 用 REST API v2 (/v2/vectordb/...)
+    # 经 JDK HttpClient 调用，避开 gRPC SDK 与 Spring Cloud 的依赖冲突。
+    # ⚠️ 换 embedding 模型务必同步改 embedding-dimension，否则 collection 维度对不上。
+    vector:
+      enabled: ${VECTOR_SEARCH_ENABLED:true}
+      embedding-model: ${EMBEDDING_MODEL:nvidia/nv-embedqa-e5-v5}
+      embedding-dimension: ${EMBEDDING_DIMENSION:1024}
+      embedding-timeout-ms: ${EMBEDDING_TIMEOUT_MS:15000}
+      milvus-host: ${MILVUS_HOST:100.66.166.46}
+      milvus-port: ${MILVUS_PORT:19530}
+      milvus-token: ${MILVUS_TOKEN:}
+      milvus-database: ${MILVUS_DATABASE:default}
+      collection-name: ${MILVUS_COLLECTION:mnemoscape_memories}
+      milvus-timeout-ms: ${MILVUS_TIMEOUT_MS:8000}
+      default-top-k: ${VECTOR_DEFAULT_TOPK:5}
   asset-service:
     base-url: ${ASSET_SERVICE_BASE_URL:http://asset-service}
   memory-service:

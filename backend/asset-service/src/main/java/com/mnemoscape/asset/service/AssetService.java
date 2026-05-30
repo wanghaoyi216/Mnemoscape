@@ -236,6 +236,124 @@ public class AssetService {
         }
     }
 
+    /**
+     * 历史孤儿对象迁移（管理员工具）。
+     *
+     * <p>背景：早期 {@link #upload(MultipartFile)}（已 @Deprecated）把用户上传对象直接
+     * 以 {@code {uuid}-{filename}} 形式写在 bucket 根目录，没有 {@value #USER_PREFIX}
+     * 多租户隔离前缀。这些"无前缀"对象会被 {@link #listMinioStaticForUser} 当成
+     * "公共内置素材"暴露给所有用户 —— 实际上它们是某个用户的私有上传，属于隐私泄漏面。
+     *
+     * <p>本方法把这类"疑似历史私有上传"的孤儿对象搬到 {@code legacy-orphan/} 前缀下，
+     * 使其不再混进公共素材池。判定规则（保守，避免误伤 133MB 预置素材）：
+     * <ul>
+     *   <li>跳过已带 {@value #USER_PREFIX} 前缀的对象（已隔离）；</li>
+     *   <li>跳过已在 {@value #LEGACY_ORPHAN_PREFIX} 下的对象（已迁移）；</li>
+     *   <li>跳过 key 含 {@code /} 的对象（预置素材保留 photo/、video/ 等目录结构）；</li>
+     *   <li>仅迁移根级、且文件名形如 {@code <uuid>-...} 的对象（旧 upload() 的指纹）。</li>
+     * </ul>
+     *
+     * @param dryRun true → 只统计与列出候选，不实际移动（让管理员先预览）
+     * @return 迁移结果统计 {scanned, candidates, migrated, dryRun, samples}
+     */
+    public java.util.Map<String, Object> migrateLegacyOrphans(boolean dryRun) {
+        java.util.Map<String, Object> result = new java.util.LinkedHashMap<>();
+        int scanned = 0, candidates = 0, migrated = 0;
+        List<String> samples = new ArrayList<>();
+
+        if (!properties.hasCredentials()) {
+            result.put("error", "MinIO credentials not configured");
+            result.put("scanned", 0);
+            result.put("candidates", 0);
+            result.put("migrated", 0);
+            result.put("dryRun", dryRun);
+            result.put("samples", samples);
+            return result;
+        }
+        try {
+            boolean exists = minioClient.bucketExists(BucketExistsArgs.builder()
+                    .bucket(properties.getBucket()).build());
+            if (!exists) {
+                result.put("error", "bucket not found");
+                result.put("scanned", 0);
+                result.put("candidates", 0);
+                result.put("migrated", 0);
+                result.put("dryRun", dryRun);
+                result.put("samples", samples);
+                return result;
+            }
+
+            Iterable<Result<Item>> results = minioClient.listObjects(ListObjectsArgs.builder()
+                    .bucket(properties.getBucket())
+                    .recursive(true)
+                    .build());
+
+            for (Result<Item> r : results) {
+                Item it;
+                try { it = r.get(); } catch (Exception e) { continue; }
+                if (it.isDir()) continue;
+                String name = it.objectName();
+                scanned++;
+
+                if (name.startsWith(USER_PREFIX)) continue;          // 已隔离
+                if (name.startsWith(LEGACY_ORPHAN_PREFIX)) continue;  // 已迁移
+                if (name.contains("/")) continue;                    // 预置素材保留目录结构
+                if (!looksLikeLegacyUpload(name)) continue;          // 不是旧 upload() 指纹
+
+                candidates++;
+                if (samples.size() < 20) samples.add(name);
+
+                if (!dryRun) {
+                    String target = LEGACY_ORPHAN_PREFIX + name;
+                    try {
+                        // server-side copy 然后删除原对象（MinIO 无原生 move）
+                        minioClient.copyObject(CopyObjectArgs.builder()
+                                .bucket(properties.getBucket())
+                                .object(target)
+                                .source(CopySource.builder()
+                                        .bucket(properties.getBucket())
+                                        .object(name)
+                                        .build())
+                                .build());
+                        minioClient.removeObject(RemoveObjectArgs.builder()
+                                .bucket(properties.getBucket())
+                                .object(name)
+                                .build());
+                        migrated++;
+                    } catch (Exception e) {
+                        log.warn("[migrate] failed to move orphan {} -> {}: {}", name, target, e.toString());
+                    }
+                }
+            }
+        } catch (Exception e) {
+            log.warn("[migrate] migrateLegacyOrphans failed: {}", e.toString());
+            result.put("error", e.getClass().getSimpleName() + ": " + e.getMessage());
+        }
+
+        result.put("scanned", scanned);
+        result.put("candidates", candidates);
+        result.put("migrated", migrated);
+        result.put("dryRun", dryRun);
+        result.put("samples", samples);
+        log.info("[migrate] legacy-orphan scan done: scanned={} candidates={} migrated={} dryRun={}",
+                scanned, candidates, migrated, dryRun);
+        return result;
+    }
+
+    /** 旧 {@link #upload} 的对象名指纹：{@code <uuid>-<原文件名>}（小写 hex + 连字符 UUID）。 */
+    private static boolean looksLikeLegacyUpload(String name) {
+        if (name == null || name.length() < 37) return false;
+        // UUID 形如 8-4-4-4-12，随后接 '-' 再接原文件名
+        String prefix = name.length() > 37 ? name.substring(0, 37) : name;
+        // 36 字符 UUID + 第 37 位应为 '-'
+        if (name.charAt(36) != '-') return false;
+        String uuidPart = name.substring(0, 36);
+        return uuidPart.matches("[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}");
+    }
+
+    /** 历史孤儿对象迁移目标前缀。 */
+    public static final String LEGACY_ORPHAN_PREFIX = "legacy-orphan/";
+
     /** 文件名清洗：去掉路径分隔与控制字符，避免 object key 注入或重名命中 USER_PREFIX。 */
     private String sanitizeFilename(String original) {
         if (original == null || original.isBlank()) return "unnamed";

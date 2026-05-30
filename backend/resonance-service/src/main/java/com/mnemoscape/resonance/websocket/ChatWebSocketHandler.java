@@ -8,6 +8,7 @@ import com.mnemoscape.resonance.model.entity.ChatMessage;
 import com.mnemoscape.resonance.repository.ChatGroupMemberRepository;
 import com.mnemoscape.resonance.repository.ChatGroupRepository;
 import com.mnemoscape.resonance.repository.ChatMessageRepository;
+import com.mnemoscape.resonance.service.ChatAiAssistant;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.stereotype.Component;
@@ -26,16 +27,27 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
     private final ChatMessageRepository chatMessageRepository;
     private final ChatGroupRepository chatGroupRepository;
     private final ChatGroupMemberRepository chatGroupMemberRepository;
+    private final ChatAiAssistant aiAssistant;
 
     // Registry: userId -> Set of active WebSocketSessions
     private final Map<String, Set<WebSocketSession>> userSessions = new ConcurrentHashMap<>();
 
+    /** 群聊 @AI 异步生成线程池 —— LLM 调用 5-30s，绝不能阻塞 WS 消息线程。 */
+    private final java.util.concurrent.ExecutorService aiExec =
+            java.util.concurrent.Executors.newFixedThreadPool(2, r -> {
+                Thread t = new Thread(r, "chat-ai-assistant");
+                t.setDaemon(true);
+                return t;
+            });
+
     public ChatWebSocketHandler(ChatMessageRepository chatMessageRepository,
                                  ChatGroupRepository chatGroupRepository,
-                                 ChatGroupMemberRepository chatGroupMemberRepository) {
+                                 ChatGroupMemberRepository chatGroupMemberRepository,
+                                 ChatAiAssistant aiAssistant) {
         this.chatMessageRepository = chatMessageRepository;
         this.chatGroupRepository = chatGroupRepository;
         this.chatGroupMemberRepository = chatGroupMemberRepository;
+        this.aiAssistant = aiAssistant;
     }
 
     @JsonIgnoreProperties(ignoreUnknown = true)
@@ -149,11 +161,58 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
             for (ChatGroupMember member : members) {
                 sendToUser(member.getUserId(), response);
             }
+            // 群聊 @AI / @Echo：异步生成 AI 回复并广播给全群（设计书 §3.2.3）
+            if ("TEXT".equalsIgnoreCase(chatMsg.getMessageType())
+                    && aiAssistant.isAiMention(payload.content)) {
+                dispatchGroupAiReply(payload.groupId, senderId, payload.content, members);
+            }
         } else if (payload.receiverId != null && !payload.receiverId.isBlank()) {
             // Private Chat: relay to receiver and sender (to sync multi-device logs)
             sendToUser(payload.receiverId, response);
             sendToUser(senderId, response);
         }
+    }
+
+    /**
+     * 群聊 @AI：在后台线程跑 LLM（避免阻塞 WS 线程），生成回复后以系统 AI 身份
+     * 落库并广播给全群在线成员。失败时降级文案已在 {@link ChatAiAssistant} 内兜底。
+     */
+    private void dispatchGroupAiReply(String groupId, String askerId, String rawContent,
+                                      List<ChatGroupMember> members) {
+        String question = aiAssistant.stripMention(rawContent);
+        aiExec.submit(() -> {
+            try {
+                String answer = aiAssistant.answerInGroup(groupId, askerId, question);
+
+                ChatMessage aiMsg = new ChatMessage();
+                aiMsg.setSenderId(ChatAiAssistant.AI_USER_ID);
+                aiMsg.setGroupId(groupId);
+                aiMsg.setContent(answer);
+                aiMsg.setMessageType("TEXT");
+                chatMessageRepository.save(aiMsg);
+
+                Map<String, Object> aiResp = new LinkedHashMap<>();
+                aiResp.put("type", "MSG_RECEIVE");
+                aiResp.put("id", aiMsg.getId());
+                aiResp.put("senderId", ChatAiAssistant.AI_USER_ID);
+                aiResp.put("senderName", ChatAiAssistant.AI_DISPLAY_NAME);
+                aiResp.put("groupId", groupId);
+                aiResp.put("content", answer);
+                aiResp.put("messageType", "TEXT");
+                aiResp.put("isAi", true);
+                aiResp.put("createdAt", System.currentTimeMillis());
+
+                for (ChatGroupMember member : members) {
+                    try {
+                        sendToUser(member.getUserId(), aiResp);
+                    } catch (Exception e) {
+                        log.warn("Failed to deliver AI reply to {}: {}", member.getUserId(), e.toString());
+                    }
+                }
+            } catch (Exception e) {
+                log.error("Group @AI reply generation failed for group {}", groupId, e);
+            }
+        });
     }
 
     private void handleGetHistory(WebSocketSession session, String userId, ChatPayload payload) throws IOException {

@@ -240,11 +240,44 @@ const ambientVideo = computed(() => {
   return v?.url || ''
 })
 
-const intentHints = computed(() =>
+const fallbackHints = computed(() =>
   locale.value === 'zh-CN'
     ? ['寻找2023年大理的记忆', '帮我整理本月的情绪轨迹', '哪个朋友与我共鸣最强', '基于回忆推荐一段冥想']
     : ['Find my Dali memories from 2023', 'Summarize my mood this month', 'Who resonates with me most?', 'Suggest a meditation from my memories'],
 )
+
+// 动态推荐问题：登录后由 ai-service 结合用户最近记忆生成；失败回退到 fallbackHints。
+const dynamicHints = ref<string[]>([])
+const intentHints = computed(() =>
+  dynamicHints.value.length > 0 ? dynamicHints.value : fallbackHints.value,
+)
+
+let hintsFetched = false
+async function fetchDynamicHints() {
+  if (hintsFetched) return
+  hintsFetched = true
+  try {
+    const token = authStore.token
+    if (!token) return
+    if ((memoryStore.memories || []).length === 0) {
+      try { await memoryStore.fetchList(0, 50) } catch { /* silent */ }
+    }
+    const context = buildMemoryDigest().map((m) => ({
+      title: m.title, location: m.location, year: m.year,
+    }))
+    if (context.length === 0) return
+    const { data } = await client.post('/reconstruct/chat/hints', {
+      locale: locale.value,
+      context,
+    })
+    const hints = data?.data?.hints
+    if (Array.isArray(hints) && hints.length > 0) {
+      dynamicHints.value = hints.filter((h: any) => typeof h === 'string' && h.trim()).slice(0, 4)
+    }
+  } catch {
+    // 静默：保留 fallbackHints
+  }
+}
 
 const placeholder = computed(() =>
   locale.value === 'zh-CN' ? '与星空使者对话…按 Enter 发送' : 'Talk to the Echo Envoy… press Enter',
@@ -406,6 +439,10 @@ function toggleOpen() {
           : "Hi, I'm your Echo Envoy. I can retrace memories, recap moods, and seek resonance across others.",
     })
   }
+  // 首次打开时拉取个性化推荐问题（失败静默回退到 fallbackHints）
+  if (open.value) {
+    void fetchDynamicHints()
+  }
 }
 
 function toggleMinimize() {
@@ -523,6 +560,7 @@ async function streamFromBackend(reply: ChatMessage, question: string, images?: 
 
   const ctrl = new AbortController()
   let gotFirst = false
+  let doneSeen = false
   let upstreamError = false
   let errorCode: string | undefined
   let errorDetail: string | undefined
@@ -667,12 +705,17 @@ async function streamFromBackend(reply: ChatMessage, question: string, images?: 
           // 真实多模态：附件已经在 tool_end (minioMediaFetchTool) 时通过 presigned URL
           // 注入到 reply.attachments；不再从 media-catalog / dynamicMedia 兜底。
           // 如果模型没调 minioMediaFetchTool 就没有附件，对应没有卡片 — 这是正确行为。
+          doneSeen = true
           reply.streaming = false
         }
       }
     }
     void pendingEvent
-    return { ok: gotFirst && !upstreamError, upstreamError, errorCode, detail: errorDetail }
+    // 成功判定：只要后端发了 done 帧（流正常结束）就算成功，即便模型这次输出为空。
+    // 之前用 `gotFirst` 会把"连上了但模型返回空"误判成"无法连接到 AI 服务"。
+    // 上游真不可用时后端发的是 error 帧（upstreamError=true），与此区分。
+    const ok = (doneSeen || gotFirst) && !upstreamError
+    return { ok, upstreamError, errorCode, detail: errorDetail }
   } catch (e: any) {
     return {
       ok: false,
@@ -801,6 +844,12 @@ async function send() {
       reply.text = baseMsg + hint
       // 显式不再注入 dynamicMedia / media-catalog 的兜底附件
       reply.attachments = undefined
+    } else if (!reply.text || !reply.text.trim()) {
+      // 流正常结束但模型这次没有输出任何文本 —— 给一句温和提示，而不是留空泡。
+      const zh = locale.value === 'zh-CN'
+      reply.text = zh
+        ? '（这次我没有想到合适的回答，可以换个说法再问我一次吗？）'
+        : "(I didn't have a good answer this time — could you rephrase and ask again?)"
     }
   } finally {
     streaming.value = false
@@ -1760,6 +1809,7 @@ shallowRef([images.goldenAfternoon.src, images.memoryCorona.src, images.resonanc
   font-size: 1rem;
   font-weight: 500;
   letter-spacing: 0.005em;
+  font-family: "Mnemoscape Mono", "Mnemoscape Hand", var(--font-sans);
 }
 .ai-msg--user .ai-msg__bubble {
   background: linear-gradient(135deg, rgba(54,216,180,0.18), rgba(192,132,252,0.16));

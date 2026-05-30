@@ -114,6 +114,69 @@ export function batchLockMemories(ids: string[], locked: boolean) {
     '/admin/memories/batch-lock', { ids, locked })
 }
 
+// ========== Maintenance tools（向量回填 / visualData 清洗 / MinIO 历史迁移）==========
+
+export interface VectorBackfillResult {
+  total: number
+  dispatched: number
+  limit: number
+}
+
+/**
+ * 维护工具批量操作的超时上限。这些操作会遍历成百上千条记忆（geocoding 还会打
+ * 外部 Nominatim API），远超默认的 15s axios 超时 —— 不放宽会必现 ECONNABORTED
+ * 让前端误报"操作失败"。给 5 分钟上限。
+ */
+const MAINTENANCE_TIMEOUT = 300_000
+
+/** 把现有记忆批量重新索引进 Milvus（首次接入向量检索后给历史数据补索引）。 */
+export function backfillVectors(limit = 500) {
+  return client.post<ApiResponse<VectorBackfillResult>>(
+    '/admin/memories/backfill-vectors', { limit }, { timeout: MAINTENANCE_TIMEOUT })
+}
+
+export interface VisualDataCleanupResult {
+  scanned: number
+  dispatched: number
+  limit: number
+  total: number
+}
+
+/** 批量重建 visualData 为 null/空 或仍是旧英文模板的记忆。 */
+export function cleanupVisualData(limit = 500) {
+  return client.post<ApiResponse<VisualDataCleanupResult>>(
+    '/admin/memories/cleanup-visualdata', { limit }, { timeout: MAINTENANCE_TIMEOUT })
+}
+
+export interface GeoBackfillResult {
+  scanned: number
+  resolved: number
+  skipped: number
+  limit: number
+  total: number
+}
+
+/** 给所有 memoryLocation 非空但坐标为 null 的历史记忆补填经纬度。 */
+export function backfillGeocoords(limit = 1000) {
+  return client.post<ApiResponse<GeoBackfillResult>>(
+    '/admin/memories/backfill-geocoords', { limit }, { timeout: MAINTENANCE_TIMEOUT })
+}
+
+export interface OrphanMigrationResult {
+  scanned: number
+  candidates: number
+  migrated: number
+  dryRun: boolean
+  samples: string[]
+  error?: string
+}
+
+/** 扫描 / 迁移 MinIO 历史无前缀孤儿对象到 legacy-orphan/。apply=false 为预览。 */
+export function migrateLegacyOrphans(apply = false) {
+  return client.post<ApiResponse<OrphanMigrationResult>>(
+    `/admin/assets/migrate-legacy-orphans?apply=${apply}`)
+}
+
 // ========== Resonance management ==========
 
 export interface AdminResonanceRow {

@@ -131,10 +131,10 @@
      - --font-mono：保留 ComicShannsMono 等宽形态，给代码块用。
      - --font-art：纯艺术显示用（落款 / brand），强制行楷优先。
   */
-  --font-sans: "Mnemoscape Mono", "Mnemoscape Hand", "Inter", "Noto Sans SC", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
-  --font-display: "Mnemoscape Mono", "Mnemoscape Hand", "Playfair Display", "Noto Serif SC", "Songti SC", "STSong", Georgia, serif;
+  --font-sans: "Inter", "Outfit", "Noto Sans SC", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+  --font-display: "Mnemoscape Mono", "Mnemoscape Hand", "Outfit", "Playfair Display", "Noto Serif SC", "Songti SC", "STSong", Georgia, serif;
   --font-mono: "Mnemoscape Mono", "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
-  --font-art: "Mnemoscape Hand", "Mnemoscape Mono", "Playfair Display", "STSong", serif;
+  --font-art: "Mnemoscape Hand", "Playfair Display", "STSong", serif;
 }
 
 /* ============================== Reset ============================== */
@@ -191,52 +191,63 @@ body {
 }
 
 .text-aurora,
-:where(h1, h2, h3, h4, h5, h6, strong, b, .section-title, .brand strong, .brand__copy strong) {
-  /* v10：七彩动态渐变 — 红橙黄绿青蓝紫一次性铺满文字宽度，再让位置动起来。
-     用 hue-rotate 难达到"所有色同时可见"的效果；直接列 7 色 stop 才行。 */
+.display-title,
+.section-title,
+.brand strong,
+.brand__copy strong,
+.ai-msg--assistant .ai-md-body :where(p, li, span, h1, h2, h3, h4, strong, code),
+.ai-msg--assistant .ai-msg__text,
+.message-bubble--ai :where(p, li, span, h1, h2, h3, h4, strong, code),
+.message-bubble--ai > span {
   background-image: linear-gradient(
-    100deg,
-    #ff5f6d 0%,
-    #ffb86c 16%,
-    #f7e96b 32%,
-    #58e36a 48%,
-    #4ecde6 64%,
-    #5b8def 80%,
-    #b06bff 96%,
-    #ff5f6d 100%
-  );
-  background-size: 220% 220%;
-  -webkit-background-clip: text;
-  background-clip: text;
-  -webkit-text-fill-color: transparent;
-  color: transparent;
-  animation: auroraShift 6s linear infinite;
-  font-weight: 800;
-  text-shadow: 0 0 0 transparent;
+    135deg,
+    var(--primary) 0%,
+    #7ee7c7 45%,
+    var(--gold) 100%
+  ) !important;
+  background-size: 200% 200% !important;
+  -webkit-background-clip: text !important;
+  background-clip: text !important;
+  -webkit-text-fill-color: transparent !important;
+  color: transparent !important;
+  animation: auroraShift 22s linear infinite !important;
+  font-weight: 600;
+  text-shadow: none !important;
 }
 
-/* 链接和按钮里的文字也享受渐变 — 但禁用区分明显
-   v12 例外：导航类链接 (.app-nav__link, .admin-subnav__link, RouterLink active 状态) 必须保持纯色，
-   因为渐变 + active pill 背景叠加会让 -webkit-text-fill-color: transparent 把文字"吃掉"。 */
-:where(a:not(.button):not(.app-nav__link):not(.admin-subnav__link):not(.cs-tab):not(.cs-back), .ai-md-body a) {
-  background-image: linear-gradient(
-    100deg,
-    #ff5f6d 0%,
-    #ffb86c 16%,
-    #f7e96b 32%,
-    #58e36a 48%,
-    #4ecde6 64%,
-    #5b8def 80%,
-    #b06bff 96%,
-    #ff5f6d 100%
-  );
-  background-size: 220% 220%;
-  -webkit-background-clip: text;
-  background-clip: text;
-  -webkit-text-fill-color: transparent;
-  color: transparent;
+:where(h1, h2, h3, h4, h5, h6) {
+  color: var(--text);
+  -webkit-text-fill-color: initial;
+  background-clip: initial;
+  -webkit-background-clip: initial;
+  background-image: none;
   font-weight: 700;
-  animation: auroraShift 5s linear infinite;
+}
+
+:where(strong, b) {
+  color: var(--primary);
+  -webkit-text-fill-color: initial;
+  background-clip: initial;
+  -webkit-background-clip: initial;
+  background-image: none;
+  font-weight: 700;
+}
+
+:where(a:not(.button):not(.app-nav__link):not(.admin-subnav__link):not(.cs-tab):not(.cs-back), .ai-md-body a) {
+  color: var(--primary);
+  -webkit-text-fill-color: initial;
+  background-clip: initial;
+  -webkit-background-clip: initial;
+  background-image: none;
+  font-weight: 600;
+  transition: color var(--duration-fast) var(--ease-out-quart),
+              text-shadow var(--duration-fast) var(--ease-out-quart);
+  position: relative;
+}
+
+:where(a:not(.button):not(.app-nav__link):not(.admin-subnav__link):not(.cs-tab):not(.cs-back):hover, .ai-md-body a:hover) {
+  color: #ffffff;
+  text-shadow: 0 0 8px var(--primary-glow);
 }
 
 /* 防止渐变把表单元素和按钮内文字也吃掉 —— 这些必须保持纯色对比 */
@@ -398,12 +409,12 @@ select:disabled {
   position: fixed;
   inset: 10px;
   pointer-events: none;
-  z-index: 45;
+  z-index: 5;
   border-radius: 30px;
-  opacity: 0.88;
-  --ai-glow-thickness: 1.5px;
-  --ai-glow-duration: 7.4s;
-  --ai-glow-halo: 38px;
+  opacity: 0.3;
+  --ai-glow-thickness: 1px !important;
+  --ai-glow-duration: 16s !important;
+  --ai-glow-halo: 12px !important;
 }
 
 @keyframes aura-drift {
@@ -516,28 +527,19 @@ select:disabled {
 }
 
 .text-gradient {
-  /* v12：把老的 white→cream "shimmer" 改成 v10 的七彩动态渐变 ——
-     这条类被所有 .display-title (页面大标题) 套用，旧版颜色在新黑底主题下
-     几乎看不见（用户报告"标题应该是文字啊"指的就是这里）。
-     现在统一切到与全局 h1-h6 一致的红橙黄绿青蓝紫七色循环。 */
   background-image: linear-gradient(
-    100deg,
-    #ff5f6d 0%,
-    #ffb86c 16%,
-    #f7e96b 32%,
-    #58e36a 48%,
-    #4ecde6 64%,
-    #5b8def 80%,
-    #b06bff 96%,
-    #ff5f6d 100%
+    135deg,
+    var(--primary) 0%,
+    #7ee7c7 45%,
+    var(--gold) 100%
   );
-  background-size: 220% 220%;
+  background-size: 200% 200%;
   -webkit-background-clip: text;
   background-clip: text;
   color: transparent;
   -webkit-text-fill-color: transparent;
   font-weight: 800;
-  animation: auroraShift 6s linear infinite;
+  animation: auroraShift 22s linear infinite;
 }
 
 @keyframes gradient-shimmer {
@@ -1203,13 +1205,11 @@ select:disabled {
 
 :root {
   --ai-glow-stops:
-    #ff5e8a 0deg,
-    #ff8a5c 60deg,
-    #ffd166 120deg,
-    #4ade80 180deg,
-    #38bdf8 240deg,
-    #a78bfa 300deg,
-    #ff5e8a 360deg;
+    var(--primary) 0deg,
+    #7ee7c7 90deg,
+    var(--gold) 180deg,
+    var(--primary-strong) 270deg,
+    var(--primary) 360deg;
   --ai-glow-thickness: 1.6px;
   --ai-glow-duration: 6s;
   --ai-glow-halo: 22px;

@@ -4,6 +4,8 @@ import com.mnemoscape.ai.config.AiUpstreamProperties;
 import com.mnemoscape.ai.controller.ChatController;
 import com.mnemoscape.ai.model.dto.AiChatRequest;
 import com.mnemoscape.ai.service.ChatReasoner;
+import com.mnemoscape.ai.service.VisionDescriber;
+import com.mnemoscape.ai.tools.MilvusSearchTool;
 import org.junit.jupiter.api.Test;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.model.ChatModel;
@@ -58,12 +60,15 @@ class SseSleepCadenceExplorationTest {
         // Build a real ChatReasoner that refuses to call the model (placeholder key).
         ChatModel chatModel = mock(ChatModel.class);
         ChatClient.Builder builder = ChatClient.builder(chatModel);
+        ChatClient.Builder streamingBuilder = ChatClient.builder(chatModel);
         AiUpstreamProperties props = new AiUpstreamProperties();
         props.setPlaceholderKeyPrefix("nvapi-placeholder");
         Environment env = new MockEnvironment()
                 .withProperty("spring.ai.openai.api-key",
                         "nvapi-placeholder-set-real-key-via-env-for-real-ai-calls");
-        ChatReasoner reasoner = new ChatReasoner(builder, props, env);
+        VisionDescriber visionDescriber = new VisionDescriber(props, env, "https://integrate.api.nvidia.com");
+        MilvusSearchTool milvusTool = new MilvusSearchTool(null, null, null);
+        ChatReasoner reasoner = new ChatReasoner(builder, streamingBuilder, props, env, visionDescriber, milvusTool);
         ChatController controller = new ChatController(reasoner);
 
         AiChatRequest req = new AiChatRequest();
@@ -95,9 +100,9 @@ class SseSleepCadenceExplorationTest {
         };
 
         Method streamMethod = ChatController.class.getDeclaredMethod(
-                "stream", SseEmitter.class, AiChatRequest.class);
+                "stream", SseEmitter.class, AiChatRequest.class, String.class);
         streamMethod.setAccessible(true);
-        streamMethod.invoke(controller, recordingEmitter, req);
+        streamMethod.invoke(controller, recordingEmitter, req, (String) null);
 
         if (!done.await(5, TimeUnit.SECONDS)) {
             fail("ChatController.stream did not complete within 5s — likely "

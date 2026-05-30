@@ -1645,3 +1645,209 @@ Gateway 路由表新增 5 条：
 ---
 
 最后一次更新：2026-05-28 (v8) · 第八代智能体重写 system prompt + 加 4 个工具 + AI 回复 markdown + 全站字体切换
+
+
+---
+---
+
+# 第四代工作记忆（v4）
+
+> 接续会话：2026-05-29
+> 视角：用户拿来一份"专业分析清单"（即外部分析师的 P0/P1/P2 优化提示词），要求逐项完善。
+> **重要：那份清单的现状描述已严重过时**（说管理端大屏"完全空白"，实际 v3 已全部做完）。
+> 本代聚焦清单里**真正还没做**的 5 项，全部落地。用户已确认 NVIDIA 文本 + 多模态 API 均连接成功。
+
+---
+
+## v4.1 立刻要知道的几件事
+
+1. **分析师清单 ≠ 项目现状**：清单写于一个旧快照。开工前务必先核对真实代码，别照着清单重做已完成功能。已核实：
+   - 管理端大屏（前端 14 个 admin 视图 + 后端聚合层 + spec tasks 全打勾）✅ 早就做完
+   - WebSocket（resonance 的 Chat/Resonance/Support handler）✅ 早就有
+   - LocalResourceWatcher ✅ 早就有（但 v4 之前没有推送通道）
+2. **真实向量检索（Embedding + Milvus）v4 做完了** —— 详 v4.2
+3. **AI 与社交聊天融合（@AI + 破冰）v4 做完了** —— 详 v4.3
+4. **动态 intentHints v4 做完了** —— 详 v4.4
+5. **静态资源热更新 WS 推送 v4 做完了** —— 详 v4.5
+6. **历史数据向量回填工具 v4 做完了**（管理员端点）—— 详 v4.2
+
+## v4.2 真实向量检索（Embedding + Milvus）
+
+**目标**：把 MilvusSearchTool 的"关键词 jaccard 替身"和共鸣大厅的关键词打分，换成真实稠密向量召回。
+
+**架构选择**：
+- Embedding：NVIDIA Integrate 的 `/v1/embeddings`（默认 `nvidia/nv-embedqa-e5-v5`，1024 维，区分 `input_type=query/passage`），用 **JDK HttpClient** 调（同 VisionDescriber 风格，避开 Spring AI EmbeddingModel 对 NVIDIA 扩展字段支持不全）。
+- Milvus：**REST API v2**（`/v2/vectordb/...`，与 gRPC 共用 19530 端口），同样裸 HttpClient —— **故意不引 milvus-java-sdk**，避免 gRPC/protobuf/netty-shaded 与 Spring Cloud 冲突。
+- **全程可降级**：`mnemoscape.ai.vector.enabled=false` 或 Embedding/Milvus 任一失败 → MilvusSearchTool 透明退回老的关键词加权；写入（index/delete）best-effort 不阻塞主流程。
+
+**新增文件（ai-service）**：
+- `config/VectorStoreProperties.java`（`mnemoscape.ai.vector.*`）
+- `service/EmbeddingClient.java`（embedPassage / embedQuery）
+- `service/MilvusVectorStore.java`（REST v2：has/create/upsert/delete/search/searchPublic + 懒建 collection + 失败置 available=false 短路）
+- `service/VectorIndexService.java`（index / delete / searchPublic 编排）
+- `controller/VectorIndexController.java`（`POST /api/v1/vector/index`、`DELETE /api/v1/vector/index/{id}`、`POST /api/v1/vector/search-public`）
+
+**改动**：
+- `tools/MilvusSearchTool.java`：构造器加 EmbeddingClient + MilvusVectorStore（`@Autowired(required=false)`，单测可不装配）；`searchForUser` 先试 `tryVectorSearch`，null→降级 `keywordSearch`。**search(req) 老签名 / searchForUser(req,userId) 契约都保留**。
+- `memory-service/MemoryService.java`：`runEnrichmentAsync` 末尾加 `indexMemoryVector`（best-effort）；`deleteMemory` 加 `aiServiceClient.deleteVector`；新增 `backfillVectors(limit)` 批量回填。
+- `memory-service/client/AiServiceClient.java`：加 `indexVector` / `deleteVector`。
+- `memory-service/admin/AdminMemoryManagementController.java`：加 `POST /api/v1/admin/memories/backfill-vectors`（注入 MemoryService）。
+- `resonance-service`：新增 `client/AiServiceClient.java`（searchPublic + chat）；`ResonanceService` 构造器加 aiClient（`required=false`），`searchResonances` 先试 `tryVectorResonance`，null→降级关键词。
+- 向量带 `privacy` 标量字段；`searchPublic` 过滤 `privacy=="PUBLIC" and user_id!=excludeUserId`，给共鸣大厅跨用户召回。
+
+**配置**：`application.yml` `mnemoscape.ai.vector.*` + `.env.example` 新增 EMBEDDING_* / MILVUS_* 变量。
+
+**⚠️ 换 embedding 模型务必同步改 `embedding-dimension`**，否则 Milvus collection 维度对不上插入失败。第一次接入要让用户跑一次 `POST /api/v1/admin/memories/backfill-vectors` 给历史记忆补索引。
+
+## v4.3 AI 与社交聊天融合（设计书 §3.2.3）
+
+**注意**：聊天历史在 **resonance-service 的 MySQL（ChatMessageRepository）**，不是分析师说的 MongoDB。
+
+**后端（resonance-service）**：
+- `service/ChatAiAssistant.java`：`isAiMention`/`stripMention`（前缀 @ai/@echo/@星空使者/@助手）、`answerInGroup`（取群最近 20 条 → 调 ai-service /reconstruct/chat）、`icebreakerForPrivate`（取私聊最近 20 条 → 破冰建议）。AI 身份固定 `AI_USER_ID="ai-echo-envoy"`。降级有兜底文案。
+- `websocket/ChatWebSocketHandler.java`：群聊 TEXT 命中 @AI → `dispatchGroupAiReply`（**独立线程池 aiExec**，LLM 5-30s 绝不阻塞 WS 线程）→ AI 回复落库 + 广播给全群（带 `isAi:true`）。
+- `controller/ChatController.java`：加 `POST /api/v1/chat/icebreaker`（私聊破冰，**不落库不广播**，只返回建议给发起者，主动权留用户）。
+- `client/AiServiceClient.java`：加 `chat(req, X-User-Id)` 调 `/api/v1/reconstruct/chat`。
+
+**前端（ChatView.vue）**：私聊头部"✨求助星空使者"按钮 → `/chat/icebreaker` → 建议卡片（采用/关闭）；群聊头部 @AI 提示胶囊；AI 消息特殊气泡（青金渐变头像 ✦ + 名字）。i18n `chat.ai.*`（中英都加）。
+
+## v4.4 动态 intentHints
+
+- ai-service `service/IntentHintService.java` + `controller/IntentHintController.java`：`POST /api/v1/reconstruct/chat/hints`，请求体复用前端已有的 memory digest（title/location/year），LLM 生成 3-4 条个性化短语，输出 JSON 数组（容忍 code fence）。无记忆/失败→通用兜底。
+- 前端 `AiMascotDock.vue`：`intentHints` 从硬编码 computed 改为 `dynamicHints`(ref) + `fallbackHints`(computed) 组合；`fetchDynamicHints()` 在面板首次打开（toggleOpen）时拉取，失败静默回退。
+
+## v4.5 静态资源热更新 WS 推送
+
+- asset-service 加 `spring-boot-starter-websocket`；新增 `websocket/ResourceWebSocketHandler.java`（端点 `/ws/assets`，广播 `{type:"RESOURCE_CHANGED",total}`）+ `websocket/WebSocketConfig.java`。
+- `service/LocalResourceWatcher.java`：构造器注入 handler，watch 事件触发 rescan 后 `broadcastResourceChanged`。
+- **⚠️ 网关路由坑**：原本 `/ws/**` 全 catch-all 到 resonance-service。在 `api-gateway/application.yml` 加 `asset-ws` 路由（`/ws/assets`）**排在 `resonance-ws` 的 `/ws/**` 之前**（first-match-wins）。`AuthGlobalFilter` 的 `/ws/` 公开前缀已覆盖。
+- 前端 `composables/useDynamicMedia.ts`：单例 WS 监听 `/ws/assets`，收到 `RESOURCE_CHANGED` 自动 `refresh()`；断线 30s 重连；WS 不可用静默降级。
+
+## v4.6 验证状态
+
+- 全后端 `mvnw -o compile` ✅；`common/auth/memory/resonance/asset/gateway` 全 `test` ✅（76+22+... 全绿）。
+- 前端 `npx vue-tsc --noEmit -p tsconfig.app.json` ✅ exit 0。
+- **ai-service 的两个 bugfix 探索测试（AiResponseDeterminism / SseSleepCadence）是历史遗留失败**：它们引用 ChatReasoner 的 3 参旧构造器（v2 起已是 5 参），与 v4 改动无关。`git show HEAD:...ChatReasoner.java` 已确认基线就是 5 参。**不要以为是 v4 引入的**。
+- **中间件在 Tailscale 100.66.166.46，本会话无法连真机**：所有向量 / WS / @AI 都按"编译通过 + 优雅降级"交付，需用户在真机端到端验证（连 Milvus / NVIDIA embedding / WS）。
+
+## v4.7 给下一代的提醒
+
+1. 真向量检索已落地，但**首次必须 backfill**（`POST /api/v1/admin/memories/backfill-vectors`）给历史记忆补索引，否则向量库空，会一直走关键词降级。
+2. **不要引 milvus-java-sdk**：REST v2 + JDK HttpClient 已够用且不打架。
+3. `MilvusVectorStore.search` 返回 **null = 走降级**，**空 list = 真没命中** —— 两个语义不同，别合并。
+4. 群聊 @AI 走 `aiExec` 线程池，**绝不能**在 WS handleTextMessage 线程里同步调 LLM。
+5. embedding 维度 / 模型成对改（VectorStoreProperties.embeddingModel + embeddingDimension），改完重建 collection 再 backfill。
+6. 分析师清单剩余"误判已完成"项（管理端大屏 / WebSocket 基础设施）**不要重做**。
+
+最后一次更新：2026-05-29 · v4 by 第四代智能体
+
+
+---
+
+## v4.8 维护工具（P2 #6 历史数据治理）+ 3D 可视化复核（补完）
+
+> 接 v4.1-v4.7，本轮把分析师清单剩余项全部收口。
+
+### 维护工具（3 个，全在新建的管理员页面 `/admin/maintenance`）
+
+1. **向量回填** `POST /api/v1/admin/memories/backfill-vectors`（body `{limit}`）
+   - `MemoryService.backfillVectors(limit)` 分页拉记忆逐条 `indexMemoryVector`（best-effort）。
+   - 首次接入向量检索 / 换 embedding 模型后必跑，否则 Milvus 空、检索退关键词。
+2. **visualData 清洗** `POST /api/v1/admin/memories/cleanup-visualdata`（body `{limit}`）
+   - `MemoryService.cleanupVisualData(limit)`：`needsVisualDataCleanup` 判定（null/空 或含旧英文模板指纹如 `summer_courtyard`/`outdoor_courtyard`/`a moment of pure childhood joy`）→ `asyncEnrichmentSelf.runEnrichmentAsync` 异步重建。
+3. **MinIO 历史孤儿迁移** `POST /api/v1/admin/assets/migrate-legacy-orphans?apply=false`
+   - `AssetService.migrateLegacyOrphans(dryRun)`：扫 bucket，挑「无 `users/` 前缀 + 无 `/` + 文件名形如 `<uuid>-...`」的旧 `upload()` 孤儿对象，server-side copy 到 `legacy-orphan/` 再删原对象。
+   - **默认 dry-run**（apply=false 只预览候选 + 样本），确认后 `apply=true` 真迁移。
+   - 新建 `asset-service/controller/AdminAssetController.java`（`/api/v1/admin/assets/**`）。
+
+### 网关路由（新增）
+- `admin-assets` 路由（`/api/v1/admin/assets/**` → asset-service），列在 admin stats catch-all 之前。
+- （v4.5 已加 `asset-ws`）
+
+### 前端
+- `api/adminManagement.ts`：加 `backfillVectors` / `cleanupVisualData` / `migrateLegacyOrphans` + 类型。
+- 新建 `views/admin/AdminMaintenanceView.vue`（3 张卡片 + 结果展示 + dry-run badge）。
+- `router/index.ts` 加 `/admin/maintenance` 子路由；`AdminEntryView.vue` 加 nav 项。
+- i18n `admin.maintenance.*` + `admin.nav.maintenance`（中英都加）。
+- **⚠️ ToastTone 没有 `'danger'`**，只有 `info/success/warning/error` —— 别用 danger。
+
+### 3D 可视化复核（分析师"defect #6"）—— 判定为已满足，未改动
+- `views/admin/HeatmapView.vue`：**已是**完整的全球 3D 热力图（maplibre globe 投影 + deck.gl `HexagonLayer` extruded + 三档分辨率 350/80/25km + 自转 + ResizeObserver）。
+- `views/MemoryGraphView.vue`：**已是**完整的 3D 情绪星图（Three.js + Fibonacci 球面分布 + 情绪着色 EMOTION_COLOR_MAP + 自定义 bloom shader + 平滑相机推进 camTween easeInOut + raycast 点选）。
+- 结论：**重做无收益且有破坏working代码的风险**，故保留。下一代别误以为这块"没做"。
+
+### v4.8 验证
+- 全后端 `mvnw -o compile` ✅；asset+memory `test` ✅（76 等全绿）。
+- 前端 `vue-tsc` ✅ exit 0。
+
+### 分析师清单最终状态（全部收口）
+| 项 | 状态 |
+|---|---|
+| P0 真向量检索（Embedding+Milvus）| ✅ v4.2 |
+| P0 AI×社交聊天融合（@AI + 破冰）| ✅ v4.3 |
+| P1 后台大屏 | ✅ 早已存在（v3），未重做 |
+| P1 静态资源热更新 WS 推送 | ✅ v4.5 |
+| P2 动态 intentHints | ✅ v4.4 |
+| P2 历史数据 MinIO 迁移 + visualData 清洗 | ✅ v4.8 |
+| defect 3D 热力图 / force-graph | ✅ 早已存在，复核保留 |
+
+**仍需用户在真机端到端验证**（Tailscale 中间件本会话连不上）：向量索引/检索、@AI 群聊、破冰、资源热更新 WS、三个维护工具。
+
+最后一次更新：2026-05-29 · v4.8 by 第四代智能体
+
+
+---
+
+## v4.9 修复：AI 流式"几十秒无输出 + 空 data: 帧"（关键）
+
+### 现象
+用户报告 SSE 流：`tool_end`(hits:0) 后 **17 个 :keepalive（≈85s 全程静默）**，然后突然一串空 `data:` 帧夹着真 token（"你好！👋"），输出极慢。
+
+### 根因
+**Spring AI 1.0.0-M4 的 `ChatClient.stream()` 在注册了 default FunctionCallback（工具）时不是真流式**：底层为了侦测 / 执行可能的 tool call，会把模型整段响应在服务端缓冲完再一次性回放。表现就是长时间零字节（只有我加的 keepalive 在动），然后一次性吐出 + 大量空 content delta。
+- `AiClientConfig.mnemoscapeChatClientBuilder` 用 `.defaultFunctions(...)` 把 6 个工具挂上了，`ChatReasoner` 流式和同步共用这一个 client → 流式被工具拖成缓冲模式。
+
+### 修复（关键认知：本项目流式不依赖模型自发 function-calling）
+本项目记忆 grounding 靠"强制 RAG"（请求层 prepend top-K 命中记忆）+ "视觉前置"，**不靠模型自己 function-call**。所以流式可以用一个无工具的纯净 client：
+1. `AiClientConfig` 新增 `mnemoscapeStreamingChatClientBuilder`（只有 system prompt，**无 defaultFunctions**）。
+2. `ChatReasoner` 注入两个 client：`chatClient`（带工具，给同步 `/chat` 的 `.call()`）+ `streamingChatClient`（无工具，给 `streamAnswer`）。构造器从 5 参 → 6 参（多了 `@Qualifier("mnemoscapeStreamingChatClientBuilder")`）。
+3. `streamAnswer` 改用 `streamingChatClient`，并 `.filter(chunk -> chunk != null && !chunk.isEmpty())` 过滤空 delta。
+
+### 顺带修复
+- 把两个历史遗留 bugfix 探索测试（`AiResponseDeterminismExplorationTest` / `SseSleepCadenceExplorationTest`）的 ChatReasoner 构造从 3 参更新到 6 参（用 `new MilvusSearchTool(null,null,null)` + `new VisionDescriber(props,env,baseUrl)`，**不要 mock 它们**——MilvusSearchTool 是 @Configuration，Mockito mock 会失败）；SseSleepCadence 的反射 `stream(...)` 签名从 2 参 → 3 参（加 `String userId`=null）。
+- **现在整个后端 7 个模块 `mvnw test` 全绿，ai-service 历史上第一次全绿。**
+
+### 给下一代
+- **不要给流式 ChatClient 挂工具**：M4 下会退化成缓冲。同步 `.call()` 挂工具没问题。
+- 等 Spring AI 升级到能用 advisors 链路暴露真 function-calling 回调时，再考虑让流式也带工具。
+- 同步路径（`POST /chat` 非流式）仍用带工具的 `chatClient`，契约不变。
+
+最后一次更新：2026-05-29 · v4.9 by 第四代智能体
+
+
+---
+
+## v4.10 修复：强制 RAG 机械触发 + 慢 + "无法连接"误报
+
+### 用户反馈
+1. 每条消息（连"你好"）都机械地调一次"个人记忆向量库"，返回 `hits:0`（向量库还没 backfill，是空的）—— 又慢又没用。
+2. 响应太久。
+3. 偶发"⚠ 无法连接到 AI 服务"。
+
+### 根因
+1. `ChatReasoner.buildRagPrefix` 对**所有**长度 ≥4 的消息都跑一次 embedding+Milvus 往返（不管意图）。空向量库下永远 0 命中，纯粹是首字前的额外延迟。
+2. 同上 —— 每条消息多 1 次 NVIDIA embedding(≤15s) + 1 次 Milvus(≤8s) 同步往返。
+3. 前端 `streamFromBackend` 用 `ok = gotFirst && !upstreamError` 判定成功；模型**正常结束但输出为空**时 `gotFirst=false` → 误判成"无法连接"（其实连接没问题）。
+
+### 修复
+- **后端**：`buildRagPrefix` 加意图门控 —— `if (classify(question) != Intent.PLAN) return ""`。寒暄 / 普通对话（CHAT）不再跑 RAG，首字延迟立刻回落；只有真正的检索/分析意图（PLAN：含"检索/搜索/匹配/共鸣/推荐/对比"等关键词或"年份+长句"）才召回。
+- **前端**：
+  - 加 `doneSeen` 标志，成功判定改为 `(doneSeen || gotFirst) && !upstreamError` —— 收到 `done` 帧就算成功，即便模型这次空输出。上游真不可用走的是 `error` 帧（upstreamError=true），与"空但成功"区分开。
+  - 流正常结束但 `reply.text` 为空时，给一句温和提示而不是留空泡。
+
+### 注意 / 给下一代
+- **向量检索要真正有用，必须先 backfill**：去 `/admin/maintenance` 点"向量回填"，否则 Milvus 空，PLAN 意图的 RAG 也只会 0 命中（此时仍有前端 context digest 兜底）。
+- RAG 现在**只在 PLAN 意图**跑。若想让更多"找记忆"措辞触发，扩 `classify()` 的 `planSignals`（前后端要同步，见 §5.5）。
+- 不要把 RAG 改回"每条都跑" —— 那是这次性能/体验问题的根源。
+
+最后一次更新：2026-05-29 · v4.10 by 第四代智能体

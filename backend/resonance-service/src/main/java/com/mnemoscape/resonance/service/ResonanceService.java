@@ -45,14 +45,19 @@ public class ResonanceService {
     private final ResonanceSpaceRepository spaceRepository;
     private final MemoryNoteRepository noteRepository;
     private final MemoryServiceClient memoryClient;
+    /** 真实向量召回（ai-service）；未装配 / 不可用时退回关键词打分。 */
+    private final com.mnemoscape.resonance.client.AiServiceClient aiClient;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     public ResonanceService(ResonanceSpaceRepository spaceRepository,
                             MemoryNoteRepository noteRepository,
-                            MemoryServiceClient memoryClient) {
+                            MemoryServiceClient memoryClient,
+                            @org.springframework.beans.factory.annotation.Autowired(required = false)
+                            com.mnemoscape.resonance.client.AiServiceClient aiClient) {
         this.spaceRepository = spaceRepository;
         this.noteRepository = noteRepository;
         this.memoryClient = memoryClient;
+        this.aiClient = aiClient;
     }
 
     /**
@@ -82,7 +87,14 @@ public class ResonanceService {
             throw new BizException(503, "记忆服务暂不可用，无法执行共鸣检索");
         }
 
-        // 拉公共池
+        // 1) 优先用 ai-service 真实稠密向量召回（跨用户公共池）。
+        //    ai-service 返回 available=false 或本路径抛错 → 透明降级到关键词打分。
+        List<Map<String, Object>> vectorMatches = tryVectorResonance(seed, memoryId, userId);
+        if (vectorMatches != null) {
+            return vectorMatches;
+        }
+
+        // 2) 关键词加权降级（拉公共池做 jaccard + 季节/年代/地点加权）。
         List<Map<String, Object>> pool;
         try {
             ApiResponse<List<Map<String, Object>>> resp = memoryClient.publicPool(MAX_PUBLIC_POOL_SIZE, userId);
@@ -211,6 +223,60 @@ public class ResonanceService {
     }
 
     /* ============ 打分 / 工具 ============ */
+
+    /**
+     * 真实向量召回路径：把 seed 记忆拼成查询文本 → ai-service /vector/search-public →
+     * 跨用户 PUBLIC 记忆的稠密向量命中。
+     *
+     * @return 命中列表（前端契约一致）；返回 null 表示"向量不可用 / 失败"，调用方降级到关键词打分。
+     */
+    private List<Map<String, Object>> tryVectorResonance(Map<String, Object> seed, String memoryId, String userId) {
+        if (aiClient == null) return null;
+        String seedText = (stringField(seed, "title") + "。"
+                + stringField(seed, "memoryLocation") + " "
+                + stringField(seed, "description")).trim();
+        if (seedText.isBlank()) return null;
+        try {
+            Map<String, Object> body = new LinkedHashMap<>();
+            body.put("seedText", seedText);
+            body.put("excludeUserId", userId);
+            body.put("topK", DEFAULT_TOP_K);
+            ApiResponse<Map<String, Object>> resp = aiClient.searchPublic(body);
+            Map<String, Object> data = resp == null ? null : resp.getData();
+            if (data == null) return null;
+            Object availObj = data.get("available");
+            boolean available = availObj instanceof Boolean b && b;
+            if (!available) return null; // ai-service 明确说向量不可用 → 降级
+
+            Object hitsObj = data.get("hits");
+            if (!(hitsObj instanceof List<?> hits)) return List.of();
+
+            List<Map<String, Object>> out = new ArrayList<>();
+            for (Object row : hits) {
+                if (!(row instanceof Map<?, ?> m)) continue;
+                String otherId = m.get("memoryId") == null ? null : String.valueOf(m.get("memoryId"));
+                if (otherId == null || otherId.equals(memoryId)) continue;
+                double score = m.get("score") instanceof Number n ? n.doubleValue() : 0.0;
+                // COSINE 相似度可能略超 1 或为负（归一化误差），clamp 到 [0,0.99]。
+                score = Math.max(0.0, Math.min(0.99, score));
+
+                Map<String, Object> match = new LinkedHashMap<>();
+                match.put("memoryId", otherId);
+                match.put("title", m.get("title") == null ? "" : String.valueOf(m.get("title")));
+                match.put("similarityScore", round(score));
+                match.put("emotionSimilarity", round(Math.min(0.99, score * 1.05)));
+                match.put("sceneSimilarity", round(Math.min(0.99, score * 0.92)));
+                match.put("ownerUsername", virtualOwnerName(
+                        m.get("userId") == null ? null : String.valueOf(m.get("userId"))));
+                out.add(match);
+            }
+            log.info("Resonance via vector recall: {} hits for seed {}", out.size(), memoryId);
+            return out;
+        } catch (Exception e) {
+            log.warn("Vector resonance failed, falling back to keyword scoring: {}", e.toString());
+            return null;
+        }
+    }
 
     /**
      * 朴素稀疏相似度：

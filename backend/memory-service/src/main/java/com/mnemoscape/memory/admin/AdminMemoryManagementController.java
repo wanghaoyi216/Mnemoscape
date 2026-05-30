@@ -49,13 +49,16 @@ public class AdminMemoryManagementController {
     private final MemoryRepository memoryRepository;
     private final MemoryFragmentRepository fragmentRepository;
     private final MemoryVersionRepository versionRepository;
+    private final com.mnemoscape.memory.service.MemoryService memoryService;
 
     public AdminMemoryManagementController(MemoryRepository memoryRepository,
                                            MemoryFragmentRepository fragmentRepository,
-                                           MemoryVersionRepository versionRepository) {
+                                           MemoryVersionRepository versionRepository,
+                                           com.mnemoscape.memory.service.MemoryService memoryService) {
         this.memoryRepository = memoryRepository;
         this.fragmentRepository = fragmentRepository;
         this.versionRepository = versionRepository;
+        this.memoryService = memoryService;
     }
 
     /** 严格白名单 DTO — 包含管理员看得到的核心运营字段，不携带 visualData/audioData/emotionProfile。 */
@@ -323,6 +326,62 @@ public class AdminMemoryManagementController {
         memoryRepository.save(m);
         logAccess(req, "/api/v1/admin/memories/" + id, "patched", 200);
         return ResponseEntity.ok(ApiResponse.success(toRow(m)));
+    }
+
+    /**
+     * 坐标回填：给所有 memoryLocation 非空但 memoryLat/memoryLng 为 null 的记忆
+     * 重新跑 GeocodingService 解析坐标。
+     * body（可选）: {limit: 1000}。返回 {scanned, resolved, skipped, limit}。
+     */
+    @PostMapping("/backfill-geocoords")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> backfillGeocoords(
+            @RequestBody(required = false) Map<String, Object> body,
+            HttpServletRequest req) {
+        int limit = 1000;
+        if (body != null && body.get("limit") instanceof Number n) {
+            limit = n.intValue();
+        }
+        Map<String, Object> result = memoryService.backfillGeocoords(limit);
+        logAccess(req, "/api/v1/admin/memories/backfill-geocoords",
+                "resolved=" + result.get("resolved"), 200);
+        return ResponseEntity.ok(ApiResponse.success(result));
+    }
+
+    /**
+     * 向量回填：把现有记忆批量重新索引进 Milvus（接入向量检索后给历史数据补索引，
+     * 或切换 embedding 模型 / 维度后重建）。
+     * body（可选）: {limit: 500}。逐条 best-effort，不阻塞；返回 {total, dispatched, limit}。
+     */
+    @PostMapping("/backfill-vectors")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> backfillVectors(
+            @RequestBody(required = false) Map<String, Object> body,
+            HttpServletRequest req) {
+        int limit = 500;
+        if (body != null && body.get("limit") instanceof Number n) {
+            limit = n.intValue();
+        }
+        Map<String, Object> result = memoryService.backfillVectors(limit);
+        logAccess(req, "/api/v1/admin/memories/backfill-vectors",
+                "dispatched=" + result.get("dispatched"), 200);
+        return ResponseEntity.ok(ApiResponse.success(result));
+    }
+
+    /**
+     * 历史 visualData 清洗：批量重建 visualData 为 null/空 或仍是旧英文模板的记忆。
+     * body（可选）: {limit: 500}。异步逐条 best-effort；返回 {scanned, dispatched, limit, total}。
+     */
+    @PostMapping("/cleanup-visualdata")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> cleanupVisualData(
+            @RequestBody(required = false) Map<String, Object> body,
+            HttpServletRequest req) {
+        int limit = 500;
+        if (body != null && body.get("limit") instanceof Number n) {
+            limit = n.intValue();
+        }
+        Map<String, Object> result = memoryService.cleanupVisualData(limit);
+        logAccess(req, "/api/v1/admin/memories/cleanup-visualdata",
+                "dispatched=" + result.get("dispatched"), 200);
+        return ResponseEntity.ok(ApiResponse.success(result));
     }
 
     private void logAccess(HttpServletRequest req, String path, String detail, int status) {

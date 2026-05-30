@@ -151,7 +151,181 @@ public class MemoryService {
         } catch (Exception e) {
             log.warn("[async-enrich] graph projection failed for {}: {}", memoryId, e.toString());
         }
+        try {
+            indexMemoryVector(memory);
+        } catch (Exception e) {
+            log.warn("[async-enrich] vector indexing failed for {}: {}", memoryId, e.toString());
+        }
         log.info("[async-enrich] done for memory {}", memoryId);
+    }
+
+    /**
+     * 把记忆写入 Milvus 向量库（经 ai-service 的 /vector/index）。
+     *
+     * <p>best-effort：ai-service 即便 Embedding / Milvus 不可用也返回 200，
+     * 所以这里只需吞掉 Feign 自身的网络异常。索引让 AI 检索 / 共鸣大厅 / RAG
+     * 能用真实稠密向量召回；失败时这些功能各自有关键词降级，主流程不受影响。
+     */
+    protected void indexMemoryVector(Memory memory) {
+        if (memory == null || memory.getId() == null) return;
+        try {
+            Map<String, Object> payload = new java.util.HashMap<>();
+            payload.put("memoryId", memory.getId());
+            payload.put("userId", memory.getUserId());
+            payload.put("title", memory.getTitle() == null ? "" : memory.getTitle());
+            payload.put("location", memory.getMemoryLocation() == null ? "" : memory.getMemoryLocation());
+            payload.put("year", memory.getMemoryYear() == null ? 0 : memory.getMemoryYear());
+            payload.put("description", memory.getDescription() == null ? "" : memory.getDescription());
+            payload.put("privacy", memory.getPrivacyLevel() == null ? "PRIVATE" : memory.getPrivacyLevel().name());
+            aiServiceClient.indexVector(payload);
+            log.info("[vector-index] dispatched index for memory {}", memory.getId());
+        } catch (Exception e) {
+            log.warn("[vector-index] index call failed for memory {}: {}", memory.getId(), e.toString());
+        }
+    }
+
+    /**
+     * 坐标回填：扫描所有 memoryLocation 非空但 memoryLat/memoryLng 为 null 的记忆，
+     * 重新跑 GeocodingService 解析坐标并写入数据库。
+     *
+     * <p>用于：1) 历史记忆在 geocoder 开启前创建，坐标为 null；
+     *          2) 切换 geocoder 策略后给旧数据补坐标。
+     * 逐条同步处理（geocoder 本地 anchor 表 O(1)，远程 Nominatim 有速率限制），
+     * 返回 {scanned, resolved, skipped, limit}。
+     *
+     * @param limit 单次最多处理多少条（防止一次性全表扫描）
+     */
+    public Map<String, Object> backfillGeocoords(int limit) {
+        int capped = Math.max(1, Math.min(limit, 5000));
+        org.springframework.data.domain.Page<Memory> page = memoryRepository.findAll(
+                org.springframework.data.domain.PageRequest.of(0, capped));
+        int scanned = 0;
+        int resolved = 0;
+        int skipped = 0;
+        for (Memory m : page.getContent()) {
+            scanned++;
+            // 已有坐标的跳过
+            if (m.getMemoryLng() != null && m.getMemoryLat() != null) {
+                skipped++;
+                continue;
+            }
+            // 没有地名文本的跳过
+            if (m.getMemoryLocation() == null || m.getMemoryLocation().isBlank()) {
+                skipped++;
+                continue;
+            }
+            try {
+                java.util.Optional<double[]> coords = geocodingService.resolve(m.getMemoryLocation());
+                if (coords.isPresent()) {
+                    m.setMemoryLng(coords.get()[0]);
+                    m.setMemoryLat(coords.get()[1]);
+                    memoryRepository.save(m);
+                    resolved++;
+                    log.info("[geocoords-backfill] resolved memory {} location='{}' → [{},{}]",
+                            m.getId(), m.getMemoryLocation(), coords.get()[0], coords.get()[1]);
+                } else {
+                    skipped++;
+                }
+            } catch (Exception e) {
+                log.warn("[geocoords-backfill] failed for memory {}: {}", m.getId(), e.toString());
+                skipped++;
+            }
+        }
+        Map<String, Object> result = new java.util.LinkedHashMap<>();
+        result.put("scanned", scanned);
+        result.put("resolved", resolved);
+        result.put("skipped", skipped);
+        result.put("limit", capped);
+        result.put("total", page.getTotalElements());
+        log.info("[geocoords-backfill] scanned={} resolved={} skipped={} (total={})",
+                scanned, resolved, skipped, page.getTotalElements());
+        return result;
+    }
+
+    /**
+     * 向量回填（管理员触发）：把现有记忆批量重新索引进 Milvus。
+     *
+     * <p>用于：1) 首次接入向量检索后，给历史记忆补索引；2) 切换 embedding 模型 /
+     * 维度后重建 collection。逐条调 {@link #indexMemoryVector}（best-effort），
+     * 返回 {@code {total, dispatched}} 统计。
+     *
+     * @param limit 单次最多处理多少条（防止一次性把全表灌进上游 embedding）
+     */
+    public Map<String, Object> backfillVectors(int limit) {
+        int capped = Math.max(1, Math.min(limit, 2000));
+        org.springframework.data.domain.Page<Memory> page = memoryRepository.findAll(
+                org.springframework.data.domain.PageRequest.of(0, capped));
+        int dispatched = 0;
+        for (Memory m : page.getContent()) {
+            try {
+                indexMemoryVector(m);
+                dispatched++;
+            } catch (Exception e) {
+                log.warn("[vector-backfill] failed for memory {}: {}", m.getId(), e.toString());
+            }
+        }
+        Map<String, Object> result = new java.util.LinkedHashMap<>();
+        result.put("total", page.getTotalElements());
+        result.put("dispatched", dispatched);
+        result.put("limit", capped);
+        log.info("[vector-backfill] dispatched {} of {} total memories", dispatched, page.getTotalElements());
+        return result;
+    }
+
+    /**
+     * 历史 visualData 清洗（管理员触发）：扫描 visualData 为 null/空 或仍是旧英文模板的记忆，
+     * 异步重新跑 reconstruction，让 SceneViewer 不再展示"假"场景。
+     *
+     * <p>判定"需要清洗"：
+     * <ul>
+     *   <li>visualData 为 null / 空白；或</li>
+     *   <li>visualData 含旧规则版英文模板指纹（如 environment 仍是英文 snake_case 关键词）。</li>
+     * </ul>
+     * 逐条通过自代理异步 enrich（不阻塞请求），返回 {scanned, dispatched, limit}。
+     *
+     * @param limit 单次最多处理多少条
+     */
+    public Map<String, Object> cleanupVisualData(int limit) {
+        int capped = Math.max(1, Math.min(limit, 1000));
+        org.springframework.data.domain.Page<Memory> page = memoryRepository.findAll(
+                org.springframework.data.domain.PageRequest.of(0, capped));
+        int scanned = 0;
+        int dispatched = 0;
+        for (Memory m : page.getContent()) {
+            scanned++;
+            if (!needsVisualDataCleanup(m)) continue;
+            try {
+                asyncEnrichmentSelf.runEnrichmentAsync(m.getId());
+                dispatched++;
+            } catch (Exception e) {
+                log.warn("[visualdata-cleanup] dispatch failed for memory {}: {}", m.getId(), e.toString());
+            }
+        }
+        Map<String, Object> result = new java.util.LinkedHashMap<>();
+        result.put("scanned", scanned);
+        result.put("dispatched", dispatched);
+        result.put("limit", capped);
+        result.put("total", page.getTotalElements());
+        log.info("[visualdata-cleanup] scanned={} dispatched={} (total={})",
+                scanned, dispatched, page.getTotalElements());
+        return result;
+    }
+
+    /** 判定一条记忆的 visualData 是否需要重建（null/空 或 旧英文模板指纹）。 */
+    private boolean needsVisualDataCleanup(Memory m) {
+        String vd = m.getVisualData();
+        if (vd == null || vd.isBlank()) return true;
+        // 旧规则版英文模板指纹：environment 取自固定英文 snake_case 词表
+        String lower = vd.toLowerCase(java.util.Locale.ROOT);
+        String[] legacyMarkers = {
+                "summer_courtyard", "snowy_landscape", "outdoor_courtyard",
+                "warm_sunset", "a moment of pure childhood joy",
+                "forgotten_detail", "emotion_flashback"
+        };
+        for (String marker : legacyMarkers) {
+            if (lower.contains(marker)) return true;
+        }
+        return false;
     }
 
     /**
@@ -400,6 +574,12 @@ public class MemoryService {
     public void deleteMemory(String memoryId, String userId) {
         Memory memory = getMemory(memoryId, userId);
         memoryRepository.delete(memory);
+        // best-effort 清理向量库残留，避免删除后 AI 检索仍召回旧记忆。
+        try {
+            aiServiceClient.deleteVector(memoryId);
+        } catch (Exception e) {
+            log.warn("[vector-index] delete call failed for memory {}: {}", memoryId, e.toString());
+        }
     }
 
     @Transactional

@@ -264,6 +264,28 @@
         "PRIVATE": "私密",
         "FRIENDS": "好友可见",
         "PUBLIC": "公开"
+      },
+      "guide": {
+        "title": "🗺️ 时空手账与导览手册 (Museum Guide)",
+        "subtitle": "重建是一种诠释，用心发掘属于你的一生展厅",
+        "toggleExpand": "展开手册",
+        "toggleCollapse": "收起手册",
+        "reconstruction": {
+          "title": "🛰️ 记忆重建 (Reconstruction)",
+          "desc": "在创建页写下回忆，AI 重建引擎会解构其视觉、听觉与情感，为您编织一座专属的 3D 记忆庭院，供您随时走进去漫游。"
+        },
+        "drift": {
+          "title": "🌫️ 记忆漂移 (Memory Drift)",
+          "desc": "基于人类真实的遗忘曲线模拟。随着时间流逝，未锁定的展厅会慢慢起雾、褪色。你可以随时点击‘锁定’保持鲜活，也可以选择‘重写’修正它。"
+        },
+        "fragments": {
+          "title": "🔍 隐藏碎片 (Fragments)",
+          "desc": "AI 会在 3D 展厅深处藏匿一些被你遗忘的感官细节或情感闪回。在漫游中靠近它们并按下 E 键，即可发掘打捞出这些尘封的碎片。"
+        },
+        "resonance": {
+          "title": "🤝 灵魂共鸣 (Resonance)",
+          "desc": "选择一段你的记忆作为基准，共鸣引擎会在全网公开记忆中匹配同频的旅人，融合并生成一个浪漫的 3D 双人共享星盘留言空间。"
+        }
       }
     },
     "builder": {
@@ -399,7 +421,7 @@
       },
       "shell": {
         "title": "时光长河",
-        "hint": "顶端是最新的记忆。点击任意卡片直达详情。"
+        "hint": "顶端是最早的记忆，越往下越接近现在。点击任意卡片直达详情。"
       },
       "loading": "正在编织时光河…",
       "legend": {
@@ -685,12 +707,58 @@
       "history": "版本历史",
       "resonance": "共鸣权限"
     },
+    "avatar3d": {
+      "eyebrow": "灵魂刻画",
+      "title": "我的 3D 灵魂形象",
+      "subtitle": "用一段文字描述你自己，AI 将为你刻画一个独一无二的 3D 灵魂形象，它将在共鸣空间中代表你出现。",
+      "editBtn": "重新刻画",
+      "empty": {
+        "title": "你的灵魂形象尚未刻画",
+        "text": "用几句话描述你自己——你的性格、爱好、内心世界——AI 将为你生成一个专属的 3D 灵魂形象。",
+        "createBtn": "✨ 开始刻画"
+      },
+      "info": {
+        "titleLabel": "灵魂名号",
+        "storyLabel": "灵魂故事",
+        "tagsLabel": "个性标签",
+        "descLabel": "自我描述",
+        "public": "🌐 公开展示",
+        "private": "🔒 仅自己可见",
+        "updatedAt": "最后更新："
+      },
+      "builder": {
+        "eyebrow": "AI 灵魂刻画引擎",
+        "title": "描述你自己",
+        "subtitle": "越具体越好——你的性格、爱好、内心世界、喜欢的时间段、对世界的感受……AI 会据此生成你的专属 3D 灵魂形象。",
+        "exampleLabel": "参考示例",
+        "exampleBtn": "示例 {n}",
+        "descLabel": "自我描述",
+        "descPlaceholder": "我是一个喜欢在深夜读书的人，内心有一片安静的星空……",
+        "publicLabel": "公开展示我的灵魂形象",
+        "publicHint": "（公开后可在共鸣空间被其他用户看到）",
+        "generate": "✨ 生成我的灵魂形象",
+        "regenerate": "🔄 重新生成",
+        "saving": "AI 正在刻画中…",
+        "delete": "删除形象",
+        "deleteConfirm": "确定删除你的 3D 灵魂形象吗？此操作不可撤销。",
+        "hints": {
+          "tooShort": "描述太短了，至少需要 10 个字",
+          "minimal": "可以再多写一些，越具体 AI 刻画得越准确",
+          "good": "不错！AI 已经能感知到你的气质了",
+          "excellent": "✓ 描述非常丰富，AI 将为你刻画出最精准的灵魂形象"
+        },
+        "error": {
+          "saveFailed": "生成失败，请稍后重试",
+          "deleteFailed": "删除失败，请稍后重试"
+        }
+      }
+    },
     "attractor": {
       "eyebrow": "情绪考古",
       "title": "情绪混沌吸引子",
-      "subtitle": "把五维情绪积分投入洛伦兹方程，绘出一条独属于你的灵魂轨迹。",
-      "intro": "轨迹的展开形态由你最近的记忆情绪决定 — 喜悦让它鲜活，怀旧让它舒展，平和让它收敛。",
-      "mockNote": "当前数值为占位示例；接入 ai-service 情绪聚合接口后会切换为实时数据。",
+      "subtitle": "将你的五维情绪积分代入洛伦兹混沌方程，勾勒出独一无二的灵魂轨迹。",
+      "intro": "这是您的情感混沌轨迹。AI 会根据您创建的所有记忆中的情绪分布（喜悦、悲伤、恐惧、平和、怀旧），利用洛伦兹动力学方程绘制出一条独属于您的“灵魂轨迹”。喜悦会让轨迹更轻盈鲜活，怀旧会让曲线更绽放舒展，平和会让它安静收敛。",
+      "mockNote": "心灵轨迹已根据您的历史记忆实时演算更新。若暂无记忆，则采用系统初始星云轨迹进行平滑演绎。",
       "dim": {
         "joy": "喜悦",
         "sorrow": "悲伤",
@@ -701,6 +769,16 @@
     }
   },
   "chat": {
+    "ai": {
+      "name": "星空使者",
+      "icebreakerBtn": "求助星空使者",
+      "icebreakerHint": "让 AI 分析你们的对话，给一条破冰 / 话题建议",
+      "icebreakerError": "星空使者暂时无法连线，稍后再试～",
+      "suggestionTitle": "星空使者的破冰建议",
+      "useSuggestion": "采用这条",
+      "mentionTip": "在群里 @AI 即可召唤我",
+      "mentionHint": "在消息开头输入 @AI 或 @Echo，我会结合最近群聊内容回复"
+    },
     "tabs": {
       "chats": "聊天会话",
       "discover": "寻找馆长",
@@ -800,6 +878,12 @@
     }
   },
   "admin": {
+    "hud": {
+      "toggle": "极客大屏模式",
+      "exit": "退出大屏模式",
+      "title": "量子记忆全局主控台 HUD",
+      "description": "实时三维空间拓扑、网络共鸣、AI重构因子与记忆微星云健康度实时监测"
+    },
     "nav": {
       "entry": "管理面板",
       "home": "总览",
@@ -814,7 +898,8 @@
       "usersManagement": "用户管理",
       "memoriesManagement": "记忆管理",
       "resonanceManagement": "关系管理",
-      "supportInbox": "客服工单"
+      "supportInbox": "客服工单",
+      "maintenance": "维护工具"
     },
     "guard": {
       "notAdmin": "仅管理员可访问该页面，已为你跳转回记忆首页",
@@ -890,7 +975,10 @@
         "MEDIUM": "中（1°）",
         "HIGH": "高（0.25°）"
       },
-      "intensity": "相对强度"
+      "intensity": "相对强度",
+      "noData": "暂无地理位置数据",
+      "noDataHint": "创建记忆时填写「地点」字段，系统将自动解析坐标并在此显示",
+      "pointsLabel": "个热力点"
     },
     "contributors": {
       "title": "Top 贡献者",
@@ -1066,6 +1154,38 @@
         "delete": "批量删除",
         "status": "批量改状态",
         "clearSelection": "取消选择"
+      }
+    },
+    "maintenance": {
+      "title": "维护工具",
+      "limit": "处理上限",
+      "done": "操作已下发",
+      "failed": "操作失败",
+      "vector": {
+        "title": "向量回填",
+        "desc": "把现有记忆批量重新索引进 Milvus 向量库。首次接入向量检索、或更换 embedding 模型 / 维度后需要执行一次，否则向量库为空，AI 检索与共鸣会退回关键词匹配。",
+        "run": "开始回填",
+        "result": "已下发 {dispatched} / 共 {total} 条记忆的索引任务。"
+      },
+      "geo": {
+        "title": "坐标回填",
+        "desc": "扫描所有填写了「地点」但坐标为空的历史记忆，重新解析经纬度并写入数据库。执行后「时空流光」地图和「全球热力」大屏将显示这些记忆的位置。",
+        "run": "开始回填",
+        "result": "扫描 {scanned} 条，成功解析 {resolved} 条，跳过 {skipped} 条。"
+      },
+      "visual": {
+        "title": "visualData 清洗",
+        "desc": "扫描 visualData 为空或仍是旧英文模板的记忆，异步重新生成 3D 场景数据，让 SceneViewer 不再展示历史「假」场景。",
+        "run": "开始清洗",
+        "result": "扫描 {scanned} 条，已下发 {dispatched} 条重建任务。"
+      },
+      "orphan": {
+        "title": "MinIO 历史孤儿迁移",
+        "desc": "早期上传的对象没有 users/ 前缀，会被当成公共素材暴露给所有用户。此工具把这类历史私有对象搬到 legacy-orphan/ 前缀下。建议先「预览」确认候选，再「执行迁移」。",
+        "preview": "预览候选",
+        "apply": "执行迁移",
+        "dryRun": "预览（未实际移动）",
+        "result": "扫描 {scanned} 个对象，候选 {candidates} 个，已迁移 {migrated} 个。"
       }
     },
     "supportInbox": {

@@ -51,6 +51,47 @@ const state = reactive<Bucket>({
 
 let inflight: Promise<void> | null = null
 
+/* ---------------- 静态资源热更新 WS 监听（单例）----------------
+ * asset-service 的 LocalResourceWatcher 检测到 resource/ 目录变动后，会通过
+ * /ws/assets 推一帧 {type:"RESOURCE_CHANGED"}。这里建立单例 WS 连接，收到通知
+ * 后自动 refresh()，让封面选择器等组件无需刷新页面就能看到新拷入的素材。
+ * 连接失败 / 断开自动重连；后端无 WS（如离线）时静默降级，不影响 REST 拉取。 */
+let hotReloadSocket: WebSocket | null = null
+let hotReloadStarted = false
+
+function startHotReloadListener(): void {
+  if (hotReloadStarted) return
+  hotReloadStarted = true
+  if (typeof window === 'undefined' || typeof WebSocket === 'undefined') return
+  connectHotReload()
+}
+
+function connectHotReload(): void {
+  try {
+    const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws'
+    const url = `${protocol}://${window.location.host}/ws/assets`
+    hotReloadSocket = new WebSocket(url)
+    hotReloadSocket.onmessage = (event) => {
+      try {
+        const msg = JSON.parse(event.data)
+        if (msg && msg.type === 'RESOURCE_CHANGED') {
+          void refresh()
+        }
+      } catch { /* ignore malformed */ }
+    }
+    hotReloadSocket.onclose = () => {
+      hotReloadSocket = null
+      // 30s 后重连（资源热更新非关键路径，重连节奏放缓避免噪声）
+      setTimeout(connectHotReload, 30_000)
+    }
+    hotReloadSocket.onerror = () => {
+      try { hotReloadSocket?.close() } catch { /* ignore */ }
+    }
+  } catch {
+    // 静默：WS 不可用时仅失去"热更新"能力，REST 拉取仍正常
+  }
+}
+
 async function refresh(): Promise<void> {
   if (inflight) return inflight
   inflight = (async () => {
@@ -119,6 +160,8 @@ function pickFromBucket(bucket: DynamicAsset[], seed: string | null | undefined)
 export function useDynamicMedia() {
   // 首次调用时启动拉取（不 await）
   if (!state.loaded && !inflight) void refresh()
+  // 启动热更新 WS 监听（单例，幂等）
+  startHotReloadListener()
 
   return {
     state: readonly(state) as Readonly<Bucket>,

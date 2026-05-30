@@ -111,6 +111,12 @@ spring:
           uri: lb://resonance-service
           predicates:
             - Path=/api/v1/admin/resonance-management/**
+        # Admin MinIO 历史资源迁移工具（asset-service）。列在 stats catch-all 之前，
+        # 这样 /api/v1/admin/assets/** 不会被其它 admin 规则误拦。
+        - id: admin-assets
+          uri: lb://asset-service
+          predicates:
+            - Path=/api/v1/admin/assets/**
         - id: admin-support
           uri: lb://resonance-service
           predicates:
@@ -142,7 +148,7 @@ spring:
         - id: auth-service
           uri: lb://auth-service
           predicates:
-            - Path=/api/v1/auth/**, /api/v1/friends/**
+            - Path=/api/v1/auth/**, /api/v1/friends/**, /api/v1/users/me/avatar-profile, /api/v1/users/*/avatar-profile
         - id: memory-service
           uri: lb://memory-service
           predicates:
@@ -155,6 +161,12 @@ spring:
           uri: lb://resonance-service
           predicates:
             - Path=/api/v1/resonances/**, /api/v1/chat/**, /api/v1/support/**
+        # asset-service 静态资源热更新 WS —— 必须排在 resonance-ws 的 /ws/** catch-all 之前，
+        # 否则 /ws/assets 会被错误路由到 resonance-service。first-match-wins。
+        - id: asset-ws
+          uri: lb:ws://asset-service
+          predicates:
+            - Path=/ws/assets/**, /ws/assets
         - id: resonance-ws
           uri: lb:ws://resonance-service
           predicates:

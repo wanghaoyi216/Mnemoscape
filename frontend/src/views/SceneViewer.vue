@@ -4,9 +4,11 @@ import { useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useSceneStore } from '../stores/scene'
 import { useMemoryStore } from '../stores/memory'
-import { useThreeScene } from '../composables/useThreeScene'
-import { fallbackSceneCover } from '../assets/media-catalog'
+import { usePremiumThree } from '../composables/usePremiumThree'
+import { fallbackSceneCover, videos } from '../assets/media-catalog'
 import type { SceneData } from '../types'
+
+const reconstructingVideo = videos.ebbingHourglass.src
 
 const { t } = useI18n()
 
@@ -14,7 +16,7 @@ const route = useRoute()
 const sceneStore = useSceneStore()
 const memoryStore = useMemoryStore()
 const containerRef = ref<HTMLElement | null>(null)
-const { init, loadScene, applyDrift } = useThreeScene(containerRef)
+const { init, loadScene, applyDrift } = usePremiumThree(containerRef)
 const sceneError = ref('')
 
 const scene = computed(() => sceneStore.sceneData)
@@ -22,6 +24,19 @@ const objectCount = computed(() => scene.value?.objects.length || 0)
 const fragmentCount = computed(() => scene.value?.fragments.length || 0)
 // 3D 场景未就绪时的占位封面 — 按 memoryId 稳定哈希到不同的视觉风格
 const fallbackCover = computed(() => fallbackSceneCover(memoryStore.current?.id).src)
+
+const sceneKeyMap: Record<string, string> = {
+  snowy_landscape: 'winter',
+  night_courtyard: 'night',
+  rainy_street: 'rain',
+  flower_garden: 'spring',
+  autumn_path: 'autumn',
+}
+
+function getSceneKey(env?: string): string {
+  if (!env) return 'summer'
+  return sceneKeyMap[env] || 'summer'
+}
 
 function normalizeScene(payload: unknown): SceneData | null {
   if (!payload || typeof payload !== 'object') return null
@@ -84,7 +99,8 @@ onMounted(async () => {
 
   init()
   if (sceneStore.sceneData) {
-    loadScene(sceneStore.sceneData)
+    const key = getSceneKey(sceneStore.sceneData.environment)
+    loadScene(sceneStore.sceneData, key)
   }
 })
 
@@ -92,7 +108,8 @@ watch(
   () => sceneStore.sceneData,
   (data) => {
     if (data) {
-      loadScene(data)
+      const key = getSceneKey(data.environment)
+      loadScene(data, key)
     }
   },
 )
@@ -160,7 +177,31 @@ watch(
         <p class="empty-state__text">{{ sceneError }}</p>
       </div>
 
-      <div v-else ref="containerRef" class="scene-canvas"></div>
+      <div v-else style="position: relative; width: 100%; border-radius: var(--radius-lg); overflow: hidden;">
+        <!-- Loading Overlay -->
+        <transition name="fade">
+          <div v-if="sceneStore.loading" class="reconstruct-veil">
+            <video class="reconstruct-veil__video" autoplay muted loop playsinline preload="auto">
+              <source :src="reconstructingVideo" type="video/mp4" />
+            </video>
+            <div class="reconstruct-veil__mask"></div>
+            <div class="reconstruct-veil__copy">
+              <p class="eyebrow" style="letter-spacing: 0.15em; color: var(--gold);">✨ QUANTUM MEMORY RECONSTRUCTION ✨</p>
+              <h2 class="display-title text-aurora" style="font-family: var(--font-art), var(--font-display); font-size: clamp(1.6rem, 2.5vw, 2.6rem); font-weight: 800;">正在重构这片记忆星空...</h2>
+              <p class="lead" style="max-width: 52ch; font-family: var(--font-display); font-size: 0.94rem; color: var(--text-soft); line-height: 1.7; margin: 12px 0;">
+                "主理人，我们正在从时间长河的文字碎片中抽离出空间、光线、声音和温度。请稍候片刻，这片坍塌的记忆时空即将重回秩序。"
+              </p>
+              <div class="reconstruct-veil__dots">
+                <span class="dot"></span>
+                <span class="dot"></span>
+                <span class="dot"></span>
+              </div>
+            </div>
+          </div>
+        </transition>
+
+        <div ref="containerRef" class="scene-canvas"></div>
+      </div>
     </section>
   </div>
 </template>
@@ -203,5 +244,94 @@ watch(
   .scene-hud {
     flex-direction: column;
   }
+}
+
+/* AI Reconstruction Loading Veil */
+.reconstruct-veil {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  z-index: 10;
+  overflow: hidden;
+  border-radius: var(--radius-lg);
+  background: rgba(5, 7, 11, 0.88);
+}
+
+.reconstruct-veil__video {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0.38;
+  filter: saturate(110%) contrast(110%);
+}
+
+.reconstruct-veil__mask {
+  position: absolute;
+  inset: 0;
+  background: radial-gradient(circle at center, rgba(5,7,11,0.3) 0%, rgba(5,7,11,0.92) 85%);
+}
+
+.reconstruct-veil__copy {
+  position: relative;
+  z-index: 2;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+  padding: 32px;
+  background: rgba(10, 14, 20, 0.42);
+  border-radius: var(--radius-lg);
+  backdrop-filter: blur(8px);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  box-shadow: var(--shadow-lg);
+}
+
+.reconstruct-veil__dots {
+  display: flex;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.reconstruct-veil__dots .dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--primary);
+  box-shadow: 0 0 12px var(--primary);
+  animation: dotPulse 1.4s infinite ease-in-out;
+}
+
+.reconstruct-veil__dots .dot:nth-child(2) {
+  animation-delay: 0.2s;
+  background: var(--gold);
+  box-shadow: 0 0 12px var(--gold);
+}
+
+.reconstruct-veil__dots .dot:nth-child(3) {
+  animation-delay: 0.4s;
+  background: var(--accent);
+  box-shadow: 0 0 12px var(--accent);
+}
+
+@keyframes dotPulse {
+  0%, 100% { transform: scale(0.6); opacity: 0.35; }
+  50% { transform: scale(1.25); opacity: 1; }
+}
+
+/* Fade Transition */
+.fade-enter-active,
+.fade-leave-active {
+  transition: opacity 0.5s ease-out;
+}
+
+.fade-enter-from,
+.fade-leave-to {
+  opacity: 0;
 }
 </style>

@@ -22,7 +22,7 @@ import { useI18n } from 'vue-i18n'
 import maplibregl from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import { MapboxOverlay } from '@deck.gl/mapbox'
-import { ScatterplotLayer, ArcLayer, PathLayer } from '@deck.gl/layers'
+import { ScatterplotLayer, ArcLayer } from '@deck.gl/layers'
 import { TripsLayer } from '@deck.gl/geo-layers'
 
 import { useAtlasStore, type MemoryWithCoords } from '../stores/atlas'
@@ -246,28 +246,34 @@ const personalTrips = computed(() => {
     path: Array<[number, number]>
     timestamps: number[]
     color: [number, number, number]
+    colorEnd: [number, number, number]
     fromTitle?: string
     toTitle?: string
   }> = []
+  // 颜色按"段序号"均匀铺满整条彩虹（而不是按时间戳 —— 记忆时间常聚在同一年，
+  // 用时间戳上色会让所有段几乎同一个蓝色）。每段起点色 = i/N，终点色 = (i+1)/N，
+  // 相邻段首尾衔接，整条记忆流呈现连续的青→紫→粉→橙光谱。
+  const total = Math.max(1, list.length - 1)
   for (let i = 0; i + 1 < list.length; i++) {
     const a = list[i]; const b = list[i + 1]
-    const ratio = list.length > 1 ? i / (list.length - 1) : 0.5
     segs.push({
       path: [a.coords, b.coords],
       timestamps: [a.ts, b.ts],
-      color: rainbow(ratio),
+      color: rainbow(i / total),
+      colorEnd: rainbow((i + 1) / total),
       fromTitle: a.title, toTitle: b.title,
     })
   }
   if (segs.length === 0) {
+    const rTotal = Math.max(1, atlas.route.length - 1)
     for (let i = 0; i < atlas.route.length; i++) {
       const s = atlas.route[i]
       if (!s.from || !s.to) continue
-      const ratio = atlas.route.length > 1 ? i / (atlas.route.length - 1) : 0.5
       segs.push({
         path: [s.from, s.to] as Array<[number, number]>,
         timestamps: [s.startTime, s.endTime],
-        color: rainbow(ratio),
+        color: rainbow(i / rTotal),
+        colorEnd: rainbow((i + 1) / rTotal),
         fromTitle: s.fromTitle, toTitle: s.toTitle,
       })
     }
@@ -384,38 +390,28 @@ function buildLayers() {
   }
 
   if (layerVis.trips && personalTrips.value.length > 0) {
-    // v7：先用 PathLayer 渲染一条永远可见的彩色路径作为"时空流光"的底（不依赖 currentTime）；
-    // 它在 globe / flat / tilt 三种投影下都能稳定渲染，避免 TripsLayer 因时间窗口或
-    // 投影特性导致看不见。线宽 10~16 像素，外圈白描边增强对比，颜色按时间索引 hsl 渐变。
+    // 「七彩记忆流」主视觉：用 ArcLayer 画大圆弧（flight-path 风格），而不是
+    // 又粗又直的 PathLayer 直线 —— 弧线在地球上优雅地拱起，每段按时间顺序
+    // 用彩虹渐变着色（起点色 → 终点色），相邻段首尾色相衔接形成连续光谱。
     layers.push(
-      new PathLayer({
-        id: 'personal-path-outline',
+      new ArcLayer({
+        id: 'personal-arc',
         data: personalTrips.value,
-        getPath: (d: any) => d.path,
-        getWidth: 4,
-        widthUnits: 'pixels',
-        widthMinPixels: 12,
-        widthMaxPixels: 18,
-        getColor: [255, 255, 255, 200],
-        capRounded: true,
-        jointRounded: true,
-      } as any),
-    )
-    layers.push(
-      new PathLayer({
-        id: 'personal-path-base',
-        data: personalTrips.value,
-        getPath: (d: any) => d.path,
+        getSourcePosition: (d: any) => d.path[0],
+        getTargetPosition: (d: any) => d.path[1],
+        getSourceColor: (d: any) => [d.color[0], d.color[1], d.color[2], 230] as any,
+        getTargetColor: (d: any) => [d.colorEnd[0], d.colorEnd[1], d.colorEnd[2], 230] as any,
         getWidth: 3,
         widthUnits: 'pixels',
-        widthMinPixels: 9,
-        widthMaxPixels: 14,
-        getColor: (d: any) => [d.color[0], d.color[1], d.color[2], 235] as any,
-        capRounded: true,
-        jointRounded: true,
+        widthMinPixels: 2.5,
+        widthMaxPixels: 5,
+        greatCircle: true,
+        getHeight: 0.35,
+        pickable: false,
       } as any),
     )
-    // 在 PathLayer 之上叠 TripsLayer 形成"流光跑动"效果（动画感）
+    // 在弧线之上叠一层动画 TripsLayer，让"流光"沿路径跑动（保持直线路径即可，
+    // 视觉主体已是弧线；这层只提供细窄的流动光点）。
     layers.push(
       new TripsLayer({
         id: 'personal-trips',
@@ -428,9 +424,9 @@ function buildLayers() {
           Math.min(255, d.color[2] + 40),
           255,
         ] as any,
-        opacity: 1,
-        widthMinPixels: 4,
-        widthMaxPixels: 7,
+        opacity: 0.9,
+        widthMinPixels: 2,
+        widthMaxPixels: 4,
         trailLength,
         currentTime: currentTime.value,
         capRounded: true,
@@ -490,8 +486,8 @@ function buildLayers() {
     )
   }
 
-  if (layerVis.physical && atlas.myLocation?.coords) {
-    const here = atlas.myLocation.coords
+  if (layerVis.physical && atlas.effectiveLocation?.coords) {
+    const here = atlas.effectiveLocation.coords
     layers.push(
       new ScatterplotLayer({
         id: 'current-location-ripple',
@@ -946,6 +942,9 @@ onMounted(async () => {
   startStarLoop()
   window.addEventListener('resize', initStars)
 
+  // 请求浏览器实时定位（用户授权后优先于后端 latest-memory 近似）
+  atlas.requestBrowserLocation()
+
   await Promise.all([atlas.fetchAll(), refreshMinioResources()])
   const [, tMax] = timeRange.value
   currentTime.value = tMax
@@ -976,7 +975,7 @@ watch(
     () => atlas.memories,
     () => atlas.route,
     () => atlas.others,
-    () => atlas.myLocation,
+    () => atlas.effectiveLocation,
     () => layerVis.physical,
     () => layerVis.aura,
     () => layerVis.trips,
@@ -1058,13 +1057,14 @@ function switchBasemap(id: BasemapStyle['id']) {
 }
 
 function flyToCurrent() {
-  if (!map || !atlas.myLocation?.coords) return
+  const loc = atlas.effectiveLocation
+  if (!map || !loc?.coords) return
   if (viewMode.value === 'globe') {
-    enterFlat(atlas.myLocation.coords[0], atlas.myLocation.coords[1])
+    enterFlat(loc.coords[0], loc.coords[1])
     return
   }
   map.flyTo({
-    center: atlas.myLocation.coords,
+    center: loc.coords,
     zoom: 11,
     pitch: viewMode.value === 'tilt' ? 60 : 0,
     bearing: viewMode.value === 'tilt' ? -15 : 0,
@@ -1134,10 +1134,14 @@ const stats = computed(() => ({
 }))
 
 const currentLocationLabel = computed(() => {
-  const loc = atlas.myLocation as
-    | (typeof atlas.myLocation & { city?: string; province?: string; country?: string })
+  const loc = atlas.effectiveLocation as
+    | (NonNullable<typeof atlas.effectiveLocation> & { city?: string; province?: string; country?: string })
     | null
   if (!loc?.coords) return '未授权 / 未记录'
+  // 浏览器实时定位时优先标注"我的位置"，否则用后端的地点名 / 城市层级。
+  if (loc.source === 'browser-geolocation') {
+    return `我的位置 · ${loc.coords[1].toFixed(2)}, ${loc.coords[0].toFixed(2)}`
+  }
   // AtlasLocation.name 是后端唯一保证存在的"地点名"；city/province/country 在
   // backend GeocodingService 命中富 anchor 时才会附带，类型上是可选的。
   const name = loc.name || loc.city || loc.province || loc.country
@@ -1306,7 +1310,7 @@ function timeMeta(mem: MemoryWithCoords): string {
         <button class="atlas-btn" :disabled="viewMode === 'globe'" @click="returnToGlobe">
           回到地球
         </button>
-        <button class="atlas-btn" :disabled="!atlas.myLocation?.coords" @click="flyToCurrent">
+        <button class="atlas-btn" :disabled="!atlas.effectiveLocation?.coords" @click="flyToCurrent">
           当前位置
         </button>
       </div>

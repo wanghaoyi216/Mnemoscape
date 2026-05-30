@@ -1,6 +1,7 @@
 package com.mnemoscape.asset.service;
 
 import com.mnemoscape.asset.model.StaticResource;
+import com.mnemoscape.asset.websocket.ResourceWebSocketHandler;
 import jakarta.annotation.PostConstruct;
 import jakarta.annotation.PreDestroy;
 import org.slf4j.Logger;
@@ -18,9 +19,14 @@ public class LocalResourceWatcher {
     private static final Logger log = LoggerFactory.getLogger(LocalResourceWatcher.class);
 
     private final List<StaticResource> cachedResources = new CopyOnWriteArrayList<>();
+    private final ResourceWebSocketHandler wsHandler;
     private Path resourceDir;
     private Thread watchThread;
     private volatile boolean running = true;
+
+    public LocalResourceWatcher(ResourceWebSocketHandler wsHandler) {
+        this.wsHandler = wsHandler;
+    }
 
     @PostConstruct
     public void init() {
@@ -181,6 +187,12 @@ public class LocalResourceWatcher {
                     if (needsRescan) {
                         // Rescan everything and sync cache
                         scanAllResources();
+                        // 推送热更新通知给前端（无需刷新页面即可重拉素材库）
+                        try {
+                            wsHandler.broadcastResourceChanged(cachedResources.size());
+                        } catch (Exception e) {
+                            log.warn("[LocalResourceWatcher] failed to broadcast resource change: {}", e.toString());
+                        }
                     }
 
                     boolean valid = key.reset();

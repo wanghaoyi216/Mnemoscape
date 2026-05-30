@@ -5,6 +5,8 @@ import com.mnemoscape.ai.config.AiUpstreamProperties;
 import com.mnemoscape.ai.exception.AiUpstreamException;
 import com.mnemoscape.ai.model.dto.AiChatRequest;
 import com.mnemoscape.ai.service.ChatReasoner;
+import com.mnemoscape.ai.service.VisionDescriber;
+import com.mnemoscape.ai.tools.MilvusSearchTool;
 import net.jqwik.api.Arbitraries;
 import net.jqwik.api.Arbitrary;
 import net.jqwik.api.ForAll;
@@ -56,6 +58,7 @@ class AiResponseDeterminismExplorationTest {
     private static ChatReasoner buildReasoner() {
         ChatModel chatModel = mock(ChatModel.class);
         ChatClient.Builder builder = ChatClient.builder(chatModel);
+        ChatClient.Builder streamingBuilder = ChatClient.builder(chatModel);
 
         AiUpstreamProperties props = new AiUpstreamProperties();
         // Same prefix the production application.yml uses; matches the
@@ -72,7 +75,9 @@ class AiResponseDeterminismExplorationTest {
                 || AiClientConfig.DEFAULT_SYSTEM_PROMPT.isBlank()) {
             throw new IllegalStateException("DEFAULT_SYSTEM_PROMPT must not be blank");
         }
-        return new ChatReasoner(builder, props, env);
+        VisionDescriber visionDescriber = new VisionDescriber(props, env, "https://integrate.api.nvidia.com");
+        MilvusSearchTool milvusTool = new MilvusSearchTool(null, null, null);
+        return new ChatReasoner(builder, streamingBuilder, props, env, visionDescriber, milvusTool);
     }
 
     /** Lexicon of safe, non-prompt-injection prompts that should hit either

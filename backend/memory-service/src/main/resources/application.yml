@@ -87,6 +87,12 @@ mnemoscape:
     secret: ${JWT_SECRET:bW5lbW9zY2FwZS1zZWNyZXQta2V5LWZvci1obWFjLXNoYTI1Ni1hbGdvcml0aG0tMjAyNQ==}
     access-token-expiration: 3600000
     refresh-token-expiration: 604800000
+  memory:
+    geocoder:
+      enabled: true
+      # 开启 Nominatim 远程查询，让 ANCHORS 表未覆盖的地名也能解析坐标
+      remote-enabled: true
+      nominatim-base: https://nominatim.openstreetmap.org
 
 springdoc:
   api-docs:

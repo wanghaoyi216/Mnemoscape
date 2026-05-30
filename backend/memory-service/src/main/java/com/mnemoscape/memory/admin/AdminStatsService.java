@@ -372,6 +372,7 @@ public class AdminStatsService {
     public List<HeatmapPoint> aggregateHeatmap(String resolutionRaw) {
         GridResolution resolution = parseResolution(resolutionRaw);
         double step = stepFor(resolution);
+
         List<HeatmapRow> rows = memoryRepository.heatmapBuckets(step);
         if (rows == null || rows.isEmpty()) {
             return Collections.emptyList();

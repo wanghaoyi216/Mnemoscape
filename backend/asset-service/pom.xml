@@ -21,6 +21,12 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-web</artifactId>
         </dependency>
+        <!-- WebSocket: push静态资源热更新通知到前端（resource/ 目录文件变动时
+             LocalResourceWatcher 广播 RESOURCE_CHANGED，前端无需刷新即可重拉素材库）。 -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-websocket</artifactId>
+        </dependency>
         <!-- Spring Security auto-configuration so the SecurityFilterChain bean
              defined in SecurityConfig is picked up.  Used for the admin-dashboard
              dual-layer enforcement: any direct call to /api/v1/admin/** that

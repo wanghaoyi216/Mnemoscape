@@ -51,12 +51,12 @@ spring:
         ip: ${SPRING_CLOUD_NACOS_DISCOVERY_IP:}
       config:
         enabled: false
-
-mnemoscape:
-  jwt:
-    secret: ${JWT_SECRET:bW5lbW9zY2FwZS1zZWNyZXQta2V5LWZvci1obWFjLXNoYTI1Ni1hbGdvcml0aG0tMjAyNQ==}
-    access-token-expiration: 3600000
-    refresh-token-expiration: 604800000
+  # NVIDIA Integrate API（用于用户 3D 刻画 AI 生成）
+  # auth-service 直接用 JDK HttpClient 调用，不依赖 Spring AI
+  ai:
+    openai:
+      api-key: ${NVIDIA_API_KEY:nvapi-placeholder-not-configured}
+      base-url: ${NVIDIA_BASE_URL:https://integrate.api.nvidia.com/v1}
   admin:
     # Bootstrap secret for the role-promotion endpoint (R1.5 / R1.6).
     # Default empty = bootstrap channel disabled; AdminBootstrapService logs a
@@ -64,6 +64,15 @@ mnemoscape:
     # Set ADMIN_BOOTSTRAP_SECRET in the deployment env (or .env.workpc) to
     # enable; rotate or unset after the first ADMIN has been provisioned.
     bootstrap-secret: ${ADMIN_BOOTSTRAP_SECRET:}
+
+mnemoscape:
+  jwt:
+    secret: ${JWT_SECRET:bW5lbW9zY2FwZS1zZWNyZXQta2V5LWZvci1obWFjLXNoYTI1Ni1hbGdvcml0aG0tMjAyNQ==}
+    access-token-expiration: 3600000
+    refresh-token-expiration: 604800000
+  ai:
+    upstream:
+      default-model: ${NVIDIA_MODEL:minimaxai/minimax-m2.7}
 
 springdoc:
   api-docs:

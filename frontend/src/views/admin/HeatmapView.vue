@@ -2,26 +2,36 @@
 /**
  * Global heatmap panel (R9.5 / R9.6).
  *
- * Renders a maplibre-gl globe + deck.gl HexagonLayer over the points returned
- * by /admin/stats/heatmap. Three resolution buckets map to {350km, 80km, 25km}
- * hex radii — the same powers-of-2.5 scale as the design's grid step table.
+ * Renders a maplibre-gl globe + deck.gl HeatmapLayer over the points returned
+ * by /admin/stats/heatmap.
  *
- * Lifecycle (v2.4 conventions reused from MemoryAtlasView):
- *   - on mount, build map + overlay, attach ResizeObserver to the container so
- *     the canvas re-sizes when the parent layout reflows;
- *   - on resolution change or new heatmap data, rebuild the layer (deck.gl's
- *     setProps is the cheap path; we wrap it in a guarded helper);
- *   - on unmount, disconnect the observer and remove the map.
+ * ⚠️ CRITICAL lifecycle fix (was the real reason the globe stayed black):
+ * the map container MUST always be in the DOM. Previously it lived inside
+ * `<AdminPanel>`'s `<slot v-if="state==='ready'">`, but `panelState` starts at
+ * `'idle'` (data is null before the first fetch). idle → slot not rendered →
+ * `containerRef` null in `onMounted` → early-return → map never built AND
+ * `fetch()` never called → data stays null → state stays idle forever. A hard
+ * deadlock. We now mount the map unconditionally and render loading / error /
+ * empty as overlays *on top of* the always-present map canvas.
+ *
+ * Rendering approach mirrors MemoryAtlasView:
+ *   - Esri World Imagery basemap (+ Carto dark fallback) so the Earth is real
+ *     and recognisable, with a `sky` background layer filling the globe's
+ *     out-of-frame area;
+ *   - a true deck.gl HeatmapLayer for the canonical "热力" gradient bloom,
+ *     plus a ScatterplotLayer of bright cores so individual hot cells are
+ *     still pinpointable at any zoom;
+ *   - ResizeObserver so the canvas re-sizes when the HUD flex column settles.
  */
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import maplibregl from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import { MapboxOverlay } from '@deck.gl/mapbox'
-import { HexagonLayer } from '@deck.gl/aggregation-layers'
-import AdminPanel from '../../components/admin/AdminPanel.vue'
+import { ScatterplotLayer } from '@deck.gl/layers'
+import { HeatmapLayer } from '@deck.gl/aggregation-layers'
 import { useAdminHeatmap } from '../../composables/useAdminHeatmap'
-import type { AdminGridResolution } from '../../api/admin'
+import type { AdminGridResolution, HeatmapPoint } from '../../api/admin'
 
 const { t } = useI18n()
 const {
@@ -29,8 +39,6 @@ const {
   data,
   loading,
   error,
-  degraded,
-  degradedReasons,
   fetch,
 } = useAdminHeatmap()
 
@@ -40,22 +48,19 @@ const containerRef = ref<HTMLElement | null>(null)
 let map: maplibregl.Map | null = null
 let overlay: MapboxOverlay | null = null
 let resizeObserver: ResizeObserver | null = null
+let mapReady = false
 
-/* v10：地球持续自转，用户操作时暂停，闲置 4s 后自动恢复 —— 与 MemoryAtlasView
-   保持一致的"星球永远在转"体验。 */
+/* 地球持续自转，用户操作时暂停，闲置 4s 后自动恢复 —— 与 MemoryAtlasView 一致。 */
 const RESUME_AFTER_MS = 4000
 let autoRotateRaf = 0
 let resumeRotateTimer: ReturnType<typeof setTimeout> | null = null
 
 function startGlobeAutoRotate(): void {
   const rotate = () => {
-    if (!map) {
-      autoRotateRaf = 0
-      return
-    }
+    if (!map) { autoRotateRaf = 0; return }
     if (autoRotateRaf === 0) return
     const c = map.getCenter()
-    map.jumpTo({ center: [c.lng + 0.06, c.lat] })
+    map.jumpTo({ center: [c.lng + 0.05, c.lat] })
     autoRotateRaf = requestAnimationFrame(rotate)
   }
   if (autoRotateRaf) cancelAnimationFrame(autoRotateRaf)
@@ -66,12 +71,8 @@ function stopGlobeAutoRotate(): void {
   autoRotateRaf = 0
 }
 function scheduleResumeRotate(): void {
-  // 已经在自转就别再 schedule，否则 jumpTo 触发的 moveend 每帧都会 reset 定时器
   if (autoRotateRaf !== 0) return
-  if (resumeRotateTimer) {
-    clearTimeout(resumeRotateTimer)
-    resumeRotateTimer = null
-  }
+  if (resumeRotateTimer) { clearTimeout(resumeRotateTimer); resumeRotateTimer = null }
   resumeRotateTimer = setTimeout(() => {
     resumeRotateTimer = null
     if (!map) return
@@ -83,81 +84,162 @@ function pauseRotateForInteraction(): void {
   scheduleResumeRotate()
 }
 
-const panelState = computed<'idle' | 'loading' | 'empty' | 'error' | 'ready'>(() => {
-  if (loading.value && !data.value) return 'loading'
-  if (error.value) return 'error'
-  // deck.gl can render an empty list cleanly; we still want the map visible.
-  if (!data.value) return 'idle'
-  return 'ready'
-})
+/** Localised error code (or null). */
+const errorCode = computed(() => error.value?.code ?? null)
+const isEmpty = computed(() => !loading.value && !error.value && Array.isArray(data.value) && data.value.length === 0)
+const pointCount = computed(() => (Array.isArray(data.value) ? data.value.length : 0))
 
-function radiusFor(r: AdminGridResolution): number {
+/** Cyberpunk gradient stops for the HeatmapLayer colorRange (cool → hot). */
+const HEAT_COLOR_RANGE: Array<[number, number, number]> = [
+  [12, 74, 110],    // deep teal (coolest)
+  [6, 182, 212],    // electric cyan
+  [34, 211, 238],   // bright cyan
+  [139, 92, 246],   // neon purple
+  [236, 72, 153],   // hot pink
+  [244, 63, 94],    // neon rose (hottest)
+]
+
+function intensityColor(intensity: number): [number, number, number] {
+  const stops: Array<[number, [number, number, number]]> = [
+    [0.0, [6, 182, 212]],
+    [0.35, [34, 211, 238]],
+    [0.6, [139, 92, 246]],
+    [0.8, [236, 72, 153]],
+    [1.0, [244, 63, 94]],
+  ]
+  const v = Math.max(0, Math.min(1, intensity))
+  for (let i = 0; i < stops.length - 1; i++) {
+    const [t0, c0] = stops[i]
+    const [t1, c1] = stops[i + 1]
+    if (v >= t0 && v <= t1) {
+      const f = (v - t0) / (t1 - t0 || 1)
+      return [
+        Math.round(c0[0] + (c1[0] - c0[0]) * f),
+        Math.round(c0[1] + (c1[1] - c0[1]) * f),
+        Math.round(c0[2] + (c1[2] - c0[2]) * f),
+      ]
+    }
+  }
+  return [244, 63, 94]
+}
+
+/** HeatmapLayer pixel radius per resolution (coarser grid → wider bloom). */
+function heatRadiusFor(r: AdminGridResolution): number {
   switch (r) {
-    case 'LOW':    return 350_000
-    case 'MEDIUM': return 80_000
-    case 'HIGH':   return 25_000
+    case 'LOW':    return 60
+    case 'MEDIUM': return 42
+    case 'HIGH':   return 28
+  }
+}
+/** Scatter core pixel radius per resolution. */
+function coreRadiusFor(r: AdminGridResolution): number {
+  switch (r) {
+    case 'LOW':    return 7
+    case 'MEDIUM': return 5
+    case 'HIGH':   return 4
   }
 }
 
-function buildLayer() {
-  return new HexagonLayer<{ lat: number; lon: number; intensity: number }>({
-    id: 'admin-heatmap',
-    data: data.value ?? [],
-    getPosition: (p) => [p.lon, p.lat],
-    getColorWeight: (p) => p.intensity,
-    getElevationWeight: (p) => p.intensity,
-    colorAggregation: 'SUM',
-    elevationAggregation: 'SUM',
-    radius: radiusFor(gridResolution.value),
-    elevationScale: 50,
-    pickable: true,
-    extruded: true,
-    opacity: 0.78,
-  })
+function buildLayers() {
+  const points = data.value ?? []
+  if (points.length === 0) return []
+  const heatRadius = heatRadiusFor(gridResolution.value)
+  const coreBase = coreRadiusFor(gridResolution.value)
+  return [
+    // Canonical heat bloom — smooth density gradient, the real "热力图" look.
+    new HeatmapLayer<HeatmapPoint>({
+      id: 'admin-heatmap-bloom',
+      data: points,
+      getPosition: (p) => [p.lon, p.lat],
+      getWeight: (p) => p.intensity,
+      radiusPixels: heatRadius,
+      intensity: 1.2,
+      threshold: 0.03,
+      colorRange: HEAT_COLOR_RANGE,
+      aggregation: 'SUM',
+    }),
+    // Bright pinpoint cores so individual hot cells stay clickable / visible.
+    new ScatterplotLayer<HeatmapPoint>({
+      id: 'admin-heatmap-core',
+      data: points,
+      pickable: true,
+      radiusUnits: 'pixels',
+      radiusMinPixels: 2.5,
+      radiusMaxPixels: 16,
+      getPosition: (p) => [p.lon, p.lat],
+      getRadius: (p) => coreBase + p.intensity * coreBase * 1.4,
+      getFillColor: (p) => {
+        const [r, g, b] = intensityColor(p.intensity)
+        return [r, g, b, 230]
+      },
+      stroked: true,
+      getLineColor: [255, 255, 255, 210],
+      lineWidthMinPixels: 0.8,
+    }),
+  ]
 }
 
 function rebuildOverlay(): void {
   if (!overlay) return
-  overlay.setProps({ layers: [buildLayer()] })
+  overlay.setProps({ layers: buildLayers() })
 }
 
 const STYLE: maplibregl.StyleSpecification = {
   version: 8,
-  // v2.2.2 — projection MUST live inside the style object, not as a Map ctor option.
   projection: { type: 'globe' },
   glyphs: 'https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf',
   sources: {
-    'amap-raster': {
+    imagery: {
       type: 'raster',
       tiles: [
-        'https://webrd01.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}',
-        'https://webrd02.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}',
-        'https://webrd03.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}',
-        'https://webrd04.is.autonavi.com/appmaptile?lang=zh_cn&size=1&scale=1&style=8&x={x}&y={y}&z={z}',
+        'https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}',
       ],
       tileSize: 256,
-      attribution: '高德地图',
+      attribution: '© Esri World Imagery',
+      maxzoom: 19,
     },
   },
   layers: [
-    {
-      id: 'amap-raster-layer',
+    { id: 'sky', type: 'background', paint: { 'background-color': '#050714' } },
+    { id: 'imagery', type: 'raster', source: 'imagery', minzoom: 0, maxzoom: 22 },
+  ],
+}
+
+const STYLE_FALLBACK: maplibregl.StyleSpecification = {
+  version: 8,
+  projection: { type: 'globe' },
+  glyphs: 'https://demotiles.maplibre.org/font/{fontstack}/{range}.pbf',
+  sources: {
+    'carto-dark': {
       type: 'raster',
-      source: 'amap-raster',
-      minzoom: 0,
-      maxzoom: 18,
+      tiles: [
+        'https://a.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png',
+        'https://b.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png',
+        'https://c.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}.png',
+      ],
+      tileSize: 256,
+      attribution: '© CartoDB',
     },
+  },
+  layers: [
+    { id: 'sky', type: 'background', paint: { 'background-color': '#050714' } },
+    { id: 'carto-dark-layer', type: 'raster', source: 'carto-dark', minzoom: 0, maxzoom: 18 },
   ],
 }
 
 onMounted(() => {
+  // 数据拉取与地图挂载解耦：即便容器（极少数布局时序问题）暂时拿不到，
+  // 也要先把数据请求发出去，避免再次出现"never fetch"死锁。
+  void fetch()
+
+  // 关键：不再依赖 AdminPanel 的 ready slot —— 容器恒在 DOM 中，map 一定能挂载。
   if (!containerRef.value) return
 
   map = new maplibregl.Map({
     container: containerRef.value,
     style: STYLE,
-    center: [105.0, 35.0],
-    zoom: 1.4,
+    center: [50, 15],
+    zoom: 1.55,
     pitch: 0,
     bearing: 0,
     minZoom: 0.4,
@@ -165,33 +247,32 @@ onMounted(() => {
     attributionControl: { compact: true },
   })
 
-  // R9.6 — ResizeObserver guard. onMounted often fires when the layout is still
-  // settling (admin-shell padding-top calc, sub-nav scrolling); without this the
-  // canvas paints at 0×0 and stays blank until the user resizes the window.
-  resizeObserver = new ResizeObserver(() => {
-    try {
-      map?.resize()
-    } catch {
-      // noop — map may have been removed before the observer fires.
+  let switchedFallback = false
+  map.on('error', (e: { error?: { status?: number; message?: string } }) => {
+    if (!map || switchedFallback) return
+    const status = e?.error?.status
+    const msg = (e?.error?.message || '').toLowerCase()
+    if ((status !== undefined && status >= 400) || msg.includes('tile') || msg.includes('fetch')) {
+      switchedFallback = true
+      try { map.setStyle(STYLE_FALLBACK) } catch { /* noop */ }
     }
   })
-  resizeObserver.observe(containerRef.value)
 
-  // First-frame nudge: some layout passes don't notify ResizeObserver on the
-  // initial frame, so kick a manual resize ~80ms after mount.
-  setTimeout(() => {
+  resizeObserver = new ResizeObserver(() => {
     try { map?.resize() } catch { /* noop */ }
-  }, 80)
+  })
+  resizeObserver.observe(containerRef.value)
+  setTimeout(() => { try { map?.resize() } catch { /* noop */ } }, 80)
+  setTimeout(() => { try { map?.resize() } catch { /* noop */ } }, 400)
 
   map.on('load', () => {
     if (!map) return
-    overlay = new MapboxOverlay({ layers: [buildLayer()], interleaved: false })
+    mapReady = true
+    overlay = new MapboxOverlay({ layers: buildLayers(), interleaved: false })
     map.addControl(overlay as unknown as maplibregl.IControl)
-    // v10：load 完成立即开始自转
     startGlobeAutoRotate()
   })
 
-  // v10：用户交互（拖 / 滚 / 旋转 / 倾斜 / 缩放）时暂停自转，闲置 4s 后恢复
   map.on('mousedown',   pauseRotateForInteraction)
   map.on('touchstart',  pauseRotateForInteraction)
   map.on('dragstart',   pauseRotateForInteraction)
@@ -209,42 +290,22 @@ onMounted(() => {
     new maplibregl.NavigationControl({ showCompass: true, visualizePitch: true }),
     'top-right',
   )
-
-  void fetch()
 })
 
 onBeforeUnmount(() => {
-  // v10：先停自转 + 清定时器，再卸载 map / overlay
   stopGlobeAutoRotate()
-  if (resumeRotateTimer) {
-    clearTimeout(resumeRotateTimer)
-    resumeRotateTimer = null
-  }
-  try {
-    resizeObserver?.disconnect()
-  } catch {
-    /* noop */
-  }
+  if (resumeRotateTimer) { clearTimeout(resumeRotateTimer); resumeRotateTimer = null }
+  try { resizeObserver?.disconnect() } catch { /* noop */ }
   resizeObserver = null
-  try {
-    if (overlay && map) {
-      map.removeControl(overlay as unknown as maplibregl.IControl)
-    }
-  } catch {
-    /* noop */
-  }
+  try { if (overlay && map) map.removeControl(overlay as unknown as maplibregl.IControl) } catch { /* noop */ }
   overlay = null
-  try {
-    map?.remove()
-  } catch {
-    /* noop */
-  }
+  try { map?.remove() } catch { /* noop */ }
   map = null
 })
 
-// Re-render whenever the data list or resolution changes.
+// 数据 / 分辨率变化时重建 overlay（map 可能还没 load 完，rebuildOverlay 自带 null 守卫）。
 watch([data, gridResolution], () => {
-  rebuildOverlay()
+  if (mapReady) rebuildOverlay()
 })
 
 function selectResolution(r: AdminGridResolution): void {
@@ -255,43 +316,65 @@ function selectResolution(r: AdminGridResolution): void {
 </script>
 
 <template>
-  <AdminPanel
-    title="admin.heatmap.title"
-    :state="panelState"
-    :error="error"
-    :degraded="degraded"
-    :degraded-reasons="degradedReasons"
-    :on-retry="fetch"
-  >
-    <div class="admin-heatmap">
-      <header class="admin-panel-controls">
-        <p class="admin-panel-subtitle">{{ t('admin.heatmap.subtitle') }}</p>
-        <div class="admin-toggle" role="tablist" :aria-label="t('admin.heatmap.title')">
-          <button
-            v-for="r in resolutions"
-            :key="r"
-            type="button"
-            role="tab"
-            class="admin-toggle__btn"
-            :class="{ 'admin-toggle__btn--active': gridResolution === r }"
-            :aria-selected="gridResolution === r"
-            @click="selectResolution(r)"
-          >
-            {{ t(`admin.heatmap.resolution.${r}`) }}
-          </button>
-        </div>
-      </header>
+  <!-- 注意：不再把 map 包进 AdminPanel 的 ready-slot；容器恒在 DOM 中。 -->
+  <div class="admin-heatmap">
+    <header class="admin-panel-controls">
+      <h3 class="admin-heatmap__title">{{ t('admin.heatmap.title') }}</h3>
+      <p class="admin-panel-subtitle">{{ t('admin.heatmap.subtitle') }}</p>
+      <div class="admin-toggle" role="tablist" :aria-label="t('admin.heatmap.title')">
+        <button
+          v-for="r in resolutions"
+          :key="r"
+          type="button"
+          role="tab"
+          class="admin-toggle__btn"
+          :class="{ 'admin-toggle__btn--active': gridResolution === r }"
+          :aria-selected="gridResolution === r"
+          @click="selectResolution(r)"
+        >
+          {{ t(`admin.heatmap.resolution.${r}`) }}
+        </button>
+      </div>
+    </header>
 
-      <div ref="containerRef" class="admin-heatmap__map" role="img" :aria-label="t('admin.heatmap.title')" />
+    <div ref="containerRef" class="admin-heatmap__map" role="img" :aria-label="t('admin.heatmap.title')">
+      <!-- loading overlay -->
+      <div v-if="loading && pointCount === 0" class="admin-heatmap__overlay">
+        <div class="admin-heatmap__spinner"></div>
+        <p class="admin-heatmap__overlay-text">{{ t('admin.common.loading') }}</p>
+      </div>
+
+      <!-- error overlay -->
+      <div v-else-if="errorCode" class="admin-heatmap__overlay">
+        <div class="admin-heatmap__overlay-icon">⚠️</div>
+        <p class="admin-heatmap__overlay-text">{{ error?.message || errorCode }}</p>
+        <button type="button" class="admin-heatmap__retry" @click="fetch">
+          {{ t('admin.common.retry') }}
+        </button>
+      </div>
+
+      <!-- empty overlay -->
+      <div v-else-if="isEmpty" class="admin-heatmap__overlay">
+        <div class="admin-heatmap__overlay-icon">🌐</div>
+        <p class="admin-heatmap__overlay-text">{{ t('admin.heatmap.noData') }}</p>
+        <p class="admin-heatmap__overlay-hint">{{ t('admin.heatmap.noDataHint') }}</p>
+      </div>
+
+      <!-- point-count badge -->
+      <div v-if="pointCount > 0" class="admin-heatmap__count-badge">
+        {{ pointCount }} {{ t('admin.heatmap.pointsLabel') }}
+      </div>
     </div>
-  </AdminPanel>
+  </div>
 </template>
 
 <style scoped>
 .admin-heatmap {
   display: flex;
   flex-direction: column;
-  gap: 18px;
+  gap: 14px;
+  height: 100%;
+  min-height: 0;
 }
 
 .admin-panel-controls {
@@ -302,10 +385,18 @@ function selectResolution(r: AdminGridResolution): void {
   gap: 12px;
 }
 
+.admin-heatmap__title {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 600;
+  color: var(--text);
+}
+
 .admin-panel-subtitle {
   margin: 0;
   color: var(--text-muted);
   font-size: 0.86rem;
+  flex: 1;
 }
 
 .admin-toggle {
@@ -340,15 +431,98 @@ function selectResolution(r: AdminGridResolution): void {
 .admin-heatmap__map {
   width: 100%;
   height: 540px;
+  flex: 1;
+  min-height: 320px;
   border-radius: var(--radius-md);
   overflow: hidden;
   position: relative;
-  background: #0a0d12;
+  background: #050714;
 }
 
-:deep(.maplibregl-canvas) {
-  outline: none;
+.admin-heatmap__overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  background: rgba(5, 7, 20, 0.6);
+  backdrop-filter: blur(2px);
+  pointer-events: none;
 }
+
+.admin-heatmap__overlay-icon {
+  font-size: 2.5rem;
+  opacity: 0.7;
+}
+
+.admin-heatmap__overlay-text {
+  margin: 0;
+  color: rgba(6, 182, 212, 0.95);
+  font-size: 0.92rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+
+.admin-heatmap__overlay-hint {
+  margin: 0;
+  color: rgba(255, 255, 255, 0.45);
+  font-size: 0.78rem;
+  text-align: center;
+  max-width: 300px;
+  line-height: 1.5;
+}
+
+.admin-heatmap__retry {
+  pointer-events: auto;
+  appearance: none;
+  background: rgba(6, 182, 212, 0.12);
+  border: 1px solid rgba(6, 182, 212, 0.4);
+  color: #22d3ee;
+  font-size: 0.8rem;
+  font-weight: 600;
+  padding: 6px 16px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+.admin-heatmap__retry:hover {
+  background: rgba(6, 182, 212, 0.25);
+  border-color: rgba(6, 182, 212, 0.7);
+}
+
+.admin-heatmap__spinner {
+  width: 36px;
+  height: 36px;
+  border: 3px solid rgba(6, 182, 212, 0.2);
+  border-top-color: #22d3ee;
+  border-radius: 50%;
+  animation: heatmap-spin 0.9s linear infinite;
+}
+@keyframes heatmap-spin {
+  to { transform: rotate(360deg); }
+}
+
+.admin-heatmap__count-badge {
+  position: absolute;
+  bottom: 12px;
+  left: 12px;
+  z-index: 10;
+  background: rgba(6, 12, 24, 0.75);
+  border: 1px solid rgba(6, 182, 212, 0.3);
+  color: #22d3ee;
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  padding: 4px 10px;
+  border-radius: 4px;
+  backdrop-filter: blur(8px);
+  pointer-events: none;
+}
+
+:deep(.maplibregl-canvas) { outline: none; }
 :deep(.maplibregl-ctrl-attrib) {
   background: rgba(0, 0, 0, 0.5);
   color: rgba(255, 255, 255, 0.7);

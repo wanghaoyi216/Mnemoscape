@@ -27,6 +27,11 @@ const newBgUrl = ref((auth.user as any)?.backgroundImageUrl || '')
 const profileMessage = ref('')
 const profileMessageType = ref<'success' | 'danger'>('success')
 
+// AI 助手融合（设计书 §3.2.3）
+const AI_USER_ID = 'ai-echo-envoy'
+const icebreakerLoading = ref(false)
+const icebreakerSuggestion = ref('')
+
 // WebSocket reference
 let ws: WebSocket | null = null
 const messageStreamEnd = ref<HTMLElement | null>(null)
@@ -190,6 +195,39 @@ async function sendMessage(type: 'TEXT' | 'IMAGE' | 'FILE' = 'TEXT', contentText
   } else {
     alert('Real-time connection is offline. Reconnecting...')
   }
+}
+
+// 私聊"求助星空使者破冰"：调后端 /chat/icebreaker，把 AI 建议填进输入框（不自动发送）
+async function requestIcebreaker() {
+  if (!activeContact.value || activeContact.value.isGroup || icebreakerLoading.value) return
+  icebreakerLoading.value = true
+  icebreakerSuggestion.value = ''
+  try {
+    const { data } = await client.post('/chat/icebreaker', { otherId: activeContact.value.id })
+    const suggestion = data?.data?.suggestion || ''
+    icebreakerSuggestion.value = suggestion
+  } catch (e: any) {
+    icebreakerSuggestion.value = t('chat.ai.icebreakerError')
+  } finally {
+    icebreakerLoading.value = false
+  }
+}
+
+// 把破冰建议填入输入框，用户可编辑后再发送
+function useIcebreakerSuggestion() {
+  if (icebreakerSuggestion.value) {
+    messageText.value = icebreakerSuggestion.value
+    icebreakerSuggestion.value = ''
+  }
+}
+
+function dismissIcebreaker() {
+  icebreakerSuggestion.value = ''
+}
+
+// 是否 AI（星空使者）发的消息 —— 用于气泡特殊渲染
+function isAiMessage(msg: any): boolean {
+  return msg?.senderId === AI_USER_ID || msg?.isAi === true
 }
 
 // File Upload
@@ -532,20 +570,53 @@ function formatBytes(bytes: number) {
                 </span>
               </div>
             </div>
+            <!-- 私聊：求助星空使者破冰 / 群聊：@AI 提示 -->
+            <button
+              v-if="!activeContact.isGroup"
+              type="button"
+              class="icebreaker-btn"
+              :disabled="icebreakerLoading"
+              :title="t('chat.ai.icebreakerHint')"
+              @click="requestIcebreaker"
+            >
+              <span v-if="icebreakerLoading" class="auth-spinner"></span>
+              <span v-else>✨ {{ t('chat.ai.icebreakerBtn') }}</span>
+            </button>
+            <span v-else class="ai-mention-tip" :title="t('chat.ai.mentionHint')">
+              @AI {{ t('chat.ai.mentionTip') }}
+            </span>
           </header>
+
+          <!-- 破冰建议卡片 -->
+          <transition name="alert">
+            <div v-if="icebreakerSuggestion" class="icebreaker-card">
+              <div class="icebreaker-card__head">
+                <span class="icebreaker-card__title">✨ {{ t('chat.ai.suggestionTitle') }}</span>
+                <button type="button" class="icebreaker-card__close" @click="dismissIcebreaker">×</button>
+              </div>
+              <p class="icebreaker-card__body">{{ icebreakerSuggestion }}</p>
+              <div class="icebreaker-card__actions">
+                <button type="button" class="button button--primary" style="padding:4px 12px;font-size:0.78rem;" @click="useIcebreakerSuggestion">
+                  {{ t('chat.ai.useSuggestion') }}
+                </button>
+              </div>
+            </div>
+          </transition>
  
           <!-- Messages Stream -->
           <div class="chat-messages-stream">
             <div 
               v-for="msg in messages" 
               :key="msg.id"
-              :class="['message-bubble-wrapper', msg.senderId === currentUserId ? 'mine' : '']"
+              :class="['message-bubble-wrapper', msg.senderId === currentUserId ? 'mine' : '', isAiMessage(msg) ? 'ai' : '']"
             >
-              <div class="message-avatar">
-                {{ msg.senderId === currentUserId ? auth.user?.username?.charAt(0).toUpperCase() : (activeContact.isGroup ? 'M' : activeContact.username.charAt(0).toUpperCase()) }}
+              <div class="message-avatar" :class="{ 'message-avatar--ai': isAiMessage(msg) }">
+                <template v-if="isAiMessage(msg)">✦</template>
+                <template v-else>{{ msg.senderId === currentUserId ? auth.user?.username?.charAt(0).toUpperCase() : (activeContact.isGroup ? 'M' : activeContact.username.charAt(0).toUpperCase()) }}</template>
               </div>
               <div class="message-bubble-container">
-                <div class="message-bubble">
+                <span v-if="isAiMessage(msg)" class="message-ai-name">{{ t('chat.ai.name') }}</span>
+                <div class="message-bubble" :class="{ 'message-bubble--ai': isAiMessage(msg) }">
                   <!-- Text -->
                   <span v-if="msg.messageType === 'TEXT'">{{ msg.content }}</span>
                   
@@ -1066,4 +1137,86 @@ function formatBytes(bytes: number) {
   color: var(--primary);
   font-weight: 600;
 }
+
+/* ---------------- AI 助手融合（@AI / 破冰）---------------- */
+.chat-body__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.icebreaker-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 14px;
+  border-radius: 999px;
+  border: 1px solid rgba(125, 211, 252, 0.4);
+  background: linear-gradient(120deg, rgba(56, 189, 248, 0.18), rgba(232, 199, 122, 0.16));
+  color: var(--text);
+  font-size: 0.8rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: transform 0.15s ease, box-shadow 0.2s ease;
+  white-space: nowrap;
+}
+.icebreaker-btn:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 18px rgba(56, 189, 248, 0.25);
+}
+.icebreaker-btn:disabled { opacity: 0.6; cursor: progress; }
+
+.ai-mention-tip {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  padding: 4px 10px;
+  border-radius: 999px;
+  border: 1px dashed rgba(125, 211, 252, 0.35);
+  white-space: nowrap;
+}
+
+.icebreaker-card {
+  margin: 10px 16px 0;
+  padding: 12px 14px;
+  border-radius: 14px;
+  background: linear-gradient(135deg, rgba(56, 189, 248, 0.12), rgba(232, 199, 122, 0.1));
+  border: 1px solid rgba(125, 211, 252, 0.3);
+}
+.icebreaker-card__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 6px;
+}
+.icebreaker-card__title { font-size: 0.82rem; font-weight: 700; color: var(--primary); }
+.icebreaker-card__close {
+  background: none; border: none; color: var(--text-muted);
+  font-size: 1.2rem; line-height: 1; cursor: pointer;
+}
+.icebreaker-card__body {
+  font-size: 0.86rem; color: var(--text); line-height: 1.5; margin: 0 0 8px;
+  white-space: pre-wrap;
+}
+.icebreaker-card__actions { display: flex; justify-content: flex-end; }
+
+/* AI（星空使者）消息气泡 */
+.message-avatar--ai {
+  background: linear-gradient(135deg, #38bdf8, #e8c77a) !important;
+  color: #06121f !important;
+  box-shadow: 0 0 14px rgba(56, 189, 248, 0.45);
+}
+.message-ai-name {
+  display: block;
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: #7dd3fc;
+  margin-bottom: 2px;
+  letter-spacing: 0.03em;
+}
+.message-bubble--ai {
+  background: linear-gradient(135deg, rgba(56, 189, 248, 0.16), rgba(232, 199, 122, 0.12)) !important;
+  border: 1px solid rgba(125, 211, 252, 0.3) !important;
+}
+.message-bubble-wrapper.ai .message-bubble-container { max-width: 78%; }
 </style>
