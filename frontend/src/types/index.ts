@@ -41,6 +41,8 @@ export interface MemoryItem {
   memorySeason?: string
   memoryTimeOfDay?: string
   memoryLocation?: string
+  memoryLat?: number
+  memoryLng?: number
   /** [lng, lat] when geocoded by memory-service; absent for unresolved locations */
   coords?: [number, number]
   privacyLevel: 'PRIVATE' | 'FRIENDS' | 'PUBLIC'

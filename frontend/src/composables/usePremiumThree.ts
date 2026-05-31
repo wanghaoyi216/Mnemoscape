@@ -31,6 +31,10 @@ export function usePremiumThree(containerRef: Ref<HTMLElement | null>) {
 
   // Frame anim ID
   let animFrameId = 0
+  // 监听父容器尺寸：init 在 onMounted 的 await 链之后执行，此刻 .scene-canvas 可能还在
+  // layout 阶段（clientWidth/Height = 0）。没有 ResizeObserver 兜底时 renderer 会被锁死在
+  // 0×0（camera aspect = NaN），画面恒为黑屏——这正是「重建三D场景空白」的根因。
+  let resizeObserver: ResizeObserver | null = null
 
   function init() {
     if (!containerRef.value) return
@@ -38,12 +42,17 @@ export function usePremiumThree(containerRef: Ref<HTMLElement | null>) {
     s.background = new THREE.Color(0x070714)
     scene.value = s
 
-    const c = new THREE.PerspectiveCamera(65, containerRef.value.clientWidth / containerRef.value.clientHeight, 0.1, 100)
+    // 初始尺寸兜底为 1，避免 0×0 让 WebGL 上下文异常 / aspect=NaN；
+    // ResizeObserver 会在父容器拿到真实布局后立即补一次正确尺寸。
+    const initW = Math.max(1, containerRef.value.clientWidth)
+    const initH = Math.max(1, containerRef.value.clientHeight)
+
+    const c = new THREE.PerspectiveCamera(65, initW / initH, 0.1, 100)
     c.position.set(6, 4, 10)
     camera.value = c
 
     const r = new THREE.WebGLRenderer({ antialias: true, alpha: true })
-    r.setSize(containerRef.value.clientWidth, containerRef.value.clientHeight)
+    r.setSize(initW, initH)
     r.setPixelRatio(Math.min(window.devicePixelRatio, 2))
     r.shadowMap.enabled = true
     r.shadowMap.type = THREE.PCFSoftShadowMap
@@ -75,13 +84,20 @@ export function usePremiumThree(containerRef: Ref<HTMLElement | null>) {
     animate()
     window.addEventListener('resize', onResize)
 
+    // 父容器初次布局往往晚于 onMounted 的同步阶段；ResizeObserver 在拿到真实宽高后
+    // 立即同步相机/渲染器，确保即使 init 时容器还是 0×0 也能恢复正常渲染。
+    if (typeof ResizeObserver !== 'undefined' && containerRef.value) {
+      resizeObserver = new ResizeObserver(() => onResize())
+      resizeObserver.observe(containerRef.value)
+    }
+
     return s
   }
 
   function onResize() {
     if (!containerRef.value || !renderer.value || !camera.value) return
-    const w = containerRef.value.clientWidth
-    const h = containerRef.value.clientHeight
+    const w = Math.max(1, containerRef.value.clientWidth)
+    const h = Math.max(1, containerRef.value.clientHeight)
     camera.value.aspect = w / h
     camera.value.updateProjectionMatrix()
     renderer.value.setSize(w, h)
@@ -564,6 +580,10 @@ export function usePremiumThree(containerRef: Ref<HTMLElement | null>) {
   function dispose() {
     cancelAnimationFrame(animFrameId)
     window.removeEventListener('resize', onResize)
+    if (resizeObserver) {
+      resizeObserver.disconnect()
+      resizeObserver = null
+    }
 
     // Clear ambient & spot sound
     if (ambientSound) {

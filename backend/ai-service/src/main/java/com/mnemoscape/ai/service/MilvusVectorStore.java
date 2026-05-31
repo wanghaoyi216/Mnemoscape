@@ -119,7 +119,8 @@ public class MilvusVectorStore {
             if (!ok) log.warn("[Milvus] upsert non-zero code for memory {}: {}", rec.memoryId, brief(resp));
             return ok;
         } catch (Exception e) {
-            log.warn("[Milvus] upsert failed for memory {}: {}", rec.memoryId, e.toString());
+            log.warn("[Milvus] upsert failed for memory {}: {}. Disabling vector store.", rec.memoryId, e.toString());
+            available = false;
             return false;
         }
     }
@@ -139,7 +140,8 @@ public class MilvusVectorStore {
             if (!ok) log.warn("[Milvus] delete non-zero code for memory {}: {}", memoryId, brief(resp));
             return ok;
         } catch (Exception e) {
-            log.warn("[Milvus] delete failed for memory {}: {}", memoryId, e.toString());
+            log.warn("[Milvus] delete failed for memory {}: {}. Disabling vector store.", memoryId, e.toString());
+            available = false;
             return false;
         }
     }
@@ -197,7 +199,8 @@ public class MilvusVectorStore {
             }
             return hits;
         } catch (Exception e) {
-            log.warn("[Milvus] search failed: {}", e.toString());
+            log.warn("[Milvus] search failed: {}. Disabling vector store.", e.toString());
+            available = false;
             return null;
         }
     }
@@ -258,7 +261,8 @@ public class MilvusVectorStore {
             if (hits.size() > limit) return hits.subList(0, limit);
             return hits;
         } catch (Exception e) {
-            log.warn("[Milvus] public search failed: {}", e.toString());
+            log.warn("[Milvus] public search failed: {}. Disabling vector store.", e.toString());
+            available = false;
             return null;
         }
     }

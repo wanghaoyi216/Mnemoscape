@@ -44,11 +44,45 @@ public class IntentHintService {
     public record MemoryDigest(String title, String location, Integer year) {}
 
     /**
+     * Compute a deterministic MD5 hash of the memory digests + locale to serve as a compact cache key.
+     */
+    public static String cacheKey(List<MemoryDigest> digests, boolean zh) {
+        if (digests == null || digests.isEmpty()) {
+            return "fallback|" + zh;
+        }
+        try {
+            java.security.MessageDigest md = java.security.MessageDigest.getInstance("MD5");
+            StringBuilder sb = new StringBuilder();
+            for (MemoryDigest d : digests) {
+                if (d == null) continue;
+                sb.append(d.title() == null ? "" : d.title()).append('|');
+                sb.append(d.location() == null ? "" : d.location()).append('|');
+                sb.append(d.year() == null ? "" : d.year()).append('|');
+            }
+            byte[] hash = md.digest(sb.toString().getBytes(java.nio.charset.StandardCharsets.UTF_8));
+            StringBuilder hex = new StringBuilder();
+            for (byte b : hash) {
+                String h = Integer.toHexString(0xff & b);
+                if (h.length() == 1) hex.append('0');
+                hex.append(h);
+            }
+            return hex.toString() + "|" + zh;
+        } catch (Exception e) {
+            return "error|" + zh + "|" + digests.size();
+        }
+    }
+
+    /**
      * 生成 3-4 条个性化推荐问题。
      *
      * @param digests 用户最近记忆摘要（可空）
      * @param zh      true → 中文；false → 英文
      */
+    @org.springframework.cache.annotation.Cacheable(
+            cacheNames = com.mnemoscape.ai.config.AiCacheConfig.CACHE_INTENT_HINTS,
+            key = "T(com.mnemoscape.ai.service.IntentHintService).cacheKey(#digests, #zh)",
+            sync = true
+    )
     public List<String> generate(List<MemoryDigest> digests, boolean zh) {
         List<String> fallback = zh ? FALLBACK_ZH : FALLBACK_EN;
         if (digests == null || digests.isEmpty()) {

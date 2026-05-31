@@ -115,21 +115,30 @@ public class MemoryService {
     }
 
     /**
-     * Spring 异步代理调用 — 通过自身代理拿到一个新线程跑 enrichWithReconstruction +
-     * extractAndProjectGraph。注意：@Async 不能从同一类的内部直接调，必须经过 Spring
-     * 代理，所以这里通过 ApplicationContext 拿到代理 bean。
+     * Spring 异步代理并发分发三路任务：3D重建、Neo4j关系图谱投影、Milvus向量索引。
+     * 每一路采用 @Async 在 TaskExecutor 线程池中并发执行，确保关系图谱与向量在秒级瞬间更新，
+     * 绝不受 3D 渲染重建的 long-tail（10-30s）延迟所阻塞。
      */
     private void triggerAsyncEnrichment(String memoryId) {
         try {
             asyncEnrichmentSelf.runEnrichmentAsync(memoryId);
         } catch (Exception e) {
-            log.warn("Failed to dispatch async enrichment for {}: {}", memoryId, e.toString());
+            log.warn("Failed to dispatch async reconstruction enrichment for {}: {}", memoryId, e.toString());
+        }
+        try {
+            asyncEnrichmentSelf.runGraphProjectionAsync(memoryId);
+        } catch (Exception e) {
+            log.warn("Failed to dispatch async graph projection for {}: {}", memoryId, e.toString());
+        }
+        try {
+            asyncEnrichmentSelf.runVectorIndexingAsync(memoryId);
+        } catch (Exception e) {
+            log.warn("Failed to dispatch async vector indexing for {}: {}", memoryId, e.toString());
         }
     }
 
     /**
-     * 异步增强：通过同类自代理（{@code asyncEnrichmentSelf}）确保 @Async 生效。
-     * 这条流水线整段都是 best-effort：单步失败不抛错，记日志即可。
+     * 异步增强：仅跑 3D Scene Reconstruction，更新 visualData / fragments 并回写落库。
      */
     @org.springframework.scheduling.annotation.Async
     public void runEnrichmentAsync(String memoryId) {
@@ -140,23 +149,55 @@ public class MemoryService {
             log.warn("[async-enrich] memory {} disappeared before enrichment: {}", memoryId, e.toString());
             return;
         }
-        log.info("[async-enrich] start for memory {}", memoryId);
+        log.info("[async-enrich] start reconstruction for memory {}", memoryId);
         try {
             enrichWithReconstruction(memory);
         } catch (Exception e) {
             log.warn("[async-enrich] reconstruction failed for {}: {}", memoryId, e.toString());
         }
+        log.info("[async-enrich] done reconstruction for memory {}", memoryId);
+    }
+
+    /**
+     * 异步增强：提取实体并投射到 Neo4j 关系图谱。
+     */
+    @org.springframework.scheduling.annotation.Async
+    public void runGraphProjectionAsync(String memoryId) {
+        Memory memory;
+        try {
+            memory = memoryLookup.findById(memoryId);
+        } catch (Exception e) {
+            log.warn("[async-graph] memory {} disappeared before graph projection: {}", memoryId, e.toString());
+            return;
+        }
+        log.info("[async-graph] start graph projection for memory {}", memoryId);
         try {
             extractAndProjectGraph(memory);
         } catch (Exception e) {
-            log.warn("[async-enrich] graph projection failed for {}: {}", memoryId, e.toString());
+            log.warn("[async-graph] graph projection failed for {}: {}", memoryId, e.toString());
         }
+        log.info("[async-graph] done graph projection for memory {}", memoryId);
+    }
+
+    /**
+     * 异步增强：把记忆写入 Milvus 向量库。
+     */
+    @org.springframework.scheduling.annotation.Async
+    public void runVectorIndexingAsync(String memoryId) {
+        Memory memory;
+        try {
+            memory = memoryLookup.findById(memoryId);
+        } catch (Exception e) {
+            log.warn("[async-vector] memory {} disappeared before vector indexing: {}", memoryId, e.toString());
+            return;
+        }
+        log.info("[async-vector] start vector indexing for memory {}", memoryId);
         try {
             indexMemoryVector(memory);
         } catch (Exception e) {
-            log.warn("[async-enrich] vector indexing failed for {}: {}", memoryId, e.toString());
+            log.warn("[async-vector] vector indexing failed for {}: {}", memoryId, e.toString());
         }
-        log.info("[async-enrich] done for memory {}", memoryId);
+        log.info("[async-vector] done vector indexing for memory {}", memoryId);
     }
 
     /**
@@ -329,6 +370,87 @@ public class MemoryService {
     }
 
     /**
+     * 历史 Fragments 批量重建（管理员触发）：扫描 legacy / 英文 / 缺失 fragments 的记忆，
+     * 异步清除并重新跑 reconstruction，生成 grounded 中文 fragments。
+     *
+     * @param limit 单次最多处理多少条
+     */
+    public Map<String, Object> rebuildFragments(int limit) {
+        int capped = Math.max(1, Math.min(limit, 1000));
+        org.springframework.data.domain.Page<Memory> page = memoryRepository.findAll(
+                org.springframework.data.domain.PageRequest.of(0, capped));
+        int scanned = 0;
+        int dispatched = 0;
+        for (Memory m : page.getContent()) {
+            scanned++;
+            if (!needsFragmentRebuild(m)) continue;
+            try {
+                asyncEnrichmentSelf.runFragmentRebuildAsync(m.getId());
+                dispatched++;
+            } catch (Exception e) {
+                log.warn("[fragment-rebuild] dispatch failed for memory {}: {}", m.getId(), e.toString());
+            }
+        }
+        Map<String, Object> result = new java.util.LinkedHashMap<>();
+        result.put("scanned", scanned);
+        result.put("dispatched", dispatched);
+        result.put("limit", capped);
+        result.put("total", page.getTotalElements());
+        log.info("[fragment-rebuild] scanned={} dispatched={} (total={})",
+                scanned, dispatched, page.getTotalElements());
+        return result;
+    }
+
+    /** 判定一条记忆的 fragments 是否需要重建（符合 needsVisualDataCleanup，或包含英文 mock 特征词）。 */
+    private boolean needsFragmentRebuild(Memory m) {
+        if (needsVisualDataCleanup(m)) return true;
+        List<MemoryFragment> fragments = fragmentRepository.findByMemoryId(m.getId());
+        if (fragments.isEmpty()) return true;
+        for (MemoryFragment f : fragments) {
+            String desc = f.getContent();
+            if (desc == null || desc.isBlank()) return true;
+            String lower = desc.toLowerCase(java.util.Locale.ROOT);
+            String[] legacyMarkers = {
+                    "a moment of pure", "playground", "grandma's kitchen",
+                    "childhood joy", "forgotten toy", "old photograph",
+                    "wild mushrooms", "quiet peace", "frost etched",
+                    "woolen scarf", "boot prints", "icicles shimmering",
+                    "hush of stillness", "laughter echoes", "attractor"
+            };
+            for (String marker : legacyMarkers) {
+                if (lower.contains(marker)) return true;
+            }
+        }
+        return false;
+    }
+
+    /** 异步执行单条记忆的碎片清空与重新构建 */
+    @org.springframework.scheduling.annotation.Async
+    @Transactional
+    public void runFragmentRebuildAsync(String memoryId) {
+        Memory memory;
+        try {
+            memory = memoryLookup.findById(memoryId);
+        } catch (Exception e) {
+            log.warn("[fragment-rebuild-async] memory {} disappeared: {}", memoryId, e.toString());
+            return;
+        }
+        log.info("[fragment-rebuild-async] start for memory {}", memoryId);
+        try {
+            // 1. 清空旧 fragments 记录
+            fragmentRepository.deleteByMemoryId(memoryId);
+            // 2. 重新进行 AI 场景重建及 grounded 碎片生成
+            enrichWithReconstruction(memory);
+            // 3. 记录修改版本
+            createVersion(memory, MemoryVersion.ChangeType.MODIFY, "Fragments batch rebuilt");
+        } catch (Exception e) {
+            log.warn("[fragment-rebuild-async] failed for memory {}: {}", memoryId, e.toString());
+        }
+        log.info("[fragment-rebuild-async] done for memory {}", memoryId);
+    }
+
+
+    /**
      * 调用 ai-service 提取实体并投射到 Neo4j。
      *
      * <p>整段写成 best-effort：任何一步抛异常都吞掉打 WARN —— 图谱是派生数据，
@@ -390,14 +512,29 @@ public class MemoryService {
                 .privacyLevel(privacyLevel)
                 .sceneDataUrl(request.getSceneDataUrl())
                 .build();
-        // 写入前尝试解析坐标 — best-effort，未命中保持 null
-        if (memory.getMemoryLocation() != null) {
+        // 写入前确定坐标：优先采用前端提交的精确 GPS / 正向地理编码坐标（街道级），
+        // 仅在缺失或越界时才退回 GeocodingService 按地名解析（城市中心点级）。
+        Double preciseLng = request.getMemoryLng();
+        Double preciseLat = request.getMemoryLat();
+        if (isValidCoord(preciseLng, preciseLat)) {
+            memory.setMemoryLng(preciseLng);
+            memory.setMemoryLat(preciseLat);
+        } else if (memory.getMemoryLocation() != null) {
             geocodingService.resolve(memory.getMemoryLocation()).ifPresent(c -> {
                 memory.setMemoryLng(c[0]);
                 memory.setMemoryLat(c[1]);
             });
         }
         return memoryRepository.save(memory);
+    }
+
+    /** 经纬度范围校验：lng∈[-180,180]，lat∈[-90,90]，且非 (0,0) 哨兵空值。 */
+    private boolean isValidCoord(Double lng, Double lat) {
+        if (lng == null || lat == null) return false;
+        if (lng.isNaN() || lat.isNaN()) return false;
+        if (lng < -180 || lng > 180 || lat < -90 || lat > 90) return false;
+        // (0,0) 在几内亚湾，几乎不可能是真实记忆点，视作未填
+        return !(Math.abs(lng) < 1e-7 && Math.abs(lat) < 1e-7);
     }
 
     /**
@@ -539,18 +676,28 @@ public class MemoryService {
         if (request.getMemoryLocation() != null) {
             String normalized = normalizeOptional(request.getMemoryLocation());
             memory.setMemoryLocation(normalized);
-            // 同步刷新坐标 — 解析失败保留旧值，避免擦写已有数据
+            // 坐标刷新优先级：前端提交的精确 GPS / 正向地理编码坐标 > 按地名 anchor 解析。
+            // 解析失败保留旧值，避免擦写已有数据。
             if (normalized != null) {
-                java.util.Optional<double[]> resolved = geocodingService.resolve(normalized);
-                if (resolved.isPresent()) {
-                    double[] c = resolved.get();
-                    memory.setMemoryLng(c[0]);
-                    memory.setMemoryLat(c[1]);
+                if (isValidCoord(request.getMemoryLng(), request.getMemoryLat())) {
+                    memory.setMemoryLng(request.getMemoryLng());
+                    memory.setMemoryLat(request.getMemoryLat());
+                } else {
+                    java.util.Optional<double[]> resolved = geocodingService.resolve(normalized);
+                    if (resolved.isPresent()) {
+                        double[] c = resolved.get();
+                        memory.setMemoryLng(c[0]);
+                        memory.setMemoryLat(c[1]);
+                    }
                 }
             } else {
                 memory.setMemoryLng(null);
                 memory.setMemoryLat(null);
             }
+        } else if (isValidCoord(request.getMemoryLng(), request.getMemoryLat())) {
+            // 仅更新坐标（地名不变）：例如用户在不改文字的情况下重新精确定位
+            memory.setMemoryLng(request.getMemoryLng());
+            memory.setMemoryLat(request.getMemoryLat());
         }
 
         if (request.getPrivacyLevel() != null) {

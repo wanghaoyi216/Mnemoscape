@@ -20,6 +20,17 @@ const selectedMembers = ref<string[]>([])
 const messageText = ref('')
 const messages = ref<any[]>([])
 const uploadLoading = ref(false)
+const showEmojiPicker = ref(false)
+const showStickerPicker = ref(false)
+const EMOJI_LIST = ['😀', '😂', '🥹', '😍', '😎', '🤔', '😭', '😡', '👍', '👏', '🙏', '✨', '🌙', '🔥', '💫', '💚']
+const STICKER_PACK = [
+  { label: '记住了', glyph: '💾', text: '记住这一刻' },
+  { label: '拥抱', glyph: '🫶', text: '给你一个记忆拥抱' },
+  { label: '闪光', glyph: '✨', text: '这段回忆正在发光' },
+  { label: '共鸣', glyph: '🌌', text: '我和这段记忆共鸣了' },
+  { label: '加油', glyph: '🔥', text: '继续向前走' },
+  { label: '安静', glyph: '🌙', text: '今晚把心放轻一点' },
+]
 
 // Profile customizer fields
 const newAvatarUrl = ref(auth.user?.avatarUrl || '')
@@ -169,7 +180,7 @@ async function selectContact(contact: any) {
   }
 }
 
-async function sendMessage(type: 'TEXT' | 'IMAGE' | 'FILE' = 'TEXT', contentText = '', fileInfo: any = {}) {
+async function sendMessage(type: 'TEXT' | 'IMAGE' | 'FILE' | 'EMOJI' = 'TEXT', contentText = '', fileInfo: any = {}) {
   const finalContent = contentText || messageText.value.trim()
   if (!finalContent || !activeContact.value) return
 
@@ -192,9 +203,19 @@ async function sendMessage(type: 'TEXT' | 'IMAGE' | 'FILE' = 'TEXT', contentText
 
     ws.send(JSON.stringify(payload))
     messageText.value = ''
+    showEmojiPicker.value = false
+    showStickerPicker.value = false
   } else {
     alert('Real-time connection is offline. Reconnecting...')
   }
+}
+
+function pickEmoji(emoji: string) {
+  sendMessage('EMOJI', emoji)
+}
+
+function pickSticker(sticker: { glyph: string; text: string }) {
+  sendMessage('EMOJI', `${sticker.glyph} ${sticker.text}`)
 }
 
 // 私聊"求助星空使者破冰"：调后端 /chat/icebreaker，把 AI 建议填进输入框（不自动发送）
@@ -619,6 +640,17 @@ function formatBytes(bytes: number) {
                 <div class="message-bubble" :class="{ 'message-bubble--ai': isAiMessage(msg) }">
                   <!-- Text -->
                   <span v-if="msg.messageType === 'TEXT'">{{ msg.content }}</span>
+
+                  <!-- Emoji / Sticker -->
+                  <span v-else-if="msg.messageType === 'EMOJI'" :class="msg.content.length > 4 ? 'message-bubble__sticker' : 'message-bubble__emoji'">
+                    <template v-if="msg.content.length > 4">
+                      <span class="sticker-glyph">{{ msg.content.split('  ')[0] || msg.content.split(' ')[0] }}</span>
+                      <span class="sticker-text">{{ msg.content.substring((msg.content.split('  ')[0] || msg.content.split(' ')[0]).length).trim() }}</span>
+                    </template>
+                    <template v-else>
+                      {{ msg.content }}
+                    </template>
+                  </span>
                   
                   <!-- Image -->
                   <div v-else-if="msg.messageType === 'IMAGE'" class="message-bubble__image">
@@ -653,6 +685,51 @@ function formatBytes(bytes: number) {
                 </svg>
                 <input type="file" style="display:none;" @change="handleFileUpload" :disabled="uploadLoading" />
               </label>
+
+              <div class="emoji-wrap">
+                <button
+                  type="button"
+                  class="attach-btn"
+                  title="发送表情"
+                  :disabled="uploadLoading"
+                  @click="showEmojiPicker = !showEmojiPicker; showStickerPicker = false"
+                >
+                  ☺
+                </button>
+                <div v-if="showEmojiPicker" class="emoji-popover">
+                  <button
+                    v-for="emoji in EMOJI_LIST"
+                    :key="emoji"
+                    type="button"
+                    class="emoji-option"
+                    @click="pickEmoji(emoji)"
+                  >{{ emoji }}</button>
+                </div>
+              </div>
+
+              <div class="emoji-wrap">
+                <button
+                  type="button"
+                  class="attach-btn"
+                  title="发送表情包"
+                  :disabled="uploadLoading"
+                  @click="showStickerPicker = !showStickerPicker; showEmojiPicker = false"
+                >
+                  ✦
+                </button>
+                <div v-if="showStickerPicker" class="sticker-popover">
+                  <button
+                    v-for="sticker in STICKER_PACK"
+                    :key="sticker.label"
+                    type="button"
+                    class="sticker-option"
+                    @click="pickSticker(sticker)"
+                  >
+                    <span>{{ sticker.glyph }}</span>
+                    <strong>{{ sticker.label }}</strong>
+                  </button>
+                </div>
+              </div>
  
               <!-- Text Input -->
               <input 
@@ -966,6 +1043,18 @@ function formatBytes(bytes: number) {
   display: block;
 }
 
+.message-bubble__emoji {
+  display: inline-block;
+  min-width: 64px;
+  padding: 6px 10px;
+  border-radius: var(--radius-sm);
+  background: linear-gradient(135deg, rgba(54, 216, 180, 0.14), rgba(242, 185, 92, 0.12));
+  border: 1px solid rgba(54, 216, 180, 0.22);
+  font-size: 1.55rem;
+  line-height: 1.25;
+  text-align: center;
+}
+
 .message-bubble__file {
   display: flex;
   align-items: center;
@@ -1029,6 +1118,71 @@ function formatBytes(bytes: number) {
   border-color: var(--border-accent);
   background: rgba(54, 216, 180, 0.04);
 }
+
+.emoji-wrap {
+  position: relative;
+  flex: 0 0 auto;
+}
+
+.emoji-popover,
+.sticker-popover {
+  position: absolute;
+  left: 0;
+  bottom: calc(100% + 10px);
+  z-index: 8;
+  width: 244px;
+  padding: 10px;
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+  background: rgba(10, 13, 18, 0.96);
+  box-shadow: var(--shadow-lg);
+  backdrop-filter: blur(18px);
+}
+
+.emoji-popover {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+}
+
+.emoji-option,
+.sticker-option {
+  border: 1px solid transparent;
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text);
+  cursor: pointer;
+  transition: background 160ms ease, border-color 160ms ease;
+}
+
+.emoji-option {
+  min-height: 42px;
+  border-radius: var(--radius-sm);
+  font-size: 1.25rem;
+}
+
+.emoji-option:hover,
+.sticker-option:hover {
+  border-color: var(--border-accent);
+  background: rgba(54, 216, 180, 0.08);
+}
+
+.sticker-popover {
+  display: grid;
+  grid-template-columns: repeat(2, 1fr);
+  gap: 8px;
+}
+
+.sticker-option {
+  min-height: 72px;
+  border-radius: var(--radius-sm);
+  display: grid;
+  place-items: center;
+  gap: 4px;
+  padding: 8px;
+}
+
+.sticker-option span { font-size: 1.45rem; }
+.sticker-option strong { font-size: 0.74rem; color: var(--text-soft); }
 
 .chat-input-field {
   flex: 1;
@@ -1219,4 +1373,50 @@ function formatBytes(bytes: number) {
   border: 1px solid rgba(125, 211, 252, 0.3) !important;
 }
 .message-bubble-wrapper.ai .message-bubble-container { max-width: 78%; }
+
+/* Premium Animated Custom Memory Stickers */
+.message-bubble__sticker {
+  display: inline-flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 18px;
+  border-radius: var(--radius-md);
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.02) 100%);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.35);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  max-width: 220px;
+  text-align: center;
+}
+.message-bubble-wrapper.mine .message-bubble__sticker {
+  background: linear-gradient(135deg, rgba(54, 216, 180, 0.14) 0%, rgba(182, 240, 119, 0.04) 100%);
+  border-color: rgba(54, 216, 180, 0.25);
+  box-shadow: 0 8px 32px rgba(54, 216, 180, 0.15);
+}
+.message-bubble__sticker .sticker-glyph {
+  font-size: 2.85rem;
+  line-height: 1.1;
+  filter: drop-shadow(0 4px 8px rgba(56, 189, 248, 0.45));
+  animation: sticker-bounce 2.2s infinite ease-in-out;
+  display: block;
+}
+.message-bubble-wrapper.mine .message-bubble__sticker .sticker-glyph {
+  filter: drop-shadow(0 4px 8px rgba(54, 216, 180, 0.45));
+}
+.message-bubble__sticker .sticker-text {
+  font-size: 0.86rem;
+  font-weight: 600;
+  color: var(--text-soft);
+  text-align: center;
+  line-height: 1.45;
+  letter-spacing: 0.03em;
+  display: block;
+}
+
+@keyframes sticker-bounce {
+  0%, 100% { transform: translateY(0) scale(1); }
+  50% { transform: translateY(-7px) scale(1.04); }
+}
 </style>

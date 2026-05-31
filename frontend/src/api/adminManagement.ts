@@ -148,6 +148,19 @@ export function cleanupVisualData(limit = 500) {
     '/admin/memories/cleanup-visualdata', { limit }, { timeout: MAINTENANCE_TIMEOUT })
 }
 
+export interface FragmentRebuildResult {
+  scanned: number
+  dispatched: number
+  limit: number
+  total: number
+}
+
+/** 批量重建 legacy / 英文 / 缺失 fragments 的记忆。 */
+export function rebuildFragments(limit = 500) {
+  return client.post<ApiResponse<FragmentRebuildResult>>(
+    '/admin/memories/rebuild-fragments', { limit }, { timeout: MAINTENANCE_TIMEOUT })
+}
+
 export interface GeoBackfillResult {
   scanned: number
   resolved: number

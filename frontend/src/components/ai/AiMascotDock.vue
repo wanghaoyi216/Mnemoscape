@@ -251,11 +251,13 @@ const dynamicHints = ref<string[]>([])
 const intentHints = computed(() =>
   dynamicHints.value.length > 0 ? dynamicHints.value : fallbackHints.value,
 )
+const hintsLoading = ref(false)
 
 let hintsFetched = false
 async function fetchDynamicHints() {
   if (hintsFetched) return
   hintsFetched = true
+  hintsLoading.value = true
   try {
     const token = authStore.token
     if (!token) return
@@ -276,6 +278,8 @@ async function fetchDynamicHints() {
     }
   } catch {
     // 静默：保留 fallbackHints
+  } finally {
+    hintsLoading.value = false
   }
 }
 
@@ -1266,16 +1270,21 @@ shallowRef([images.goldenAfternoon.src, images.memoryCorona.src, images.resonanc
           </div>
 
           <div class="ai-hints">
-            <button
-              v-for="hint in intentHints"
-              :key="hint"
-              type="button"
-              class="ai-hint"
-              :disabled="streaming"
-              @click="pickHint(hint)"
-            >
-              {{ hint }}
-            </button>
+            <template v-if="hintsLoading">
+              <div v-for="i in 4" :key="i" class="ai-hint ai-hint--skeleton"></div>
+            </template>
+            <template v-else>
+              <button
+                v-for="hint in intentHints"
+                :key="hint"
+                type="button"
+                class="ai-hint"
+                :disabled="streaming"
+                @click="pickHint(hint)"
+              >
+                {{ hint }}
+              </button>
+            </template>
           </div>
 
           <!-- 多模态附件队列：已选 / 上传中 / 失败 状态 -->
@@ -2089,6 +2098,21 @@ shallowRef([images.goldenAfternoon.src, images.memoryCorona.src, images.resonanc
 }
 .ai-hint:hover { background: rgba(54,216,180,0.18); color: #f3f5fa; border-color: rgba(54,216,180,0.42); }
 .ai-hint:disabled { opacity: 0.4; cursor: not-allowed; }
+.ai-hint--skeleton {
+  width: 120px;
+  height: 28px;
+  background: linear-gradient(90deg, rgba(255, 255, 255, 0.05) 25%, rgba(255, 255, 255, 0.12) 50%, rgba(255, 255, 255, 0.05) 75%);
+  background-size: 200% 100%;
+  animation: hint-shimmer 1.6s infinite linear;
+  border: 1px solid rgba(255, 255, 255, 0.04);
+  border-radius: var(--radius-full);
+  pointer-events: none;
+}
+
+@keyframes hint-shimmer {
+  0% { background-position: 200% 0; }
+  100% { background-position: -200% 0; }
+}
 
 /* ============ 输入框：太极双鱼"双灯环绕" ============
  * 输入框本体保持完全静止；两条发光"鱼"分别沿椭圆轨道反向追逐，

@@ -384,6 +384,25 @@ public class AdminMemoryManagementController {
         return ResponseEntity.ok(ApiResponse.success(result));
     }
 
+    /**
+     * 历史 Fragments 批量重建：扫描 legacy / 英文 / 缺失 fragments 的记忆，
+     * 异步清除并重新跑 reconstruction，生成 grounded 中文 fragments。
+     * body（可选）: {limit: 500}。
+     */
+    @PostMapping("/rebuild-fragments")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> rebuildFragments(
+            @RequestBody(required = false) Map<String, Object> body,
+            HttpServletRequest req) {
+        int limit = 500;
+        if (body != null && body.get("limit") instanceof Number n) {
+            limit = n.intValue();
+        }
+        Map<String, Object> result = memoryService.rebuildFragments(limit);
+        logAccess(req, "/api/v1/admin/memories/rebuild-fragments",
+                "dispatched=" + result.get("dispatched"), 200);
+        return ResponseEntity.ok(ApiResponse.success(result));
+    }
+
     private void logAccess(HttpServletRequest req, String path, String detail, int status) {
         try {
             String adminUserId = req.getHeader("X-User-Id");

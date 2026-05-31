@@ -48,6 +48,7 @@ function normalizeScene(payload: unknown): SceneData | null {
 onMounted(async () => {
   const id = route.params.id as string
   sceneError.value = ''
+  sceneStore.setScene(null)
   try {
     await memoryStore.fetchOne(id)
     await memoryStore.fetchDrift(id)

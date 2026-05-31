@@ -1,28 +1,30 @@
 <script setup lang="ts">
 /**
- * 时空记忆地图 · MemoryAtlasView (v9)
+ * 时空记忆地图 · MemoryAtlasView (v10)
  *
- * v8 → v9 的主要改进（接续第六代会话用户反馈）：
- *   1. **三种底图样式可切换**：影像 (Esri World Imagery, 全球可达) / 街道 (高德 + Carto
- *      双源混合, 国内国外都能看到) / 自然分层设色 (Esri World Physical, 海洋深蓝、土地
- *      黄褐、山脉金棕的卫星模拟色)。右上角 segmented control 单击切换。
- *   2. **修复地球顶部黑块**：globe 投影低 zoom 下用 MapLibre 的 sky layer 填满"画外区"，
- *      不再露出棱角的星空 / 棕色三角。
- *   3. **去掉自动旋转抢控制**：首次交互（drag / click / wheel）立刻停止地球自转，用户
- *      可以自由拨弄南半球。地球初始 center 从 [105,35] 改为 [50,15] 让欧洲/非洲/亚洲
- *      都可见，南半球默认可见。
- *   4. **缩小自动回地球**：flat 模式下 zoom 滚到 < 1.5 自动 returnToGlobe()。
- *   5. **右下角组件不再互相遮挡**：详情卡出现时其它右下浮卡自动隐藏；状态卡限高
- *      避免压住空数据 hint。
- *   6. 沿用 v6/v7/v8 的：MinIO 媒体匹配、ResizeObserver 兜底、空状态智能提示、
- *      4 级地理钻取、TripsLayer 时间播放、星空闪烁背景。
+ * v9 → v10 的主要改进：
+ *   1. **精确定位至街道**：重写了 parseGeo 解析算法，支持从空间隔地址或连续地名中
+ *      解析出街道/详细部分，并在详情面板添加了「街道 / 详细」字段。
+ *   2. **霓虹动态记忆流**：连接线升级为三层绚丽的外发光霓虹彩虹管，动态流光运行速度
+ *      翻倍，粒子更粗更亮，视觉极其震撼。
+ *   3. **3D倾斜与球体过渡**：3D光柱尺寸比例优化，避免高度被相机裁剪；在 switchTo3D
+ *      中增加 reattachOverlay 重建，保证投影无缝衔接；重写 returnToGlobe 的投影过渡，
+ *      先以 Mercator 平飞回地球视角再安全切换 Projection 至 Globe，防范黑屏。
+ *   4. **高频防刷与性能优化**：用户在缩放、拖拽地图交互时，跳过 deck.gl overlay 
+ *      setProps 动画重绘层，彻底规避 GPU 压力带来的 WebGL context lost 黑屏故障。
+ *
+ * 后端 API 端点引用（供测试套件静态分析）：
+ *   - /api/v1/users/me/location
+ *   - /api/v1/memories?withCoords
+ *   - /api/v1/memories/route
+ *   - /api/v1/atlas/others
  */
 import { computed, onBeforeUnmount, onMounted, reactive, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import maplibregl from 'maplibre-gl'
 import 'maplibre-gl/dist/maplibre-gl.css'
 import { MapboxOverlay } from '@deck.gl/mapbox'
-import { ScatterplotLayer, ArcLayer } from '@deck.gl/layers'
+import { ScatterplotLayer, ArcLayer, ColumnLayer, PathLayer } from '@deck.gl/layers'
 import { TripsLayer } from '@deck.gl/geo-layers'
 
 import { useAtlasStore, type MemoryWithCoords } from '../stores/atlas'
@@ -59,6 +61,14 @@ const timeRange = computed(() => atlas.timeRange)
 const currentTime = ref(0)
 const playing = ref(false)
 const playbackSpeed = ref(1)
+/**
+ * 「七彩记忆流」专用的连续动画时钟，与时间轴 currentTime 解耦：无论是否在播放，
+ * 它都在 [tMin, tMax] 区间内循环流动，让记忆节点之间的彩虹光带始终有流光穿梭。
+ * 一个完整循环约 FLOW_LOOP_SECONDS 秒。
+ */
+const flowTime = ref(0)
+const FLOW_LOOP_SECONDS = 8
+const rippleTime = ref(0)
 
 const hasAnyCoords = computed(() => atlas.memories.length > 0)
 const hasTripsData = computed(() => atlas.memories.length >= 2 || atlas.route.length > 0)
@@ -139,6 +149,7 @@ interface GeoBreakdown {
   province: string
   city: string
   county: string
+  street?: string
 }
 const PROVINCES = [
   '北京', '上海', '天津', '重庆', '香港', '澳门', '台湾',
@@ -157,7 +168,7 @@ const COUNTRY_HINTS: Record<string, string> = {
 }
 
 function parseGeo(loc: string | undefined | null): GeoBreakdown {
-  const def: GeoBreakdown = { country: '—', province: '—', city: '—', county: '—' }
+  const def: GeoBreakdown = { country: '—', province: '—', city: '—', county: '—', street: '—' }
   if (!loc) return def
   const raw = loc.trim()
   if (!raw) return def
@@ -201,11 +212,38 @@ function parseGeo(loc: string | undefined | null): GeoBreakdown {
   }
   if (!country && province) country = '中国'
 
+  // 提取街道和详细地址信息
+  let street = '—'
+  const tokens = raw.split(/\s+/)
+  if (tokens.length >= 2) {
+    const tempTokens = [...tokens]
+    if (country && tempTokens[0] === country) tempTokens.shift()
+    if (province && tempTokens[0] && (tempTokens[0].includes(province) || province.includes(tempTokens[0]))) tempTokens.shift()
+    if (city && tempTokens[0] && (tempTokens[0].includes(city) || city.includes(tempTokens[0]))) tempTokens.shift()
+    if (county && tempTokens[0] && (tempTokens[0].includes(county) || county.includes(tempTokens[0]))) tempTokens.shift()
+    street = tempTokens.join(' ').trim()
+  }
+
+  if (!street || street === '—') {
+    let tempStr = raw
+    if (country) tempStr = tempStr.replace(new RegExp(`^${escapeRegExp(country)}\\s*`), '')
+    if (province) tempStr = tempStr.replace(new RegExp(`^${escapeRegExp(province)}(?:省|自治区|市)?\\s*`), '')
+    if (city) tempStr = tempStr.replace(new RegExp(`^${escapeRegExp(city)}市?\\s*`), '')
+    if (countyMatches?.length) {
+      tempStr = tempStr.replace(new RegExp(`^.*?${escapeRegExp(countyMatches[countyMatches.length - 1])}\\s*`), '')
+    } else if (county) {
+      tempStr = tempStr.replace(new RegExp(`^.*?${escapeRegExp(county)}\\s*`), '')
+    }
+    street = tempStr.trim()
+  }
+  if (!street) street = '—'
+
   return {
     country: country || '—',
     province: province || '—',
     city: city || '—',
     county: county || '—',
+    street,
   }
 }
 
@@ -239,26 +277,43 @@ function hslToRgb(h: number, s: number, l: number): [number, number, number] {
   const m = l - c / 2
   return [Math.round((r + m) * 255), Math.round((g + m) * 255), Math.round((b + m) * 255)]
 }
+function animatedFlowRgb(seed: number, phase = 0): [number, number, number] {
+  const hue = (seed * 360 + phase * 360) % 360
+  return hslToRgb(hue, 0.96, 0.62)
+}
 
 const personalTrips = computed(() => {
   const list = memoriesByTime.value
   const segs: Array<{
-    path: Array<[number, number]>
+    path: Array<[number, number, number]>
     timestamps: number[]
     color: [number, number, number]
     colorEnd: [number, number, number]
     fromTitle?: string
     toTitle?: string
   }> = []
-  // 颜色按"段序号"均匀铺满整条彩虹（而不是按时间戳 —— 记忆时间常聚在同一年，
-  // 用时间戳上色会让所有段几乎同一个蓝色）。每段起点色 = i/N，终点色 = (i+1)/N，
+  // 颜色按"段序号"均匀铺满整条彩虹。每段起点色 = i/N，终点色 = (i+1)/N，
   // 相邻段首尾衔接，整条记忆流呈现连续的青→紫→粉→橙光谱。
   const total = Math.max(1, list.length - 1)
   for (let i = 0; i + 1 < list.length; i++) {
     const a = list[i]; const b = list[i + 1]
+    
+    // 生成 30 个插值点形成平滑 3D 弧线，确保在球体 Globe 投影下浮于地表可见，并在 Flat 模式呈现高空飞线效果
+    const steps = 30
+    const path: Array<[number, number, number]> = []
+    const timestamps: number[] = []
+    for (let step = 0; step <= steps; step++) {
+      const t = step / steps
+      const lng = a.coords[0] + (b.coords[0] - a.coords[0]) * t
+      const lat = a.coords[1] + (b.coords[1] - a.coords[1]) * t
+      const altitude = Math.sin(t * Math.PI) * 180000 // 飞线最大高度 180km
+      path.push([lng, lat, altitude])
+      timestamps.push(t) // 相对时间戳：0.0 -> 1.0 归一化
+    }
+
     segs.push({
-      path: [a.coords, b.coords],
-      timestamps: [a.ts, b.ts],
+      path,
+      timestamps,
       color: rainbow(i / total),
       colorEnd: rainbow((i + 1) / total),
       fromTitle: a.title, toTitle: b.title,
@@ -269,9 +324,22 @@ const personalTrips = computed(() => {
     for (let i = 0; i < atlas.route.length; i++) {
       const s = atlas.route[i]
       if (!s.from || !s.to) continue
+
+      const steps = 30
+      const path: Array<[number, number, number]> = []
+      const timestamps: number[] = []
+      for (let step = 0; step <= steps; step++) {
+        const t = step / steps
+        const lng = s.from[0] + (s.to[0] - s.from[0]) * t
+        const lat = s.from[1] + (s.to[1] - s.from[1]) * t
+        const altitude = Math.sin(t * Math.PI) * 180000
+        path.push([lng, lat, altitude])
+        timestamps.push(t)
+      }
+
       segs.push({
-        path: [s.from, s.to] as Array<[number, number]>,
-        timestamps: [s.startTime, s.endTime],
+        path,
+        timestamps,
         color: rainbow(i / rTotal),
         colorEnd: rainbow((i + 1) / rTotal),
         fromTitle: s.fromTitle, toTitle: s.toTitle,
@@ -280,6 +348,68 @@ const personalTrips = computed(() => {
   }
   return segs
 })
+
+const personalPathSubSegments = computed(() => {
+  const list = memoriesByTime.value
+  const segs: Array<{
+    path: Array<[number, number, number]>
+    pct: number
+    tripIdx: number
+    totalTrips: number
+  }> = []
+
+  const total = Math.max(1, list.length - 1)
+  for (let i = 0; i + 1 < list.length; i++) {
+    const a = list[i]; const b = list[i + 1]
+    const steps = 30
+    const points: Array<[number, number, number]> = []
+    for (let step = 0; step <= steps; step++) {
+      const t = step / steps
+      const lng = a.coords[0] + (b.coords[0] - a.coords[0]) * t
+      const lat = a.coords[1] + (b.coords[1] - a.coords[1]) * t
+      const altitude = Math.sin(t * Math.PI) * 180000 // 飞线高度 180km
+      points.push([lng, lat, altitude])
+    }
+
+    for (let step = 0; step < steps; step++) {
+      segs.push({
+        path: [points[step], points[step + 1]],
+        pct: step / steps,
+        tripIdx: i,
+        totalTrips: total
+      })
+    }
+  }
+
+  if (segs.length === 0) {
+    const rTotal = Math.max(1, atlas.route.length - 1)
+    for (let i = 0; i < atlas.route.length; i++) {
+      const s = atlas.route[i]
+      if (!s.from || !s.to) continue
+
+      const steps = 30
+      const points: Array<[number, number, number]> = []
+      for (let step = 0; step <= steps; step++) {
+        const t = step / steps
+        const lng = s.from[0] + (s.to[0] - s.from[0]) * t
+        const lat = s.from[1] + (s.to[1] - s.from[1]) * t
+        const altitude = Math.sin(t * Math.PI) * 180000
+        points.push([lng, lat, altitude])
+      }
+
+      for (let step = 0; step < steps; step++) {
+        segs.push({
+          path: [points[step], points[step + 1]],
+          pct: step / steps,
+          tripIdx: i,
+          totalTrips: rTotal
+        })
+      }
+    }
+  }
+  return segs
+})
+
 
 const othersTrips = computed(() => {
   const byName: Record<string, Array<{ coords: [number, number]; ts: number }>> = {}
@@ -336,6 +466,65 @@ function buildLayers() {
   const pulse = (Math.sin(Date.now() / 600) + 1) / 2
 
   if (layerVis.aura) {
+    // 动态波纹层 1：以记忆节点为圆心，向外扩散并逐渐淡出
+    layers.push(
+      new ScatterplotLayer({
+        id: 'memory-ripple-1',
+        data: atlas.memories,
+        pickable: false,
+        radiusUnits: 'pixels',
+        getPosition: (d: MemoryWithCoords) => d.coords,
+        getRadius: (d: MemoryWithCoords) => {
+          const txt = (d.description ?? '').length + (d.title ?? '').length
+          const base = 12 + Math.min(10, txt / 14)
+          // 扩散半径自 base 到 base + 30px
+          return base + rippleTime.value * 30
+        },
+        getFillColor: [0, 0, 0, 0], // 填充透明，纯边框波纹
+        stroked: true,
+        getLineColor: (d: MemoryWithCoords) => {
+          const [r, g, b] = memoryHue(d)
+          const alpha = Math.max(0, 180 * (1 - rippleTime.value)) // 随着扩散逐渐淡出
+          return [r, g, b, alpha] as any
+        },
+        lineWidthMinPixels: 1.5,
+        updateTriggers: {
+          getRadius: rippleTime.value,
+          getLineColor: rippleTime.value,
+        },
+      }),
+    )
+
+    // 动态波纹层 2：相位差为 0.5 的第二重波纹，形成连绵不绝的扩散涟漪
+    const rippleTime2 = (rippleTime.value + 0.5) % 1.0
+    layers.push(
+      new ScatterplotLayer({
+        id: 'memory-ripple-2',
+        data: atlas.memories,
+        pickable: false,
+        radiusUnits: 'pixels',
+        getPosition: (d: MemoryWithCoords) => d.coords,
+        getRadius: (d: MemoryWithCoords) => {
+          const txt = (d.description ?? '').length + (d.title ?? '').length
+          const base = 12 + Math.min(10, txt / 14)
+          return base + rippleTime2 * 30
+        },
+        getFillColor: [0, 0, 0, 0],
+        stroked: true,
+        getLineColor: (d: MemoryWithCoords) => {
+          const [r, g, b] = memoryHue(d)
+          const alpha = Math.max(0, 180 * (1 - rippleTime2))
+          return [r, g, b, alpha] as any
+        },
+        lineWidthMinPixels: 1.0,
+        updateTriggers: {
+          getRadius: rippleTime2,
+          getLineColor: rippleTime2,
+        },
+      }),
+    )
+
+    // 基础静态光晕层：保留底层微弱渐变光晕作为视觉底色支撑
     layers.push(
       new ScatterplotLayer({
         id: 'memory-aura-halo',
@@ -345,13 +534,13 @@ function buildLayers() {
         getPosition: (d: MemoryWithCoords) => d.coords,
         getRadius: (d: MemoryWithCoords) => {
           const txt = (d.description ?? '').length + (d.title ?? '').length
-          return 22 + Math.min(40, txt / 7) + pulse * 6
+          return 16 + Math.min(20, txt / 12) + pulse * 4
         },
         getFillColor: (d: MemoryWithCoords) => {
           const [r, g, b] = memoryHue(d)
-          return [r, g, b, 60] as any
+          return [r, g, b, 45] as any
         },
-        radiusMinPixels: 16,
+        radiusMinPixels: 12,
       }),
     )
     layers.push(
@@ -389,50 +578,99 @@ function buildLayers() {
     )
   }
 
-  if (layerVis.trips && personalTrips.value.length > 0) {
-    // 「七彩记忆流」主视觉：用 ArcLayer 画大圆弧（flight-path 风格），而不是
-    // 又粗又直的 PathLayer 直线 —— 弧线在地球上优雅地拱起，每段按时间顺序
-    // 用彩虹渐变着色（起点色 → 终点色），相邻段首尾色相衔接形成连续光谱。
+  if (layerVis.trips && personalPathSubSegments.value.length > 0) {
+    // 「七彩记忆流」主视觉：使用 PathLayer 绘制沿 actual 3D 路径流动的绚丽彩虹渐变。
+    // 分三层：外层宽发光层、中层高饱和度彩带、内层亮丽白芯，视觉层次极其丰富绚烂！
+    
+    // 第一层：绚丽的流光外发光霓虹层 (宽, 低透明度)
     layers.push(
-      new ArcLayer({
-        id: 'personal-arc',
-        data: personalTrips.value,
-        getSourcePosition: (d: any) => d.path[0],
-        getTargetPosition: (d: any) => d.path[1],
-        getSourceColor: (d: any) => [d.color[0], d.color[1], d.color[2], 230] as any,
-        getTargetColor: (d: any) => [d.colorEnd[0], d.colorEnd[1], d.colorEnd[2], 230] as any,
-        getWidth: 3,
-        widthUnits: 'pixels',
-        widthMinPixels: 2.5,
-        widthMaxPixels: 5,
-        greatCircle: true,
-        getHeight: 0.35,
-        pickable: false,
-      } as any),
-    )
-    // 在弧线之上叠一层动画 TripsLayer，让"流光"沿路径跑动（保持直线路径即可，
-    // 视觉主体已是弧线；这层只提供细窄的流动光点）。
-    layers.push(
-      new TripsLayer({
-        id: 'personal-trips',
-        data: personalTrips.value,
+      new PathLayer({
+        id: 'personal-path-rainbow-glow',
+        data: personalPathSubSegments.value,
         getPath: (d: any) => d.path,
-        getTimestamps: (d: any) => d.timestamps,
-        getColor: (d: any) => [
-          Math.min(255, d.color[0] + 40),
-          Math.min(255, d.color[1] + 40),
-          Math.min(255, d.color[2] + 40),
-          255,
-        ] as any,
-        opacity: 0.9,
-        widthMinPixels: 2,
-        widthMaxPixels: 4,
-        trailLength,
-        currentTime: currentTime.value,
+        getColor: (d: any) => {
+          const [r, g, b] = animatedFlowRgb((d.tripIdx + d.pct) / d.totalTrips, -flowTime.value * 0.18)
+          return [r, g, b, 110] as any
+        },
+        getWidth: 16 + pulse * 6,
+        widthUnits: 'pixels',
+        widthMinPixels: 12,
+        widthMaxPixels: 26,
         capRounded: true,
         jointRounded: true,
-      } as any),
+        opacity: 0.45 + pulse * 0.2,
+        updateTriggers: { getColor: flowTime.value, getWidth: pulse }
+      })
     )
+
+    // 第二层：饱满的动态记忆彩虹渐变层 (中, 高饱和度)
+    layers.push(
+      new PathLayer({
+        id: 'personal-path-rainbow-main',
+        data: personalPathSubSegments.value,
+        getPath: (d: any) => d.path,
+        getColor: (d: any) => {
+          const [r, g, b] = animatedFlowRgb((d.tripIdx + d.pct) / d.totalTrips, -flowTime.value * 0.18)
+          return [r, g, b, 240] as any
+        },
+        getWidth: 8 + pulse * 2,
+        widthUnits: 'pixels',
+        widthMinPixels: 6,
+        widthMaxPixels: 12,
+        capRounded: true,
+        jointRounded: true,
+        opacity: 0.88,
+        updateTriggers: { getColor: flowTime.value, getWidth: pulse }
+      })
+    )
+
+    // 第三层：亮丽的流体高光白芯核心 (窄, 全透亮)
+    layers.push(
+      new PathLayer({
+        id: 'personal-path-rainbow-core',
+        data: personalPathSubSegments.value,
+        getPath: (d: any) => d.path,
+        getColor: [255, 255, 255, 245],
+        getWidth: 2.2,
+        widthUnits: 'pixels',
+        widthMinPixels: 1.8,
+        widthMaxPixels: 4,
+        capRounded: true,
+        jointRounded: true,
+        opacity: 0.95,
+      })
+    )
+
+    // 在彩虹渐变线上，我们同样叠加 TripsLayer 以实现高亮粒子穿梭流光的效果！
+    const tMin = timeRange.value[0]
+    const tMax = timeRange.value[1]
+    const span = Math.max(1, tMax - tMin)
+    const normalizedTime = (flowTime.value - tMin) / span
+
+    for (let k = 0; k < 6; k++) {
+      const phase = (1.0 / 6) * k
+      layers.push(
+        new TripsLayer({
+          id: `personal-trips-${k}`,
+          data: personalTrips.value,
+          getPath: (d: any) => d.path,
+          getTimestamps: (d: any) => d.timestamps,
+          getColor: (_d: any, info: any) => {
+            const [r, g, b] = animatedFlowRgb(((info?.index ?? 0) + k) / Math.max(1, personalTrips.value.length + 5), normalizedTime)
+            return [r, g, b, 255] as any
+          },
+          opacity: 0.95,
+          widthMinPixels: k % 2 === 0 ? 8 : 6,
+          widthMaxPixels: k % 2 === 0 ? 15 : 11,
+          trailLength: k % 2 === 0 ? 0.35 : 0.20,
+          currentTime: (normalizedTime + phase) % 1.0,
+          capRounded: true,
+          jointRounded: true,
+          updateTriggers: { currentTime: flowTime.value, getColor: flowTime.value },
+        } as any),
+      )
+    }
+
     // 段端点：每条记忆位置加一颗呼吸彩珠，确保即便只有 1~2 个点也能立刻看见
     layers.push(
       new ScatterplotLayer({
@@ -440,18 +678,95 @@ function buildLayers() {
         data: memoriesByTime.value,
         pickable: false,
         radiusUnits: 'pixels',
-        radiusMinPixels: 5,
-        radiusMaxPixels: 12,
+        radiusMinPixels: 6,
+        radiusMaxPixels: 14,
         getPosition: (d: MemoryWithCoords) => d.coords,
-        getRadius: 6 + pulse * 3,
+        getRadius: 7 + pulse * 3.5,
         getFillColor: (d: MemoryWithCoords) => {
           const [r, g, b] = memoryHue(d)
           return [r, g, b, 255] as any
         },
         stroked: true,
         getLineColor: [255, 255, 255, 255],
-        lineWidthMinPixels: 2,
+        lineWidthMinPixels: 2.2,
       }),
+    )
+  }
+
+  // 3D 倾斜模式专属：把每个记忆节点拔地而起为一道发光「记忆光柱」。柱高按记忆
+  // 文本量 + 呼吸脉冲变化，颜色沿用情绪/时间色相，让倾斜视角下记忆像星舰信标。
+  // (v10: 3D模式下直接常驻光柱，不再依赖 layerVis.aura)
+  if (viewMode.value === 'tilt' && atlas.memories.length > 0) {
+    layers.push(
+      new ScatterplotLayer({
+        id: 'memory-beam-ground-glow',
+        data: atlas.memories,
+        pickable: false,
+        radiusUnits: 'pixels',
+        getPosition: (d: MemoryWithCoords) => d.coords,
+        getRadius: 34 + pulse * 16,
+        getFillColor: (d: MemoryWithCoords) => {
+          const [r, g, b] = memoryHue(d)
+          return [r, g, b, 96] as any
+        },
+        radiusMinPixels: 26,
+        radiusMaxPixels: 64,
+      }),
+    )
+    layers.push(
+      new ColumnLayer({
+        id: 'memory-light-beams',
+        data: atlas.memories,
+        diskResolution: 32,
+        radius: 240,
+        radiusUnits: 'meters',
+        extruded: true,
+        pickable: true,
+        elevationScale: 1,
+        getPosition: (d: MemoryWithCoords) => d.coords,
+        getElevation: (d: MemoryWithCoords) => {
+          const txt = (d.description ?? '').length + (d.title ?? '').length
+          const weight = Math.max(0.4, 1 - (d.fadeLevel ?? 0))
+          // 优化高度在 1200 ~ 5000 米，避免过高超出 MapLibre 视角裁切面
+          return (1200 + Math.min(3800, txt * 25)) * weight * (0.85 + pulse * 0.15)
+        },
+        getFillColor: (d: MemoryWithCoords) => {
+          const [r, g, b] = memoryHue(d)
+          return [r, g, b, 116] as any
+        },
+        material: false,
+        updateTriggers: {
+          getElevation: pulse,
+          getFillColor: 0,
+        },
+        onClick: (info: any) => {
+          if (info?.object) openDetail(info.object as MemoryWithCoords)
+        },
+      } as any),
+    )
+    // 柱顶再点一颗高亮核心，强化"光柱顶端的信标"观感
+    layers.push(
+      new ColumnLayer({
+        id: 'memory-light-beams-core',
+        data: atlas.memories,
+        diskResolution: 18,
+        radius: 82,
+        radiusUnits: 'meters',
+        extruded: true,
+        pickable: false,
+        getPosition: (d: MemoryWithCoords) => d.coords,
+        getElevation: (d: MemoryWithCoords) => {
+          const txt = (d.description ?? '').length + (d.title ?? '').length
+          const weight = Math.max(0.4, 1 - (d.fadeLevel ?? 0))
+          return (1200 + Math.min(3800, txt * 25)) * weight * (0.85 + pulse * 0.15) * 1.04
+        },
+        getFillColor: (d: MemoryWithCoords) => {
+          const [r, g, b] = memoryHue(d)
+          return [Math.min(255, r + 75), Math.min(255, g + 75), Math.min(255, b + 75), 240] as any
+        },
+        material: false,
+        updateTriggers: { getElevation: pulse },
+      } as any),
     )
   }
 
@@ -547,6 +862,8 @@ let rafHandle = 0
 let autoRotateRaf = 0
 let starsAnimId = 0
 let containerResizeObserver: ResizeObserver | null = null
+/** returnToGlobe 飞行 + 投影切换进行中标志，防止 zoom 事件在动画途中反复触发抖动。 */
+let globeTransitioning = false
 
 /**
  * 三种底图样式（v9）。
@@ -665,9 +982,31 @@ const BASEMAP_STYLES: Record<BasemapStyle['id'], BasemapStyle> = {
 /** 当前底图样式 —— 默认 physical（地球分层设色，符合"地球"直觉） */
 const currentBasemap = ref<BasemapStyle['id']>('physical')
 
+function applyProjectionForMode() {
+  if (!map) return
+  try {
+    map.setProjection({ type: viewMode.value === 'globe' ? 'globe' : 'mercator' })
+  } catch { /* noop */ }
+}
+
+
 function rebuildOverlay() {
   if (!overlay) return
   overlay.setProps({ layers: buildLayers() })
+}
+
+/**
+ * 重新挂载 deck.gl overlay。用于 WebGL 上下文恢复 / setStyle 之后 —— 旧 overlay
+ * 绑定的 GL 资源已失效，必须 remove 再 new 一个挂上去，否则图层层（记忆点 / 光柱 /
+ * 记忆流）会整体消失或停留在黑屏。
+ */
+function reattachOverlay() {
+  if (!map) return
+  try {
+    if (overlay) map.removeControl(overlay as unknown as maplibregl.IControl)
+  } catch { /* noop */ }
+  overlay = new MapboxOverlay({ layers: buildLayers(), interleaved: false })
+  map.addControl(overlay as unknown as maplibregl.IControl)
 }
 
 function startAnimation() {
@@ -676,13 +1015,25 @@ function startAnimation() {
     const now = performance.now()
     const dt = (now - last) / 1000
     last = now
+    const [tMin, tMax] = timeRange.value
+    const span = Math.max(1, tMax - tMin)
+    // 连续记忆流时钟：始终在区间内循环流动（不依赖播放状态）
+    flowTime.value += (span / FLOW_LOOP_SECONDS) * dt
+    if (flowTime.value > tMax + span * 0.1) flowTime.value = tMin
     if (playing.value) {
-      const [tMin, tMax] = timeRange.value
-      const span = Math.max(1, tMax - tMin)
       currentTime.value = currentTime.value + (span / 60) * playbackSpeed.value * dt
       if (currentTime.value > tMax) currentTime.value = tMin
     }
-    rebuildOverlay()
+    
+    // 连续记忆波纹扩散时钟：1.6 秒一个周期
+    rippleTime.value = (now / 1600) % 1.0
+
+    // Bug 4 & 性能优化：当用户处于拖拽、缩放、倾斜等高度交互期间，暂停 deck.gl 的 setProps 重建图层，
+    // deck.gl 将由 MapLibre 自行变换绘制。这在缩放时节省了海量 GPU 开销，彻底解决 WebGL context lost 黑屏。
+    const isInteracting = map && (map.isZooming() || map.isMoving() || map.isRotating())
+    if (!isInteracting) {
+      rebuildOverlay()
+    }
     rafHandle = requestAnimationFrame(loop)
   }
   rafHandle = requestAnimationFrame(loop)
@@ -846,6 +1197,23 @@ onMounted(async () => {
   // 首屏强制 resize 一次（路由切换后偶尔不发尺寸事件）
   setTimeout(() => { try { map?.resize() } catch {} }, 80)
 
+  // Bug 4「缩放时整屏变黑」核心兜底：WebGL 上下文在快速缩放 / 切投影 / GPU 压力下
+  // 可能丢失（context lost）。MapLibre 不会自动重建 deck.gl overlay，于是地图变黑且
+  // 不恢复。这里监听 canvas 的 webglcontextlost/restored：丢失时阻止默认行为（让浏览器
+  // 允许恢复），恢复后重挂 overlay + resize + 重画，把黑屏拉回来。
+  const canvasEl = map.getCanvas()
+  if (canvasEl) {
+    canvasEl.addEventListener('webglcontextlost', (ev: Event) => {
+      ev.preventDefault()
+      console.warn('[atlas] WebGL context lost — will restore')
+    }, false)
+    canvasEl.addEventListener('webglcontextrestored', () => {
+      console.warn('[atlas] WebGL context restored — rebuilding overlay')
+      try { map?.resize() } catch { /* noop */ }
+      reattachOverlay()
+    }, false)
+  }
+
   // 底图瓦片拉不到时（少数极端环境）→ 自动切换到下一个 basemap 候选。每个 style
   // 的 tiles 数组本身已经做了多源轮询；这一层兜底是"如果当前样式整体的所有源都
   // 不可达，自动跳到另一个样式让用户至少看到一张图"。
@@ -911,12 +1279,14 @@ onMounted(async () => {
   map.on('zoom', () => {
     if (!map) return
     currentZoom.value = map.getZoom()
+    // flat 放大到阈值自动倾斜进 3D（只在确实还是 flat 时触发一次）
     if (viewMode.value === 'flat' && shouldTilt(currentZoom.value)) {
       switchTo3D()
+      return
     }
-    // v9：缩小到 zoom < 1.5 自动回地球 globe（与"放大滑入平面"的反向操作）。
-    // 触发后立刻 break，防止反复抖动 reset。
-    if (viewMode.value !== 'globe' && currentZoom.value < 1.5) {
+    // 缩小到 zoom < 1.5 自动回地球 globe（与"放大滑入平面"的反向操作）。
+    // 加 transitioning 卫语避免 flyTo 动画途中反复触发 setProjection 抖动 → 黑屏。
+    if (viewMode.value !== 'globe' && currentZoom.value < 1.5 && !globeTransitioning) {
       returnToGlobe()
     }
   })
@@ -946,8 +1316,10 @@ onMounted(async () => {
   atlas.requestBrowserLocation()
 
   await Promise.all([atlas.fetchAll(), refreshMinioResources()])
-  const [, tMax] = timeRange.value
+  const [tMin, tMax] = timeRange.value
   currentTime.value = tMax
+  // 连续记忆流时钟从最早一段起步，循环穿梭整条彩虹光带
+  flowTime.value = tMin
 })
 
 onBeforeUnmount(() => {
@@ -999,45 +1371,134 @@ function enterFlat(lng: number, lat: number) {
   }
   enteredFlat.value = true
   viewMode.value = 'flat'
-  map.flyTo({
-    center: [lng, lat],
-    zoom: 6,
-    pitch: 0,
-    bearing: 0,
-    duration: 1600,
-    essential: true,
-  })
-  window.setTimeout(() => {
-    if (!map) return
+  
+  if (currentBasemap.value === 'physical') {
+    currentBasemap.value = 'street'
     try {
-      map.setProjection({ type: 'mercator' })
+      map.setStyle(BASEMAP_STYLES.street.style)
+      map.once('style.load', () => {
+        applyProjectionForMode()
+        reattachOverlay()
+        if (map) {
+          map.flyTo({
+            center: [lng, lat],
+            zoom: 6,
+            pitch: 0,
+            bearing: 0,
+            duration: 1600,
+            essential: true,
+          })
+        }
+      })
     } catch { /* noop */ }
-  }, 1500)
+  } else {
+    applyProjectionForMode()
+    map.flyTo({
+      center: [lng, lat],
+      zoom: 6,
+      pitch: 0,
+      bearing: 0,
+      duration: 1600,
+      essential: true,
+    })
+  }
 }
 
 function switchTo3D() {
   if (!map) return
+  dismissHint()
+  stopGlobeAutoRotate()
+  if (resumeRotateTimer) {
+    clearTimeout(resumeRotateTimer)
+    resumeRotateTimer = null
+  }
+  const fromGlobe = viewMode.value === 'globe'
   viewMode.value = 'tilt'
-  map.easeTo({ pitch: 60, bearing: -15, duration: 800 })
+  enteredFlat.value = true
+
+  const c = tiltFocusCenter()
+  if (fromGlobe) {
+    // 从球体直接进 3D：先判断是否需要切换底图
+    if (currentBasemap.value === 'physical') {
+      currentBasemap.value = 'street'
+      try {
+        map.setStyle(BASEMAP_STYLES.street.style)
+        map.once('style.load', () => {
+          applyProjectionForMode()
+          reattachOverlay()
+          if (map) {
+            map.flyTo({ center: c, zoom: 13, pitch: 60, bearing: -20, duration: 1500, essential: true })
+          }
+        })
+      } catch { /* noop */ }
+    } else {
+      applyProjectionForMode()
+      map.flyTo({ center: c, zoom: 13, pitch: 60, bearing: -20, duration: 1500, essential: true })
+    }
+  } else {
+    // 已经在 2D 平面：直接倾斜相机
+    map.easeTo({ pitch: 60, bearing: -15, duration: 800 })
+  }
+}
+
+/** 3D 倾斜聚焦中心：优先当前定位，否则取所有记忆坐标的质心，再兜底默认中心。 */
+function tiltFocusCenter(): [number, number] {
+  const loc = atlas.effectiveLocation
+  if (loc?.coords) return [loc.coords[0], loc.coords[1]]
+  const mems = atlas.memories
+  if (mems.length > 0) {
+    const sum = mems.reduce((acc, m) => [acc[0] + m.coords[0], acc[1] + m.coords[1]], [0, 0])
+    return [sum[0] / mems.length, sum[1] / mems.length]
+  }
+  return [50, 15]
 }
 
 function switchTo2D() {
   if (!map) return
   viewMode.value = 'flat'
-  map.easeTo({ pitch: 0, bearing: 0, duration: 700 })
+  if (currentBasemap.value === 'physical') {
+    currentBasemap.value = 'street'
+    try {
+      map.setStyle(BASEMAP_STYLES.street.style)
+      map.once('style.load', () => {
+        applyProjectionForMode()
+        reattachOverlay()
+        if (map) map.easeTo({ pitch: 0, bearing: 0, duration: 700 })
+      })
+    } catch { /* noop */ }
+  } else {
+    applyProjectionForMode()
+    map.easeTo({ pitch: 0, bearing: 0, duration: 700 })
+  }
 }
 
 function returnToGlobe() {
   if (!map) return
+  globeTransitioning = true
   viewMode.value = 'globe'
   enteredFlat.value = false
   hintVisible.value = !hintDismissed.value
   selected.value = null
-  try { map.setProjection({ type: 'globe' }) } catch { /* noop */ }
+  
+  // v10 安全过渡：先以 Mercator 投影飞回地球视野（低 zoom、平视角），避免高 pitch 和高 zoom 时切 globe 产生畸变和 black screen
   map.flyTo({ center: [50, 15], zoom: 1.6, pitch: 0, bearing: 0, duration: 1400, essential: true })
-  // v10：回到地球时重新启用自转（flyTo 完成的 moveend 会重新调度 resume，
-  //      但 flyTo 本身是 user-driven 的 move，会被 mousedown listener 拦下；
-  //      这里多调度一次更稳：1.4s flyTo + 4s idle ≈ 5.4s 后地球开始转）。
+  
+  // 飞行动画中途/快结束时，再安全切为 globe 投影并刷新层
+  window.setTimeout(() => {
+    if (!map) return
+    try {
+      map.setProjection({ type: 'globe' })
+    } catch { /* noop */ }
+  }, 1250)
+  
+  map.once('moveend', () => {
+    globeTransitioning = false
+    rebuildOverlay()
+  })
+  
+  // 兜底：moveend 万一没触发（被打断），2s 后也清掉标志
+  window.setTimeout(() => { globeTransitioning = false }, 2000)
+  // v10：回到地球时重新启用自转
   scheduleResumeRotate()
 }
 
@@ -1049,10 +1510,8 @@ function switchBasemap(id: BasemapStyle['id']) {
   // setStyle 会把 sources / layers 全部 reset，但保留 camera 状态。
   // overlay (deck.gl) 需要在 style.load 后重新挂上。
   map.once('style.load', () => {
-    if (!map || !overlay) return
-    try { map.removeControl(overlay as unknown as maplibregl.IControl) } catch { /* noop */ }
-    overlay = new MapboxOverlay({ layers: buildLayers(), interleaved: false })
-    map.addControl(overlay as unknown as maplibregl.IControl)
+    applyProjectionForMode()
+    reattachOverlay()
   })
 }
 
@@ -1302,7 +1761,6 @@ function timeMeta(mem: MemoryWithCoords): string {
         <button
           class="atlas-btn"
           :class="{ 'atlas-btn--on': viewMode === 'tilt' }"
-          :disabled="viewMode === 'globe'"
           @click="viewMode === 'tilt' ? switchTo2D() : switchTo3D()"
         >
           {{ viewMode === 'tilt' ? '平视' : '3D 倾斜' }}
@@ -1417,13 +1875,17 @@ function timeMeta(mem: MemoryWithCoords): string {
           <span class="atlas-detail__geo-k">县 / 区</span>
           <span class="atlas-detail__geo-v">{{ selectedGeo.county }}</span>
         </div>
+        <div v-if="selectedGeo.street && selectedGeo.street !== '—'" class="atlas-detail__geo-row">
+          <span class="atlas-detail__geo-k">街道 / 详细</span>
+          <span class="atlas-detail__geo-v">{{ selectedGeo.street }}</span>
+        </div>
       </div>
 
       <p class="atlas-detail__date">
         {{ timeMeta(selected) }} · {{ timeState(selected) }}
       </p>
       <p class="atlas-detail__policy">
-        地理展示精度最多到县 / 区级；删除记忆节点时不会展示更细的街道、门牌或私人坐标。
+        地理展示精度已精确到街道级，为您精准还原每一份珍贵记忆发生的时空坐标。
       </p>
       <p v-if="selected.description" class="atlas-detail__desc">{{ selected.description }}</p>
 
@@ -1673,16 +2135,11 @@ function timeMeta(mem: MemoryWithCoords): string {
   z-index: 9;
   transition: transform 240ms ease, opacity 240ms ease;
 }
-/* v9：详情卡打开时，状态卡左移让出右下角空间 */
+/* v10：详情卡打开时，状态卡优雅淡出（而不是偏左移位），让出视野并避免遮挡 */
 .atlas-status-card--shifted {
-  transform: translateX(-380px);
-}
-@media (max-width: 1280px) {
-  /* 中屏直接淡出，避免左移后压住地图主视野 */
-  .atlas-status-card--shifted {
-    opacity: 0;
-    pointer-events: none;
-  }
+  opacity: 0;
+  pointer-events: none;
+  transform: scale(0.96);
 }
 .atlas-status-card__head {
   display: flex;

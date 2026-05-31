@@ -16,10 +16,12 @@ import {
   backfillVectors,
   backfillGeocoords,
   cleanupVisualData,
+  rebuildFragments,
   migrateLegacyOrphans,
   type VectorBackfillResult,
   type GeoBackfillResult,
   type VisualDataCleanupResult,
+  type FragmentRebuildResult,
   type OrphanMigrationResult,
 } from '../../api/adminManagement'
 import { useToastStore } from '../../stores/toast'
@@ -90,6 +92,28 @@ async function runCleanup() {
     toast.push({ key: 'admin.maintenance.failed', tone: 'error' })
   } finally {
     visualBusy.value = false
+  }
+}
+
+// ---- Fragments 批量重建 ----
+const fragmentsLimit = ref(500)
+const fragmentsBusy = ref(false)
+const fragmentsResult = ref<FragmentRebuildResult | null>(null)
+
+async function runFragmentsRebuild() {
+  fragmentsBusy.value = true
+  try {
+    const { data } = await rebuildFragments(fragmentsLimit.value)
+    if (data.code === 200) {
+      fragmentsResult.value = data.data
+      toast.push({ key: 'admin.maintenance.done', tone: 'success' })
+    } else {
+      toast.push({ key: 'admin.maintenance.failed', tone: 'error' })
+    }
+  } catch {
+    toast.push({ key: 'admin.maintenance.failed', tone: 'error' })
+  } finally {
+    fragmentsBusy.value = false
   }
 }
 
@@ -170,6 +194,23 @@ async function runMigration(apply: boolean) {
         </div>
         <p v-if="visualResult" class="maint-card__result">
           {{ t('admin.maintenance.visual.result', { dispatched: visualResult.dispatched, scanned: visualResult.scanned }) }}
+        </p>
+      </section>
+
+      <!-- Fragments 批量重建 -->
+      <section class="maint-card">
+        <h3 class="maint-card__title">🧩 {{ t('admin.maintenance.fragments.title') }}</h3>
+        <p class="maint-card__desc">{{ t('admin.maintenance.fragments.desc') }}</p>
+        <div class="maint-card__row">
+          <label>{{ t('admin.maintenance.limit') }}</label>
+          <input v-model.number="fragmentsLimit" type="number" min="1" max="1000" class="input maint-input" />
+          <button class="button button--primary" :disabled="fragmentsBusy" @click="runFragmentsRebuild">
+            <span v-if="fragmentsBusy" class="auth-spinner"></span>
+            <span v-else>{{ t('admin.maintenance.fragments.run') }}</span>
+          </button>
+        </div>
+        <p v-if="fragmentsResult" class="maint-card__result">
+          {{ t('admin.maintenance.fragments.result', { dispatched: fragmentsResult.dispatched, scanned: fragmentsResult.scanned }) }}
         </p>
       </section>
 

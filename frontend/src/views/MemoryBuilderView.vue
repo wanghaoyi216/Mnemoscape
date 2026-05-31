@@ -21,6 +21,8 @@ const memoryDate = ref('')
 const memorySeason = ref('')
 const memoryTimeOfDay = ref('')
 const memoryLocation = ref('')
+/** LocationPicker 上抛的精确坐标 [lng, lat]（GPS / 正向地理编码）；用于街道级定位。 */
+const memoryCoords = ref<[number, number] | null>(null)
 const privacyLevel = ref('PRIVATE')
 const error = ref('')
 const loading = ref(false)
@@ -76,6 +78,8 @@ async function handleSubmit() {
       memorySeason: memorySeason.value || undefined,
       memoryTimeOfDay: memoryTimeOfDay.value || undefined,
       memoryLocation: memoryLocation.value || undefined,
+      memoryLng: memoryCoords.value?.[0],
+      memoryLat: memoryCoords.value?.[1],
       privacyLevel: privacyLevel.value,
       sceneDataUrl: selectedCoverUrl.value || undefined,
     })
@@ -292,7 +296,7 @@ async function handleSubmit() {
 
           <label class="field" style="grid-column: 1 / -1;">
             <span class="field__label">{{ t('memory.builder.fields.location') }}</span>
-            <LocationPicker v-model="memoryLocation" />
+            <LocationPicker v-model="memoryLocation" @update:coords="memoryCoords = $event" />
             <p class="location-helper">
               {{ locale === 'zh-CN'
                 ? '💡 选择国家/省/市后可继续填写街道；点击「📍 使用当前位置」让浏览器自动定位（需要授予权限）。系统会按这条信息在时空地图上标点。'

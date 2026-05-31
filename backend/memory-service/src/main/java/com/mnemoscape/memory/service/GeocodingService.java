@@ -302,42 +302,69 @@ public class GeocodingService {
         if (!enabled || location == null || location.isBlank()) return Optional.empty();
         String norm = location.trim().toLowerCase().replaceAll("\\s+", "");
 
-        // anchor 表：包含查找
+        // 1. 判断是否为简单城市/区域名（完全等于锚点，或者锚点名+市/省/特区/区等，无其他文字）
+        boolean isSimpleCity = false;
+        double[] directAnchor = null;
+        for (Map.Entry<String, double[]> e : ANCHORS.entrySet()) {
+            String anchorKey = e.getKey().toLowerCase();
+            if (norm.equals(anchorKey) || 
+                norm.equals(anchorKey + "市") || 
+                norm.equals(anchorKey + "省") || 
+                norm.equals(anchorKey + "特别行政区") || 
+                norm.equals(anchorKey + "特区") || 
+                norm.equals(anchorKey + "city") || 
+                norm.equals(anchorKey + "town") || 
+                norm.equals(anchorKey + "district")) {
+                isSimpleCity = true;
+                directAnchor = e.getValue();
+                break;
+            }
+        }
+
+        // 如果是简单城市名，直接返回预置坐标（避免对简单查询发起外部 API 调度）
+        if (isSimpleCity && directAnchor != null) {
+            return Optional.of(directAnchor.clone());
+        }
+
+        // 2. 对于较详细的地址，优先检查远程缓存与外部 Nominatim 地理编码
+        double[] cached = remoteCache.get(norm);
+        if (cached != null) return Optional.of(cached.clone());
+
+        if (remoteEnabled) {
+            try {
+                String url = nominatimBase + "/search?format=json&limit=1&q="
+                        + URLEncoder.encode(location.trim(), StandardCharsets.UTF_8);
+                HttpHeaders headers = new HttpHeaders();
+                headers.set("User-Agent", "Mnemoscape/1.0 (memory-service)");
+                org.springframework.http.HttpEntity<Void> req = new org.springframework.http.HttpEntity<>(headers);
+                String body = restTemplate.exchange(URI.create(url),
+                        org.springframework.http.HttpMethod.GET, req, String.class)
+                        .getBody();
+                if (body != null) {
+                    JsonNode arr = objectMapper.readTree(body);
+                    if (arr.isArray() && arr.size() > 0) {
+                        double lat = arr.get(0).get("lat").asDouble();
+                        double lon = arr.get(0).get("lon").asDouble();
+                        double[] coords = new double[]{lon, lat};
+                        remoteCache.put(norm, coords);
+                        return Optional.of(coords);
+                    }
+                }
+            } catch (Exception e) {
+                log.debug("Geocoder remote fetch failed for '{}': {}", location, e.toString());
+            }
+        }
+
+        // 3. 如果远程未启用或解析失败，降级使用 anchor 包含查找
         for (Map.Entry<String, double[]> e : ANCHORS.entrySet()) {
             if (norm.contains(e.getKey().toLowerCase())) {
                 return Optional.of(e.getValue().clone());
             }
         }
 
-        // 远程命中缓存
-        double[] cached = remoteCache.get(norm);
-        if (cached != null) return Optional.of(cached.clone());
-
-        if (!remoteEnabled) return Optional.empty();
-
-        try {
-            String url = nominatimBase + "/search?format=json&limit=1&q="
-                    + URLEncoder.encode(location.trim(), StandardCharsets.UTF_8);
-            HttpHeaders headers = new HttpHeaders();
-            headers.set("User-Agent", "Mnemoscape/1.0 (memory-service)");
-            org.springframework.http.HttpEntity<Void> req = new org.springframework.http.HttpEntity<>(headers);
-            String body = restTemplate.exchange(URI.create(url),
-                    org.springframework.http.HttpMethod.GET, req, String.class)
-                    .getBody();
-            if (body == null) return Optional.empty();
-            JsonNode arr = objectMapper.readTree(body);
-            if (arr.isArray() && arr.size() > 0) {
-                double lat = arr.get(0).get("lat").asDouble();
-                double lon = arr.get(0).get("lon").asDouble();
-                double[] coords = new double[]{lon, lat};
-                remoteCache.put(norm, coords);
-                return Optional.of(coords);
-            }
-        } catch (Exception e) {
-            log.debug("Geocoder remote fetch failed for '{}': {}", location, e.toString());
-        }
         return Optional.empty();
     }
+
 
     /** 仅供单元测试或回填脚本使用：直接读 anchor 表，不打网络。 */
     public Optional<double[]> resolveAnchorOnly(String location) {

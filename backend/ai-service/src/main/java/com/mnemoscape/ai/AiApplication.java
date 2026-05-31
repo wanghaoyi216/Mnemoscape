@@ -8,6 +8,7 @@ import org.springframework.cloud.openfeign.EnableFeignClients;
 @SpringBootApplication(scanBasePackages = {"com.mnemoscape.ai", "com.mnemoscape.common"})
 @EnableDiscoveryClient
 @EnableFeignClients(basePackages = "com.mnemoscape.ai.client")
+@org.springframework.cache.annotation.EnableCaching
 public class AiApplication {
     public static void main(String[] args) {
         SpringApplication.run(AiApplication.class, args);

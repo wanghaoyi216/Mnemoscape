@@ -16,7 +16,7 @@
  *    "美国 San Francisco"      / "日本 东京 涩谷"
  *  这与 memory-service GeocodingService 现有的 anchor 表能正确命中。
  */
-import { computed, ref, watch } from 'vue'
+import { computed, ref, watch, nextTick, onBeforeUnmount } from 'vue'
 import { CHINA_REGIONS, COUNTRIES } from '../../composables/chinaRegions'
 
 const props = defineProps<{
@@ -24,6 +24,8 @@ const props = defineProps<{
 }>()
 const emit = defineEmits<{
   (e: 'update:modelValue', val: string): void
+  /** 精确坐标 [lng, lat]：GPS 定位或正向地理编码命中街道时一并上抛；地址被手动改动时给 null。 */
+  (e: 'update:coords', val: [number, number] | null): void
 }>()
 
 const country = ref('中国')
@@ -33,6 +35,15 @@ const detail = ref('')     // 县/区/街道（自由输入）
 
 const locating = ref(false)
 const locateError = ref('')
+
+/** GPS / 正向地理编码命中后的精确坐标 [lng, lat]；手动改动地址字段时清空。 */
+const preciseCoords = ref<[number, number] | null>(null)
+/** 反查回填期间临时屏蔽 watch 的 setCoords(null)，避免把 GPS 坐标误清。 */
+let suppressCoordReset = false
+function setCoords(c: [number, number] | null) {
+  preciseCoords.value = c
+  emit('update:coords', c)
+}
 
 const provinceOptions = computed(() => CHINA_REGIONS.map((p) => p.name))
 const cityOptions = computed(() => {
@@ -100,8 +111,52 @@ watch(country, () => {
     // 不自动选省，让用户主动选
   }
   city.value = ''
+  // 手动切国家 → 之前的 GPS 精确点已经不对应，清掉让后端按地名解析
+  if (!suppressCoordReset) setCoords(null)
 })
-watch(province, () => { city.value = '' })
+watch(province, () => { city.value = ''; if (!suppressCoordReset) setCoords(null) })
+watch(city, () => { if (!suppressCoordReset) setCoords(null) })
+
+/* 手填街道 / 详细地址：debounce 后做一次 Nominatim 正向地理编码，把整行地址
+   解析成街道级坐标。命中即上抛 preciseCoords，让"填写时尽可能精确到街道"成立。 */
+let geocodeTimer: ReturnType<typeof setTimeout> | null = null
+function scheduleForwardGeocode(delay = 700) {
+  if (suppressCoordReset) return
+  setCoords(null)
+  if (geocodeTimer) clearTimeout(geocodeTimer)
+  const query = composed.value
+  if (!detail.value.trim() || query.length < 4) return
+  geocodeTimer = setTimeout(() => forwardGeocode(query), delay)
+}
+
+watch(detail, () => {
+  // 用户改了详细地址 → 旧 GPS 坐标作废，等正向地理编码结果
+  scheduleForwardGeocode()
+})
+
+watch([country, province, city], () => {
+  if (suppressCoordReset) return
+  if (detail.value.trim()) scheduleForwardGeocode(450)
+})
+
+async function forwardGeocode(query: string) {
+  try {
+    const url = `https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&addressdetails=1&accept-language=zh&q=${encodeURIComponent(query)}`
+    const resp = await fetch(url, { headers: { Accept: 'application/json' } })
+    if (!resp.ok) return
+    const arr = await resp.json()
+    if (Array.isArray(arr) && arr.length > 0) {
+      const lon = Number(arr[0].lon)
+      const lat = Number(arr[0].lat)
+      // 只有当用户输入未再变化时才落定，避免竞态把过期结果写回
+      if (Number.isFinite(lon) && Number.isFinite(lat) && composed.value === query) {
+        setCoords([lon, lat])
+      }
+    }
+  } catch {
+    /* 正向地理编码失败 → 保持 null，后端按地名 anchor 兜底 */
+  }
+}
 
 /* ============ 浏览器定位 + Nominatim 反查 ============ */
 async function locate() {
@@ -114,41 +169,56 @@ async function locate() {
   try {
     const pos = await new Promise<GeolocationPosition>((resolve, reject) => {
       navigator.geolocation.getCurrentPosition(resolve, reject, {
-        enableHighAccuracy: false,
-        timeout: 8000,
-        maximumAge: 60_000,
+        enableHighAccuracy: true,
+        timeout: 12_000,
+        maximumAge: 15_000,
       })
     })
     const { latitude, longitude } = pos.coords
+    // GPS 拿到的就是街道级精确坐标 —— 直接作为 preciseCoords 上抛，后端会优先采用，
+    // 不再把它退化成城市中心点。
+    setCoords([longitude, latitude])
     // Nominatim 公共服务（OpenStreetMap）— accept-language=zh 让返回是中文。
-    const url = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${latitude}&lon=${longitude}&accept-language=zh`
+    const url = `https://nominatim.openstreetmap.org/reverse?format=jsonv2&addressdetails=1&zoom=18&lat=${latitude}&lon=${longitude}&accept-language=zh`
     const resp = await fetch(url, { headers: { 'Accept': 'application/json' } })
     if (!resp.ok) throw new Error(`HTTP ${resp.status}`)
     const data = await resp.json()
     const a = data?.address || {}
     const cn = (a.country || '').includes('中国') || a.country_code === 'cn'
+    // 反查回填行政区字段会触发 country/province/city 的 watch（进而 setCoords(null)）。
+    // 用 suppressCoordReset 标志在回填期间临时屏蔽清空，回填完再把 GPS 坐标重新落定。
+    suppressCoordReset = true
     if (cn) {
       country.value = '中国'
       // Nominatim 在中国返回的 state 通常是省名，city / county 是市/区
       const provHit = CHINA_REGIONS.find((p) => (a.state || '').includes(p.name))
       if (provHit) province.value = provHit.name
-      const cityFromAddress = a.city || a.county || a.town || a.suburb || ''
+      const cityFromAddress = a.city || a.prefecture || a.municipality || a.county || a.town || a.suburb || ''
       const cityHit = provHit?.cities.find((c) => cityFromAddress.includes(c)) || ''
       city.value = cityHit
-      const restParts = [a.suburb, a.neighbourhood, a.road].filter(Boolean) as string[]
+      const restParts = [a.county, a.suburb, a.neighbourhood, a.road, a.house_number]
+        .filter(Boolean) as string[]
       detail.value = restParts.length ? restParts.join('') : ''
     } else {
       country.value = a.country || ''
       province.value = ''
       city.value = a.city || a.town || a.state || ''
-      detail.value = [a.suburb, a.neighbourhood, a.road].filter(Boolean).join(' ')
+      detail.value = [a.suburb, a.neighbourhood, a.road, a.house_number].filter(Boolean).join(' ')
     }
+    // 等本轮同步赋值触发的 watch 跑完后再恢复，并把 GPS 精确坐标重新落定
+    await nextTick()
+    suppressCoordReset = false
+    setCoords([longitude, latitude])
   } catch (e: any) {
     locateError.value = e?.message || '定位失败，请允许浏览器获取位置或手动选择'
   } finally {
     locating.value = false
   }
 }
+
+onBeforeUnmount(() => {
+  if (geocodeTimer) clearTimeout(geocodeTimer)
+})
 </script>
 
 <template>
@@ -194,6 +264,7 @@ async function locate() {
         <span v-else>📍 使用当前位置</span>
       </button>
       <span v-if="composed" class="loc-picker__preview">将保存为：<b>{{ composed }}</b></span>
+      <span v-if="preciseCoords" class="loc-picker__ok">已锁定街道级坐标</span>
       <span v-if="locateError" class="loc-picker__error">{{ locateError }}</span>
     </div>
   </div>
@@ -232,5 +303,6 @@ async function locate() {
 }
 .loc-picker__locate:disabled { opacity: 0.55; cursor: progress; }
 .loc-picker__preview b { color: var(--primary); font-weight: 600; }
+.loc-picker__ok { color: var(--primary); font-weight: 600; }
 .loc-picker__error { color: #ff6b6b; }
 </style>

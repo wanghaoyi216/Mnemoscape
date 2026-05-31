@@ -1023,6 +1023,18 @@
         "run": "Run cleanup",
         "result": "Scanned {scanned}, dispatched {dispatched} rebuild jobs."
       },
+      "geo": {
+        "title": "Coordinate backfill",
+        "desc": "Scan memories with non-empty location text but empty coordinates, re-resolve their longitude and latitude and persist them to the database. Retraced trails on Atlas and heatmap charts will display these locations after backfilling.",
+        "run": "Run backfill",
+        "result": "Scanned {scanned}, resolved {resolved}, skipped {skipped} memories."
+      },
+      "fragments": {
+        "title": "Fragments batch rebuild",
+        "desc": "Scan and purge historical legacy English mock fragments, and asynchronously rebuild new, grounded Chinese fragments matching the memory descriptions using the LLM or localized rule pipeline.",
+        "run": "Run rebuild",
+        "result": "Scanned {scanned}, dispatched {dispatched} fragment rebuild tasks."
+      },
       "orphan": {
         "title": "MinIO legacy orphan migration",
         "desc": "Early uploads have no users/ prefix and get exposed as public assets to everyone. This tool moves such legacy private objects under the legacy-orphan/ prefix. Preview first, then apply.",

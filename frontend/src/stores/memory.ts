@@ -61,6 +61,8 @@ export const useMemoryStore = defineStore('memory', () => {
     memorySeason?: string
     memoryTimeOfDay?: string
     memoryLocation?: string
+    memoryLng?: number
+    memoryLat?: number
     privacyLevel?: string
     sceneDataUrl?: string
   }) {

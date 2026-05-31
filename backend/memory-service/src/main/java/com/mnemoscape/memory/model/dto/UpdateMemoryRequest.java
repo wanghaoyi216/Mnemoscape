@@ -15,6 +15,9 @@ public class UpdateMemoryRequest {
     private String memorySeason;
     private String memoryTimeOfDay;
     private String memoryLocation;
+    /** 精确坐标（可选）：编辑时若前端重新定位到街道，优先采用，避免退化成城市中心点。 */
+    private Double memoryLat;
+    private Double memoryLng;
 
     @Pattern(regexp = "(?i)PRIVATE|FRIENDS|PUBLIC", message = "Privacy level must be PRIVATE, FRIENDS, or PUBLIC")
     private String privacyLevel;
@@ -50,6 +53,10 @@ public class UpdateMemoryRequest {
     public void setMemoryTimeOfDay(String memoryTimeOfDay) { this.memoryTimeOfDay = memoryTimeOfDay; }
     public String getMemoryLocation() { return memoryLocation; }
     public void setMemoryLocation(String memoryLocation) { this.memoryLocation = memoryLocation; }
+    public Double getMemoryLat() { return memoryLat; }
+    public void setMemoryLat(Double memoryLat) { this.memoryLat = memoryLat; }
+    public Double getMemoryLng() { return memoryLng; }
+    public void setMemoryLng(Double memoryLng) { this.memoryLng = memoryLng; }
     public String getPrivacyLevel() { return privacyLevel; }
     public void setPrivacyLevel(String privacyLevel) { this.privacyLevel = privacyLevel; }
     public String getSceneDataUrl() { return sceneDataUrl; }

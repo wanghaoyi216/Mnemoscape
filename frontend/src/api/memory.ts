@@ -25,7 +25,10 @@ export function createMemory(data: {
   memorySeason?: string
   memoryTimeOfDay?: string
   memoryLocation?: string
+  memoryLng?: number
+  memoryLat?: number
   privacyLevel?: string
+  sceneDataUrl?: string
 }) {
   return client.post<ApiResponse<MemoryItem>>('/memories', data)
 }

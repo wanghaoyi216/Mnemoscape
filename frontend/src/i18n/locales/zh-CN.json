@@ -1179,6 +1179,12 @@
         "run": "开始清洗",
         "result": "扫描 {scanned} 条，已下发 {dispatched} 条重建任务。"
       },
+      "fragments": {
+        "title": "历史 Fragments 重建",
+        "desc": "批量清除历史静态英文 Mock 碎片，并基于真实大模型或中文规则，重新生成契合记忆具体描述的 grounded 中文碎片。",
+        "run": "开始重建",
+        "result": "扫描 {scanned} 条，已下发 {dispatched} 条碎片重建任务。"
+      },
       "orphan": {
         "title": "MinIO 历史孤儿迁移",
         "desc": "早期上传的对象没有 users/ 前缀，会被当成公共素材暴露给所有用户。此工具把这类历史私有对象搬到 legacy-orphan/ 前缀下。建议先「预览」确认候选，再「执行迁移」。",
