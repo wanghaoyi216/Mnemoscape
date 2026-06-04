@@ -72,7 +72,7 @@ mnemoscape:
     refresh-token-expiration: 604800000
   ai:
     upstream:
-      default-model: ${NVIDIA_MODEL:minimaxai/minimax-m2.7}
+      default-model: ${NVIDIA_GENERATION_MODEL:meta/llama-4-maverick-17b-128e-instruct}
 
 springdoc:
   api-docs:

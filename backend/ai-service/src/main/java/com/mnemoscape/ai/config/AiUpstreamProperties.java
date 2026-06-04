@@ -36,6 +36,23 @@ public class AiUpstreamProperties {
      */
     private String visionModel = "meta/llama-3.2-11b-vision-instruct";
 
+    private String chatModel = "google/gemma-3n-e4b-it";
+    private String reasoningModel = "bytedance/seed-oss-36b-instruct";
+    private String agenticModel = "google/gemma-3n-e2b-it";
+    private String generationModel = "meta/llama-4-maverick-17b-128e-instruct";
+
+    /**
+     * Embedding 模型（用于记忆向量化 + 相似度计算）。
+     * 默认 nvidia/nv-embedqa-e5-v5 — 1024 维，支持中英文，余弦相似度。
+     */
+    private String embeddingModel = "nvidia/nv-embedqa-e5-v5";
+
+    /**
+     * 情感分析模型（用于 EmotionAnalysisTool）。
+     * 默认用 chatModel 做 zero-shot 情感分类。
+     */
+    private String sentimentModel = "google/gemma-3n-e2b-it";
+
     /**
      * 视觉模型主选不可用时的降级（默认 90B Vision）。
      * 两者都不可用时，最终降级为"用文件名 + URL 注入 prompt"，让基座 M2.7 至少
@@ -65,6 +82,16 @@ public class AiUpstreamProperties {
     }
     public String getVisionModel() { return visionModel; }
     public void setVisionModel(String visionModel) { this.visionModel = visionModel; }
+
+    public String getChatModel() { return chatModel; }
+    public void setChatModel(String chatModel) { this.chatModel = chatModel; }
+    public String getReasoningModel() { return reasoningModel; }
+    public void setReasoningModel(String reasoningModel) { this.reasoningModel = reasoningModel; }
+    public String getAgenticModel() { return agenticModel; }
+    public void setAgenticModel(String agenticModel) { this.agenticModel = agenticModel; }
+    public String getGenerationModel() { return generationModel; }
+    public void setGenerationModel(String generationModel) { this.generationModel = generationModel; }
+
     public String getVisionFallbackModel() { return visionFallbackModel; }
     public void setVisionFallbackModel(String visionFallbackModel) {
         this.visionFallbackModel = visionFallbackModel;
@@ -75,4 +102,10 @@ public class AiUpstreamProperties {
     }
     public long getVisionTimeoutMs() { return visionTimeoutMs; }
     public void setVisionTimeoutMs(long visionTimeoutMs) { this.visionTimeoutMs = visionTimeoutMs; }
+
+    public String getEmbeddingModel() { return embeddingModel; }
+    public void setEmbeddingModel(String embeddingModel) { this.embeddingModel = embeddingModel; }
+
+    public String getSentimentModel() { return sentimentModel; }
+    public void setSentimentModel(String sentimentModel) { this.sentimentModel = sentimentModel; }
 }

@@ -28,6 +28,15 @@ public class AiChatRequest {
      */
     private List<String> images;
 
+    /**
+     * 可选 — 启用 ReAct 自主循环协议（任务 C4）。当 {@code true} 时，
+     * ChatController 走 {@code ReActController.run()} 路径；模型按
+     * {@code REACT_PROTOCOL_PROMPT} 输出 think→act→observe 标签，
+     * 后端解析标签、调工具、把结果当 observation 喂回下一轮。
+     * 默认 false 保持向后兼容。
+     */
+    private Boolean reAct;
+
     public String getQuestion() { return question; }
     public void setQuestion(String question) { this.question = question; }
     public List<MemoryDigest> getContext() { return context; }
@@ -36,6 +45,10 @@ public class AiChatRequest {
     public void setLocale(String locale) { this.locale = locale; }
     public List<String> getImages() { return images; }
     public void setImages(List<String> images) { this.images = images; }
+    public Boolean getReAct() { return reAct; }
+    public void setReAct(Boolean reAct) { this.reAct = reAct; }
+    /** 兼容 Boolean 字段的 boolean 取值（避免 unbox NPE）。 */
+    public boolean isReAct() { return Boolean.TRUE.equals(reAct); }
 
     public static class MemoryDigest {
         private String id;

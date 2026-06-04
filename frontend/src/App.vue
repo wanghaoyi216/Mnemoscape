@@ -6,6 +6,7 @@ import AppHeader from './components/layout/AppHeader.vue'
 import AiMascotDock from './components/ai/AiMascotDock.vue'
 import CustomerSupportWidget from './components/support/CustomerSupportWidget.vue'
 import ToastContainer from './components/common/ToastContainer.vue'
+import WeatherFxOverlay from './components/layout/WeatherFxOverlay.vue'
 import { useHealthCheck } from './composables/useHealthCheck'
 import { useDynamicMedia } from './composables/useDynamicMedia'
 import { useAuthStore } from './stores/auth'
@@ -68,6 +69,8 @@ onMounted(() => {
     <AiMascotDock v-if="auth.isLoggedIn" />
     <CustomerSupportWidget v-if="auth.isLoggedIn" />
     <ToastContainer />
+    <!-- 16+ 环境特效层（登录后启用，避免与登录页 WebGL 背景冲突） -->
+    <WeatherFxOverlay v-if="auth.isLoggedIn" />
     <footer v-if="route.name !== 'MemoryAtlas'" class="app-footer" role="contentinfo">
       <div class="page-shell app-footer__inner">
         <div class="app-footer__brand">

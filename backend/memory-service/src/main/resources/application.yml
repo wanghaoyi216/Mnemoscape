@@ -128,3 +128,10 @@ logging:
     root: INFO
     com.mnemoscape: INFO
     org.hibernate.SQL: WARN
+
+feign:
+  client:
+    config:
+      default:
+        connectTimeout: 5000
+        readTimeout: 120000

@@ -619,6 +619,14 @@
         "calm": "Calm",
         "nostalgia": "Nostalgia"
       }
+    },
+    "emotion": {
+      "loading": "Aggregating your emotional profile…",
+      "loadFailed": "Failed to load emotional profile",
+      "unavailable": "Emotional profile temporarily unavailable",
+      "empty": "No emotional data yet — add a few memories with emotion tags to start charting",
+      "hint": "Data is averaged across your 50 most recent memories with emotion tags, then drives the chaotic attractor.",
+      "retry": "Retry"
     }
   },
   "chat": {

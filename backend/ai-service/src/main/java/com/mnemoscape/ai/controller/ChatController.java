@@ -3,6 +3,7 @@ package com.mnemoscape.ai.controller;
 import com.mnemoscape.ai.exception.AiUpstreamException;
 import com.mnemoscape.ai.model.dto.AiChatRequest;
 import com.mnemoscape.ai.service.ChatReasoner;
+import com.mnemoscape.ai.service.ReActController;
 import com.mnemoscape.common.dto.ApiResponse;
 import jakarta.annotation.PreDestroy;
 import jakarta.validation.Valid;
@@ -48,6 +49,7 @@ public class ChatController {
     private static final Logger log = LoggerFactory.getLogger(ChatController.class);
 
     private final ChatReasoner reasoner;
+    private final ReActController reactController;
 
     /** 共享调度器：在视觉前置阻塞 / 上游首字延迟期间发 SSE 注释帧 :keepalive，
      *  防止前端浏览器 / 反向代理 / 开发服务器把"无任何字节流出"的 SSE 当死连接 reset。
@@ -66,8 +68,9 @@ public class ChatController {
         return t;
     });
 
-    public ChatController(ChatReasoner reasoner) {
+    public ChatController(ChatReasoner reasoner, ReActController reactController) {
         this.reasoner = reasoner;
+        this.reactController = reactController;
     }
 
     @PreDestroy
@@ -147,6 +150,15 @@ public class ChatController {
         } catch (Exception e) {
             log.warn("[ChatController] failed to send meta: {}", e.getMessage());
             try { emitter.completeWithError(e); } catch (Exception ignored) {}
+            return;
+        }
+
+        // ============ 任务 C4：ReAct 自主循环路径 ============
+        // 客户端在 AiChatRequest.reAct=true 时显式启用 ReAct；前端 SSE 帧
+        // 会从 token/done 扩展为 thought/tool_start/tool_end/token/done，
+        // 由本方法第二段订阅 ReActController.onEvent 桥接。
+        if (request.isReAct()) {
+            streamReAct(emitter, request, userId, requestId);
             return;
         }
 
@@ -270,5 +282,115 @@ public class ChatController {
         } catch (Exception e) {
             log.debug("[ChatController] failed to send error frame: {}", e.getMessage());
         }
+    }
+
+    /**
+     * 任务 C4：把 ReActController 的事件桥到 SSE。
+     *
+     * <p>事件映射：
+     * <ul>
+     *   <li>thought     → {@code event: thought} data={text}</li>
+     *   <li>action_start→ {@code event: tool_start} data={name, input}</li>
+     *   <li>observation → {@code event: tool_end} data={name, output}</li>
+     *   <li>token       → {@code event: token} data=text</li>
+     *   <li>done        → {@code event: done} data={ok,requestId}</li>
+     *   <li>error       → {@code event: error} data={code, detail, requestId}</li>
+     * </ul>
+     */
+    private void streamReAct(SseEmitter emitter, AiChatRequest request, String userId, String requestId) {
+        AtomicBoolean firstTokenSeen = new AtomicBoolean(false);
+        ScheduledFuture<?> keepAlive = keepAliveExec.scheduleAtFixedRate(() -> {
+            if (firstTokenSeen.get()) return;
+            try {
+                emitter.send(SseEmitter.event().comment("keepalive"));
+            } catch (Exception e) {
+                // 客户端断 / emitter 已关，定时器自动 noop
+            }
+        }, 5, 5, TimeUnit.SECONDS);
+
+        // ReActController 同步跑（内部用弹性线程），把事件一个一个 emit 到 SSE。
+        ChatReasoner.EventListener listener = evt -> {
+            if (evt == null) return;
+            try {
+                switch (evt.type == null ? "" : evt.type) {
+                    case "thought": {
+                        Map<String, Object> body = new LinkedHashMap<>();
+                        body.put("text", evt.text);
+                        emitter.send(SseEmitter.event().name("thought").data(body));
+                        break;
+                    }
+                    case "action_start": {
+                        Map<String, Object> body = new LinkedHashMap<>();
+                        body.put("name", evt.toolName);
+                        body.put("input", evt.input);
+                        emitter.send(SseEmitter.event().name("tool_start").data(body));
+                        break;
+                    }
+                    case "observation": {
+                        Map<String, Object> body = new LinkedHashMap<>();
+                        body.put("name", evt.toolName);
+                        body.put("output", evt.output);
+                        emitter.send(SseEmitter.event().name("tool_end").data(body));
+                        break;
+                    }
+                    case "token": {
+                        if (evt.text == null || evt.text.isEmpty()) break;
+                        firstTokenSeen.set(true);
+                        emitter.send(SseEmitter.event().name("token").data(evt.text));
+                        break;
+                    }
+                    case "done": {
+                        emitter.send(SseEmitter.event().name("done").data(
+                                Map.of("ok", true, "requestId", requestId, "reason", evt.text == null ? "" : evt.text)));
+                        try { emitter.complete(); } catch (Exception ignored) {}
+                        break;
+                    }
+                    case "error": {
+                        Map<String, Object> body = new LinkedHashMap<>();
+                        body.put("code", "REACT_ERROR");
+                        body.put("detail", evt.text);
+                        body.put("requestId", requestId);
+                        emitter.send(SseEmitter.event().name("error").data(body));
+                        break;
+                    }
+                    default:
+                        // 未识别事件：忽略
+                        break;
+                }
+            } catch (Exception e) {
+                log.debug("[ChatController] react SSE emit failed: {}", e.getMessage());
+            }
+        };
+
+        // 在独立线程池跑 ReActController.run() ——
+        // 它内部会阻塞订阅 ChatReasoner 的 Flux（最多 45s/turn × 6 轮），
+        // 不能放在 servlet 线程里。
+        planExec.submit(() -> {
+            try {
+                reactController.run(request, userId, requestId, listener);
+            } catch (Exception e) {
+                log.warn("[ChatController] ReAct run uncaught: {}", e.toString());
+                Map<String, Object> body = new LinkedHashMap<>();
+                body.put("code", "REACT_UNCAUGHT");
+                body.put("detail", e.getMessage());
+                body.put("requestId", requestId);
+                try {
+                    emitter.send(SseEmitter.event().name("error").data(body));
+                } catch (Exception ignored) {}
+                try { emitter.complete(); } catch (Exception ignored) {}
+            } finally {
+                keepAlive.cancel(false);
+            }
+        });
+
+        emitter.onTimeout(() -> {
+            keepAlive.cancel(false);
+            sendError(emitter, new AiUpstreamException(AiUpstreamException.Reason.TIMEOUT,
+                    "SSE timeout"), requestId);
+            try { emitter.complete(); } catch (Exception ignored) {}
+        });
+        emitter.onError(t -> {
+            keepAlive.cancel(false);
+        });
     }
 }

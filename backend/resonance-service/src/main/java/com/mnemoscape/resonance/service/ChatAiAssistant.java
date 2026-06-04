@@ -55,24 +55,26 @@ public class ChatAiAssistant {
     /** 判断一条群聊消息是否在召唤 AI。 */
     public boolean isAiMention(String content) {
         if (content == null) return false;
-        String low = content.trim().toLowerCase(Locale.ROOT);
+        String low = content.toLowerCase(Locale.ROOT);
         for (String p : MENTION_PREFIXES) {
-            if (low.startsWith(p)) return true;
+            if (low.contains(p)) return true;
         }
         return false;
     }
 
-    /** 去掉 @AI 前缀，拿到用户真正想问的内容。 */
+    /** 去掉 @AI，拿到用户真正想问的内容。 */
     public String stripMention(String content) {
         if (content == null) return "";
-        String trimmed = content.trim();
-        String low = trimmed.toLowerCase(Locale.ROOT);
+        String result = content;
+        String low = content.toLowerCase(Locale.ROOT);
         for (String p : MENTION_PREFIXES) {
-            if (low.startsWith(p)) {
-                return trimmed.substring(p.length()).trim();
+            int idx = low.indexOf(p);
+            if (idx != -1) {
+                result = result.substring(0, idx) + result.substring(idx + p.length());
+                low = result.toLowerCase(Locale.ROOT);
             }
         }
-        return trimmed;
+        return result.trim();
     }
 
     /**
@@ -86,11 +88,29 @@ public class ChatAiAssistant {
     public String answerInGroup(String groupId, String askerId, String question) {
         List<ChatMessage> history = safeHistory(() ->
                 chatMessageRepository.findByGroupIdOrderByCreatedAtAsc(groupId));
+        
+        String realQuestion = question;
+        if (realQuestion == null || realQuestion.isBlank()) {
+            if (history != null) {
+                for (int i = history.size() - 1; i >= 0; i--) {
+                    ChatMessage m = history.get(i);
+                    if (!AI_USER_ID.equals(m.getSenderId())
+                            && "TEXT".equalsIgnoreCase(m.getMessageType())
+                            && m.getContent() != null
+                            && !m.getContent().trim().isBlank()
+                            && !isAiMention(m.getContent())) {
+                        realQuestion = m.getContent();
+                        break;
+                    }
+                }
+            }
+        }
+
         String context = buildHistoryContext(history);
         String prompt = "你是群聊里的 AI 助手「星空使者」。下面是这个群聊最近的对话记录，"
                 + "请结合上下文气氛，自然地回应被 @ 的问题。回答简洁友好，像群里的一员。\n\n"
                 + "【最近对话】\n" + context + "\n\n"
-                + "【被 @ 的问题】\n" + (question.isBlank() ? "（用户只是 @ 了你，请热情地打个招呼并询问能帮什么）" : question);
+                + "【被 @ 的问题】\n" + (realQuestion == null || realQuestion.isBlank() ? "（用户只是 @ 了你，请热情地打个招呼并询问能帮什么）" : realQuestion);
         return callAi(prompt, askerId,
                 "星空使者暂时离线了，稍后再 @ 我吧～");
     }
@@ -117,26 +137,61 @@ public class ChatAiAssistant {
 
     /* ---------------- internal ---------------- */
 
+    private static final java.net.http.HttpClient httpClient = java.net.http.HttpClient.newBuilder()
+            .connectTimeout(java.time.Duration.ofSeconds(10))
+            .build();
+
     private String callAi(String prompt, String userId, String fallback) {
-        if (aiClient == null) {
-            log.warn("[ChatAiAssistant] ai-service client not available; returning fallback");
-            return fallback;
+        // 1. 优先尝试标准的 Feign Client 调用
+        if (aiClient != null) {
+            try {
+                Map<String, Object> req = new LinkedHashMap<>();
+                req.put("question", prompt);
+                req.put("locale", "zh");
+                ApiResponse<Map<String, Object>> resp = aiClient.chat(req, userId);
+                Map<String, Object> data = resp == null ? null : resp.getData();
+                Object answer = data == null ? null : data.get("answer");
+                if (answer != null && !String.valueOf(answer).isBlank()) {
+                    return String.valueOf(answer).trim();
+                }
+            } catch (Exception e) {
+                log.warn("[ChatAiAssistant] Primary Feign client call failed: {}. Falling back to direct Local-HTTP...", e.toString());
+            }
         }
+
+        // 2. 核心本地直连兜底：当服务发现尚未注册完毕或不可达时，直接轰击本地 8083 端口上的 ai-service！
         try {
             Map<String, Object> req = new LinkedHashMap<>();
             req.put("question", prompt);
             req.put("locale", "zh");
-            ApiResponse<Map<String, Object>> resp = aiClient.chat(req, userId);
-            Map<String, Object> data = resp == null ? null : resp.getData();
-            Object answer = data == null ? null : data.get("answer");
-            if (answer == null || String.valueOf(answer).isBlank()) {
-                return fallback;
+            
+            String jsonReq = new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(req);
+            
+            java.net.http.HttpRequest httpReq = java.net.http.HttpRequest.newBuilder()
+                    .uri(java.net.URI.create("http://localhost:8083/api/v1/reconstruct/chat"))
+                    .header("Content-Type", "application/json")
+                    .header("X-User-Id", userId != null ? userId : "")
+                    .POST(java.net.http.HttpRequest.BodyPublishers.ofString(jsonReq, java.nio.charset.StandardCharsets.UTF_8))
+                    .timeout(java.time.Duration.ofSeconds(30))
+                    .build();
+            
+            java.net.http.HttpResponse<String> httpResp = httpClient.send(httpReq, 
+                    java.net.http.HttpResponse.BodyHandlers.ofString(java.nio.charset.StandardCharsets.UTF_8));
+            
+            if (httpResp.statusCode() == 200) {
+                com.fasterxml.jackson.databind.JsonNode root = new com.fasterxml.jackson.databind.ObjectMapper().readTree(httpResp.body());
+                com.fasterxml.jackson.databind.JsonNode answerNode = root.path("data").path("answer");
+                if (!answerNode.isMissingNode() && !answerNode.asText().isBlank()) {
+                    return answerNode.asText().trim();
+                }
+            } else {
+                log.warn("[ChatAiAssistant] Direct Local-HTTP fallback failed with status code: {}", httpResp.statusCode());
             }
-            return String.valueOf(answer).trim();
         } catch (Exception e) {
-            log.warn("[ChatAiAssistant] ai-service call failed: {}", e.toString());
-            return fallback;
+            log.error("[ChatAiAssistant] Direct Local-HTTP fallback call completely failed", e);
         }
+
+        return fallback;
     }
 
     /** 把最近 N 条消息渲染成"角色: 内容"的紧凑上下文。 */

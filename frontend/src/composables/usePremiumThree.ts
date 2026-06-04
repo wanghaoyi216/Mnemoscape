@@ -2,13 +2,14 @@ import { ref, onUnmounted, type Ref } from 'vue'
 import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import { Howl } from 'howler'
-import type { SceneData } from '../types'
+import type { SceneData, MemoryFragment } from '../types'
 
 export function usePremiumThree(containerRef: Ref<HTMLElement | null>) {
   const renderer = ref<THREE.WebGLRenderer | null>(null)
   const scene = ref<THREE.Scene | null>(null)
   const camera = ref<THREE.PerspectiveCamera | null>(null)
   const controls = ref<OrbitControls | null>(null)
+  const ready = ref(false)
 
   // Particle Core System
   let particleGeometry: THREE.BufferGeometry | null = null
@@ -29,69 +30,118 @@ export function usePremiumThree(containerRef: Ref<HTMLElement | null>) {
   // Ghosts map (userId -> Points representing nebulous stardust)
   const ghosts: Map<string, THREE.Points> = new Map()
 
+  // Fragment meshes map (fragmentId -> Mesh)
+  const fragmentMeshes: Map<string, THREE.Mesh> = new Map()
+  const tStart = performance.now()
+
   // Frame anim ID
   let animFrameId = 0
-  // 监听父容器尺寸：init 在 onMounted 的 await 链之后执行，此刻 .scene-canvas 可能还在
-  // layout 阶段（clientWidth/Height = 0）。没有 ResizeObserver 兜底时 renderer 会被锁死在
-  // 0×0（camera aspect = NaN），画面恒为黑屏——这正是「重建三D场景空白」的根因。
   let resizeObserver: ResizeObserver | null = null
+  // Pending scene load — queued if init hasn't resolved real dimensions yet
+  let pendingLoad: { data: SceneData; key: string } | null = null
 
-  function init() {
-    if (!containerRef.value) return
-    const s = new THREE.Scene()
-    s.background = new THREE.Color(0x070714)
-    scene.value = s
+  /**
+   * Initialize the Three.js renderer. Returns a Promise that resolves once the
+   * container has real (non-zero) dimensions — this guarantees loadScene will
+   * render correctly on the first call.
+   */
+  function init(): Promise<THREE.Scene> {
+    return new Promise((resolve) => {
+      if (!containerRef.value) {
+        resolve(null as unknown as THREE.Scene)
+        return
+      }
 
-    // 初始尺寸兜底为 1，避免 0×0 让 WebGL 上下文异常 / aspect=NaN；
-    // ResizeObserver 会在父容器拿到真实布局后立即补一次正确尺寸。
-    const initW = Math.max(1, containerRef.value.clientWidth)
-    const initH = Math.max(1, containerRef.value.clientHeight)
+      const s = new THREE.Scene()
+      s.background = new THREE.Color(0x070714)
+      scene.value = s
 
-    const c = new THREE.PerspectiveCamera(65, initW / initH, 0.1, 100)
-    c.position.set(6, 4, 10)
-    camera.value = c
+      const initW = Math.max(1, containerRef.value.clientWidth)
+      const initH = Math.max(1, containerRef.value.clientHeight)
 
-    const r = new THREE.WebGLRenderer({ antialias: true, alpha: true })
-    r.setSize(initW, initH)
-    r.setPixelRatio(Math.min(window.devicePixelRatio, 2))
-    r.shadowMap.enabled = true
-    r.shadowMap.type = THREE.PCFSoftShadowMap
-    r.toneMapping = THREE.ACESFilmicToneMapping
-    r.toneMappingExposure = 1.0
+      const c = new THREE.PerspectiveCamera(65, initW / initH, 0.1, 100)
+      c.position.set(6, 4, 10)
+      camera.value = c
 
-    // Remove any old canvas first
-    containerRef.value.innerHTML = ''
-    containerRef.value.appendChild(r.domElement)
-    renderer.value = r
+      const r = new THREE.WebGLRenderer({ antialias: true, alpha: true })
+      r.setSize(initW, initH)
+      r.setPixelRatio(Math.min(window.devicePixelRatio, 2))
+      r.shadowMap.enabled = true
+      r.shadowMap.type = THREE.PCFSoftShadowMap
+      r.toneMapping = THREE.ACESFilmicToneMapping
+      r.toneMappingExposure = 1.0
 
-    const o = new OrbitControls(c, r.domElement)
-    o.enableDamping = true
-    o.dampingFactor = 0.05
-    o.maxPolarAngle = Math.PI / 2 - 0.02 // Don't go below ground
-    o.minDistance = 2
-    o.maxDistance = 25
-    o.target.set(0, 1.5, 0)
-    controls.value = o
+      containerRef.value.innerHTML = ''
+      containerRef.value.appendChild(r.domElement)
+      renderer.value = r
 
-    // Floor grid with a futuristic cyan-purple touch
-    const grid = new THREE.GridHelper(20, 40, 0x6c63ff, 0x1e1a3e)
-    if (grid.material instanceof THREE.Material) {
-      grid.material.opacity = 0.25
-      grid.material.transparent = true
-    }
-    s.add(grid)
+      const o = new OrbitControls(c, r.domElement)
+      o.enableDamping = true
+      o.dampingFactor = 0.05
+      o.maxPolarAngle = Math.PI / 2 - 0.02
+      o.minDistance = 2
+      o.maxDistance = 25
+      o.target.set(0, 1.5, 0)
+      controls.value = o
 
-    animate()
-    window.addEventListener('resize', onResize)
+      const grid = new THREE.GridHelper(20, 40, 0x6c63ff, 0x1e1a3e)
+      if (grid.material instanceof THREE.Material) {
+        grid.material.opacity = 0.25
+        grid.material.transparent = true
+      }
+      s.add(grid)
 
-    // 父容器初次布局往往晚于 onMounted 的同步阶段；ResizeObserver 在拿到真实宽高后
-    // 立即同步相机/渲染器，确保即使 init 时容器还是 0×0 也能恢复正常渲染。
-    if (typeof ResizeObserver !== 'undefined' && containerRef.value) {
-      resizeObserver = new ResizeObserver(() => onResize())
-      resizeObserver.observe(containerRef.value)
-    }
+      animate()
+      window.addEventListener('resize', onResize)
 
-    return s
+      // Wait for real dimensions before marking ready
+      const markReady = () => {
+        if (ready.value) return
+        const w = containerRef.value?.clientWidth || 0
+        const h = containerRef.value?.clientHeight || 0
+        if (w > 1 && h > 1) {
+          onResize()
+          ready.value = true
+          // Flush any pending loadScene that was queued before dimensions arrived
+          if (pendingLoad) {
+            const { data, key } = pendingLoad
+            pendingLoad = null
+            loadScene(data, key)
+          }
+          resolve(s)
+        }
+      }
+
+      // If container already has real dimensions, resolve immediately
+      if (initW > 1 && initH > 1) {
+        ready.value = true
+        resolve(s)
+      }
+
+      if (typeof ResizeObserver !== 'undefined' && containerRef.value) {
+        resizeObserver = new ResizeObserver(() => {
+          onResize()
+          markReady()
+        })
+        resizeObserver.observe(containerRef.value)
+      }
+
+      // Fallback: if ResizeObserver doesn't fire within 500ms, force resolve
+      if (!ready.value) {
+        setTimeout(() => {
+          if (!ready.value) {
+            onResize()
+            ready.value = true
+            if (pendingLoad) {
+              const { data, key } = pendingLoad
+              pendingLoad = null
+              loadScene(data, key)
+            }
+            resolve(s)
+          }
+        }, 500)
+      }
+    })
   }
 
   function onResize() {
@@ -116,14 +166,27 @@ export function usePremiumThree(containerRef: Ref<HTMLElement | null>) {
     // Update positional sound coordinates in space
     updateAudioPositions()
 
+    // Update Fragments Bobbing
+    const t = (performance.now() - tStart) / 1000
+    fragmentMeshes.forEach((mesh) => {
+      const base = mesh.userData.bobBase as number
+      const phase = mesh.userData.bobPhase as number
+      mesh.position.y = base + Math.sin(t * 1.5 + phase) * 0.08
+      mesh.rotation.y += 0.01
+    })
+
     if (renderer.value && scene.value && camera.value) {
       renderer.value.render(scene.value, camera.value)
     }
   }
 
-  // Load complete gallery scene
   function loadScene(data: SceneData, sceneKey = 'summer') {
     if (!scene.value) return
+    // Queue if renderer hasn't acquired real dimensions yet
+    if (!ready.value) {
+      pendingLoad = { data, key: sceneKey }
+      return
+    }
 
     // Clear previous elements except standard Grid
     scene.value.children = scene.value.children.filter(
@@ -185,15 +248,25 @@ export function usePremiumThree(containerRef: Ref<HTMLElement | null>) {
 
   // Create refined meshes instead of basic shapes
   function createObjectMesh(obj: any): THREE.Mesh | null {
+    if (!obj) return null
     let geo: THREE.BufferGeometry
-    const type = obj.type.toLowerCase()
+    const type = obj.type ? obj.type.toLowerCase() : 'sphere'
+
+    const pos = (obj.position && Array.isArray(obj.position) && obj.position.length >= 3)
+      ? [Number(obj.position[0]), Number(obj.position[1]), Number(obj.position[2])]
+      : [0, 0, 0]
+
+    const scale = (obj.scale && Array.isArray(obj.scale) && obj.scale.length >= 3)
+      ? [Number(obj.scale[0]), Number(obj.scale[1]), Number(obj.scale[2])]
+      : [1, 1, 1]
 
     if (type === 'tree' || type === 'cherry_tree' || type === 'autumn_tree') {
       // Sophisticated composite structure
       geo = new THREE.CylinderGeometry(0.15, 0.3, 3, 8)
       const trunkMat = new THREE.MeshStandardMaterial({ color: 0x3e2723, roughness: 0.9 })
       const trunk = new THREE.Mesh(geo, trunkMat)
-      trunk.position.set(obj.position[0], obj.position[1] + 1.5, obj.position[2])
+      trunk.position.set(pos[0], pos[1] + 1.5, pos[2])
+      trunk.scale.set(scale[0], scale[1], scale[2])
       trunk.castShadow = true
 
       // Stardust leaf canopy
@@ -222,7 +295,8 @@ export function usePremiumThree(containerRef: Ref<HTMLElement | null>) {
       case 'lamp':
         geo = new THREE.CylinderGeometry(0.04, 0.04, 2.5, 8)
         const pole = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ color: 0x2c3e50 }))
-        pole.position.set(obj.position[0], obj.position[1] + 1.25, obj.position[2])
+        pole.position.set(pos[0], pos[1] + 1.25, pos[2])
+        pole.scale.set(scale[0], scale[1], scale[2])
         const lightGeo = new THREE.SphereGeometry(0.3, 16, 16)
         const lightMat = new THREE.MeshBasicMaterial({ color: 0xffea00 })
         const bulb = new THREE.Mesh(lightGeo, lightMat)
@@ -242,8 +316,8 @@ export function usePremiumThree(containerRef: Ref<HTMLElement | null>) {
       metalness: 0.2
     })
     const mesh = new THREE.Mesh(geo, mat)
-    mesh.position.set(obj.position[0], obj.position[1] + (type === 'bench' ? 0.3 : 0.5), obj.position[2])
-    mesh.scale.set(obj.scale[0], obj.scale[1], obj.scale[2])
+    mesh.position.set(pos[0], pos[1] + (type === 'bench' ? 0.3 : 0.5), pos[2])
+    mesh.scale.set(scale[0], scale[1], scale[2])
     mesh.castShadow = true
     mesh.receiveShadow = true
     return mesh
@@ -566,6 +640,80 @@ export function usePremiumThree(containerRef: Ref<HTMLElement | null>) {
     }
   }
 
+  function syncFragments(list: MemoryFragment[]) {
+    if (!scene.value) return
+
+    // Clear old meshes no longer in list
+    const incomingIds = new Set(list.map(f => f.id))
+    for (const [id, mesh] of fragmentMeshes.entries()) {
+      if (!incomingIds.has(id)) {
+        scene.value.remove(mesh)
+        mesh.geometry.dispose()
+        if (mesh.material instanceof THREE.Material) mesh.material.dispose()
+        fragmentMeshes.delete(id)
+      }
+    }
+
+    // Add or update stardust fragments
+    for (const f of list) {
+      let mesh = fragmentMeshes.get(f.id)
+      let px = 0, py = 1.2, pz = 0
+      try {
+        const p = JSON.parse(f.position3d)
+        px = p.x ?? p[0] ?? 0
+        py = p.y ?? p[1] ?? 1.2
+        pz = p.z ?? p[2] ?? 0
+      } catch (e) {}
+
+      const color = f.isDiscovered ? 0x60a5fa : 0xf59e0b
+      const emissive = f.isDiscovered ? 0x1d4ed8 : 0x78350f
+
+      if (!mesh) {
+        // Floating glowing stardust dodecahedron
+        const geo = new THREE.DodecahedronGeometry(0.18, 1)
+        const mat = new THREE.MeshStandardMaterial({
+          color: color,
+          emissive: emissive,
+          emissiveIntensity: 1.4,
+          roughness: 0.2,
+          metalness: 0.1,
+          transparent: true,
+          opacity: 0.88
+        })
+        mesh = new THREE.Mesh(geo, mat)
+        mesh.position.set(px, py, pz)
+        mesh.userData.fragment = f
+        mesh.userData.bobBase = py
+        mesh.userData.bobPhase = Math.random() * Math.PI * 2
+        scene.value.add(mesh)
+        fragmentMeshes.set(f.id, mesh)
+      } else {
+        if (mesh.material instanceof THREE.MeshStandardMaterial) {
+          mesh.material.color.setHex(color)
+          mesh.material.emissive.setHex(emissive)
+        }
+        mesh.userData.fragment = f
+      }
+    }
+  }
+
+  function findNearestFragment(radius = 2.5): MemoryFragment | null {
+    if (!camera.value) return null
+    const camPos = camera.value.position
+    let best: MemoryFragment | null = null
+    let bestDist = Infinity
+    for (const [id, mesh] of fragmentMeshes.entries()) {
+      const f = mesh.userData.fragment as MemoryFragment
+      if (f.isDiscovered) continue
+      const d = camPos.distanceTo(mesh.position)
+      if (d < bestDist && d < radius) {
+        bestDist = d
+        best = f
+      }
+    }
+    return best
+  }
+
   function getCameraPosition() {
     return camera.value?.position.toArray() ?? [0, 1.8, 0]
   }
@@ -584,6 +732,14 @@ export function usePremiumThree(containerRef: Ref<HTMLElement | null>) {
       resizeObserver.disconnect()
       resizeObserver = null
     }
+
+    // Clear stardust fragment meshes
+    fragmentMeshes.forEach((mesh) => {
+      if (scene.value) scene.value.remove(mesh)
+      mesh.geometry.dispose()
+      if (mesh.material instanceof THREE.Material) mesh.material.dispose()
+    })
+    fragmentMeshes.clear()
 
     // Clear ambient & spot sound
     if (ambientSound) {
@@ -634,7 +790,10 @@ export function usePremiumThree(containerRef: Ref<HTMLElement | null>) {
     syncGhost,
     removeGhost,
     placeNoteMesh,
+    syncFragments,
+    findNearestFragment,
     dispose,
+    ready,
     scene,
     camera,
     renderer,

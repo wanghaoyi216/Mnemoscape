@@ -33,8 +33,43 @@ public class VectorIndexService {
         this.vectorStore = vectorStore;
     }
 
+    /**
+     * 最近一次真实 embedding 调用返回的向量维度。{@code -1} = 还没观察到任何向量。
+     * 由 {@link EmbeddingClient}（在 {@code embedQuery} / {@code embedPassage} 返回时）
+     * 写入；{@link #isReady()} 拿它跟 {@link VectorStoreProperties#getEmbeddingDimension()}
+     * 对齐校验 —— 防止误配 1024 维模型跑 4096 维 Milvus collection 的"插入 / 检索维度
+     * 不一致"灾难（这种问题 Milvus 不会自动检查，第一次 upsert 才会 422）。
+     */
+    private volatile int lastObservedDimension = -1;
+
+    /** 给 {@link EmbeddingClient} 回调用：记录一次真实 embed 的维度。 */
+    public void recordObservedDimension(int dim) {
+        this.lastObservedDimension = dim;
+    }
+
+    /** 给 {@link com.mnemoscape.ai.controller.VectorAdminController} 用的只读访问。 */
+    public int getLastObservedDimension() {
+        return lastObservedDimension;
+    }
+
     public boolean isReady() {
-        return props.isEnabled() && embeddingClient.isConfigured() && vectorStore.isEnabled();
+        if (!(props.isEnabled() && embeddingClient.isConfigured() && vectorStore.isEnabled())) {
+            return false;
+        }
+        int expected = props.getEmbeddingDimension();
+        int observed = lastObservedDimension;
+        if (observed < 0) {
+            // 还没观察过任何向量（启动后没真实 embed 过）—— 视为"维度未知"，
+            // 仍然按"就绪"放行（搜索路径里能拿到再校验）。
+            return true;
+        }
+        if (observed != expected) {
+            log.warn("[VectorIndex] isReady=false: dimension mismatch observed={} expected={}. " +
+                    "Check mnemoscape.ai.vector.embedding-model vs embedding-dimension.",
+                    observed, expected);
+            return false;
+        }
+        return true;
     }
 
     /**

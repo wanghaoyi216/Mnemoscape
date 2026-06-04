@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useSceneStore } from '../stores/scene'
@@ -16,7 +16,7 @@ const route = useRoute()
 const sceneStore = useSceneStore()
 const memoryStore = useMemoryStore()
 const containerRef = ref<HTMLElement | null>(null)
-const { init, loadScene, applyDrift } = usePremiumThree(containerRef)
+const { init, loadScene, applyDrift, syncFragments, findNearestFragment, ready } = usePremiumThree(containerRef)
 const sceneError = ref('')
 
 const scene = computed(() => sceneStore.sceneData)
@@ -25,12 +25,22 @@ const fragmentCount = computed(() => scene.value?.fragments.length || 0)
 // 3D 场景未就绪时的占位封面 — 按 memoryId 稳定哈希到不同的视觉风格
 const fallbackCover = computed(() => fallbackSceneCover(memoryStore.current?.id).src)
 
+const proximityHint = ref(false)
+const nearestFragment = ref<any | null>(null)
+let proximityTimer = 0
+
 const sceneKeyMap: Record<string, string> = {
   snowy_landscape: 'winter',
   night_courtyard: 'night',
   rainy_street: 'rain',
   flower_garden: 'spring',
   autumn_path: 'autumn',
+  schoolyard: 'spring',
+  indoor_room: 'summer',
+  city_street: 'rain',
+  seaside: 'summer',
+  mountain_path: 'autumn',
+  kitchen: 'summer',
 }
 
 function getSceneKey(env?: string): string {
@@ -52,14 +62,13 @@ onMounted(async () => {
   try {
     await memoryStore.fetchOne(id)
     await memoryStore.fetchDrift(id)
+    await memoryStore.fetchFragments(id) // Fetch real database fragments
   } catch (e: any) {
     sceneError.value = e.response?.data?.message || t('scene.loadError')
     return
   }
 
   // 优先用记忆创建期已经 freeze 的 visualData（完整的 SceneReconstructionResponse）
-  // —— 这避免了每次进 SceneViewer 都重跑 /reconstruct 的 30s 等待 + 失败风险，
-  // 且和创建当时 AI 输出保持一致（fragments 来自当时的描述，永远 grounded）。
   const visualData = memoryStore.current?.visualData
   if (visualData && typeof visualData === 'string') {
     try {
@@ -98,12 +107,47 @@ onMounted(async () => {
     }
   }
 
-  init()
+  await init()
   if (sceneStore.sceneData) {
     const key = getSceneKey(sceneStore.sceneData.environment)
     loadScene(sceneStore.sceneData, key)
+    syncFragments(memoryStore.currentFragments)
   }
+
+  // 500ms 频率碰撞/靠近碎片检测，呼出 HUD 气泡
+  proximityTimer = window.setInterval(() => {
+    const nearest = findNearestFragment(2.6)
+    nearestFragment.value = nearest
+    proximityHint.value = !!nearest
+  }, 500)
+
+  window.addEventListener('keydown', onKeyDown)
 })
+
+onUnmounted(() => {
+  if (proximityTimer) {
+    window.clearInterval(proximityTimer)
+  }
+  window.removeEventListener('keydown', onKeyDown)
+})
+
+async function onKeyDown(ev: KeyboardEvent) {
+  if (ev.key !== 'e' && ev.key !== 'E') return
+  const tag = (ev.target as HTMLElement | null)?.tagName
+  if (tag === 'INPUT' || tag === 'TEXTAREA') return
+  
+  if (nearestFragment.value) {
+    const fId = nearestFragment.value.id
+    try {
+      await memoryStore.discover(fId)
+      const id = route.params.id as string
+      await memoryStore.fetchFragments(id)
+      syncFragments(memoryStore.currentFragments)
+    } catch (err) {
+      console.error('Failed to discover fragment:', err)
+    }
+  }
+}
 
 watch(
   () => sceneStore.sceneData,
@@ -111,8 +155,17 @@ watch(
     if (data) {
       const key = getSceneKey(data.environment)
       loadScene(data, key)
+      syncFragments(memoryStore.currentFragments)
     }
   },
+)
+
+watch(
+  () => memoryStore.currentFragments,
+  (list) => {
+    if (list) syncFragments(list)
+  },
+  { deep: true }
 )
 
 watch(
@@ -125,6 +178,16 @@ watch(
 
 <template>
   <div class="page-shell page-shell--wide">
+    <div class="detail-nav-bar" style="margin-bottom: 16px;">
+      <RouterLink :to="`/memories/${route.params.id}`" class="button button--ghost" style="backdrop-filter: blur(10px); background: rgba(255, 255, 255, 0.05); display: inline-flex; align-items: center; gap: 8px;">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="19" y1="12" x2="5" y2="12"></line>
+          <polyline points="12 19 5 12 12 5"></polyline>
+        </svg>
+        <span>返回记忆档案</span>
+      </RouterLink>
+    </div>
+
     <section
       class="hero-card hero-card--split scene-hero"
       :style="{ backgroundImage: `linear-gradient(120deg, rgba(8,10,14,0.82) 0%, rgba(8,10,14,0.42) 55%, rgba(8,10,14,0.92) 100%), url(${fallbackCover})` }"
@@ -152,24 +215,28 @@ watch(
     </section>
 
     <section class="section-card stack" style="margin-top: 24px; position: relative;">
-      <div class="scene-hud">
+      <div v-if="scene" class="scene-hud">
         <div>
           <h2 class="section-title">
-            {{ scene?.environment
-              ? t(`scene.environments.${scene.environment}`, scene.environment)
-              : t('scene.hud.reconstructing') }}
+            {{ t(`scene.environments.${scene.environment}`, scene.environment) }}
           </h2>
           <p class="subtitle">
-            {{ t(`scene.lighting.${scene?.lighting?.type || 'ambient'}`, scene?.lighting?.type || 'ambient') }}
+            {{ t(`scene.lighting.${scene.lighting?.type || 'ambient'}`, scene.lighting?.type || 'ambient') }}
             {{ t('scene.hud.lightingSuffix') }} ·
-            {{ t(`scene.terrain.${scene?.terrain?.type || 'terrain'}`, scene?.terrain?.type || 'terrain') }}
+            {{ t(`scene.terrain.${scene.terrain?.type || 'terrain'}`, scene.terrain?.type || 'terrain') }}
             {{ t('scene.hud.terrainSuffix') }}
           </p>
         </div>
         <div class="chip-grid">
           <span class="chip">{{ t('scene.hud.objects', { count: objectCount }) }}</span>
           <span class="chip">{{ t('scene.hud.fragments', { count: fragmentCount }) }}</span>
-          <span class="chip">{{ t('scene.hud.saturation', { pct: Math.round((memoryStore.currentDrift?.colorSaturation || 0) * 100) }) }}</span>
+          <span v-if="memoryStore.currentDrift" class="chip">{{ t('scene.hud.saturation', { pct: Math.round((memoryStore.currentDrift.colorSaturation || 0) * 100) }) }}</span>
+        </div>
+      </div>
+      <div v-else class="scene-hud">
+        <div>
+          <h2 class="section-title">{{ t('scene.hud.reconstructing') }}</h2>
+          <p class="subtitle">{{ t('scene.lead') }}</p>
         </div>
       </div>
 
@@ -179,7 +246,21 @@ watch(
       </div>
 
       <div v-else style="position: relative; width: 100%; border-radius: var(--radius-lg); overflow: hidden;">
-        <!-- Loading Overlay -->
+        <!-- Loading Overlay — shown while 3D renderer acquires real dimensions -->
+        <transition name="fade">
+          <div v-if="!ready && !sceneStore.loading" class="reconstruct-veil" style="background: rgba(7, 7, 20, 0.95);">
+            <div class="reconstruct-veil__copy">
+              <p class="eyebrow" style="letter-spacing: 0.15em; color: var(--primary);">INITIALIZING 3D ENGINE</p>
+              <div class="reconstruct-veil__dots">
+                <span class="dot"></span>
+                <span class="dot"></span>
+                <span class="dot"></span>
+              </div>
+            </div>
+          </div>
+        </transition>
+
+        <!-- Loading Overlay — shown during AI reconstruction -->
         <transition name="fade">
           <div v-if="sceneStore.loading" class="reconstruct-veil">
             <video class="reconstruct-veil__video" autoplay muted loop playsinline preload="auto">
@@ -203,6 +284,18 @@ watch(
 
         <div ref="containerRef" class="scene-canvas"></div>
       </div>
+
+      <!-- Proximity Hint overlay -->
+      <transition name="proximity">
+        <div
+          v-if="proximityHint && nearestFragment"
+          class="beacon-proximity"
+          role="status"
+        >
+          <kbd class="beacon-proximity__key">E</kbd>
+          <span>按 E 键打捞遗忘的记忆碎片</span>
+        </div>
+      </transition>
     </section>
   </div>
 </template>
@@ -334,5 +427,50 @@ watch(
 .fade-enter-from,
 .fade-leave-to {
   opacity: 0;
+}
+
+/* 「按 E 键打捞」提示 */
+.beacon-proximity {
+  position: absolute;
+  bottom: 24px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 14px 8px 10px;
+  border-radius: 999px;
+  background: rgba(10, 14, 22, 0.78);
+  backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  color: var(--text);
+  font-size: 0.86rem;
+  z-index: 18;
+  pointer-events: none;
+  box-shadow: 0 16px 40px -20px rgba(0, 0, 0, 0.6);
+}
+.beacon-proximity__key {
+  display: inline-grid;
+  place-items: center;
+  min-width: 24px;
+  height: 24px;
+  padding: 0 6px;
+  border-radius: 6px;
+  background: linear-gradient(180deg, rgba(255,255,255,0.14), rgba(255,255,255,0.06));
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  font-family: var(--font-mono, ui-monospace, SFMono-Regular, monospace);
+  font-size: 0.78rem;
+  color: var(--gold, #f2b95c);
+  letter-spacing: 0.02em;
+}
+
+.proximity-enter-active,
+.proximity-leave-active {
+  transition: opacity 220ms ease, transform 220ms ease;
+}
+.proximity-enter-from,
+.proximity-leave-to {
+  opacity: 0;
+  transform: translate(-50%, 8px);
 }
 </style>

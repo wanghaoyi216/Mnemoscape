@@ -583,7 +583,13 @@
       "night_courtyard": "夜色庭院",
       "rainy_street": "雨夜街巷",
       "flower_garden": "花丛庭园",
-      "autumn_path": "秋色步道"
+      "autumn_path": "秋色步道",
+      "schoolyard": "校园操场",
+      "indoor_room": "温馨室内",
+      "city_street": "都市街头",
+      "seaside": "海滨沙滩",
+      "mountain_path": "山间小道",
+      "kitchen": "柴火厨房"
     },
     "lighting": {
       "warm_sunset": "暖夕阳",
@@ -766,6 +772,14 @@
         "calm": "平和",
         "nostalgia": "怀旧"
       }
+    },
+    "emotion": {
+      "loading": "正在聚合你的情绪画像…",
+      "loadFailed": "情绪画像加载失败",
+      "unavailable": "情绪画像暂不可用",
+      "empty": "尚无情绪数据 — 创建几条带情绪标签的记忆后会开始绘制",
+      "hint": "数据来自你最近 50 条带情绪标签的记忆，按维度求平均后驱动混沌吸引子。",
+      "retry": "重试"
     }
   },
   "chat": {

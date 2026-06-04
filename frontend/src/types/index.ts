@@ -158,7 +158,30 @@ export interface ResonanceMatch {
   similarityScore: number
   emotionSimilarity: number
   sceneSimilarity: number
+  /**
+   * 记忆发布者的展示名（已脱敏 / 虚名）。
+   * 后端 resonance-service 直接以 `ownerUsername` (camelCase) 写入响应 Map，
+   * Jackson 默认序列化规则保持 camelCase，前端无需做大小写转换。
+   * 真实服务实现见 `backend/resonance-service/.../service/ResonanceService.java`:
+   *   - searchResonances 关键词打分分支（line ~141）
+   *   - tryVectorResonance 向量召回分支（line ~269）
+   */
   ownerUsername: string
+}
+
+/**
+ * 共鸣服务聚合统计（GET /api/v1/resonances/stats）。
+ *
+ * <p>用于 ResonanceHub 顶部三张 metric 卡片：阈值/排名/算法名。
+ * 当后端不可达时前端把 stats 置为 null，模板上 fallback 显示"—"。
+ */
+export interface ResonanceStats {
+  /** 当前公共池的平均相似度（0..1）。 */
+  avgScore: number
+  /** 当前可被召回的候选数量。 */
+  totalMatches: number
+  /** 算法标识（如 "Mnemoscape Multi-Signal v1"）。 */
+  algorithmName: string
 }
 
 export interface ResonanceSpace {

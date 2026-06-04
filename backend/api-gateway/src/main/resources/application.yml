@@ -38,7 +38,7 @@ spring:
           enabled: false
       httpclient:
         connect-timeout: ${GATEWAY_CONNECT_TIMEOUT:5000}
-        response-timeout: ${GATEWAY_RESPONSE_TIMEOUT:30s}
+        response-timeout: ${GATEWAY_RESPONSE_TIMEOUT:60s}
         pool:
           max-connections: ${GATEWAY_MAX_CONNECTIONS:200}
           max-idle-time: 30s
@@ -76,6 +76,12 @@ spring:
           uri: forward:/__internal/admin/health
           predicates:
             - Path=/api/v1/admin/health
+            - Method=GET
+        # Admin audit logs SIEM terminal aggregator
+        - id: admin-audit-logs
+          uri: forward:/__internal/admin/audit/logs
+          predicates:
+            - Path=/api/v1/admin/audit/logs
             - Method=GET
         # Admin role-promotion (bootstrap + ongoing) lives on auth-service.
         # Listed before the catch-all /api/v1/admin/stats/** so the more
@@ -117,6 +123,12 @@ spring:
           uri: lb://asset-service
           predicates:
             - Path=/api/v1/admin/assets/**
+        # Admin vector store self-check (ai-service). Listed before admin-support
+        # to avoid being shadowed by it.
+        - id: admin-vector
+          uri: lb://ai-service
+          predicates:
+            - Path=/api/v1/admin/vector/**
         - id: admin-support
           uri: lb://resonance-service
           predicates:
@@ -148,15 +160,17 @@ spring:
         - id: auth-service
           uri: lb://auth-service
           predicates:
-            - Path=/api/v1/auth/**, /api/v1/friends/**, /api/v1/users/me/avatar-profile, /api/v1/users/*/avatar-profile
+            - Path=/api/v1/auth/**, /api/v1/friends/**, /api/v1/users/me/avatar-profile, /api/v1/users/*/avatar-profile, /api/v1/users/me/emotion-summary
         - id: memory-service
           uri: lb://memory-service
           predicates:
-            - Path=/api/v1/memories/**, /api/v1/fragments/**, /api/v1/atlas/**, /api/v1/users/me/location
+            - Path=/api/v1/memories/**, /api/v1/fragments/**, /api/v1/atlas/**, /api/v1/users/me/location, /api/v1/achievements/**, /api/v1/bottles/**
         - id: ai-service
           uri: lb://ai-service
           predicates:
-            - Path=/api/v1/reconstruct/**
+            - Path=/api/v1/reconstruct/**, /api/v1/diary/**
+          metadata:
+            response-timeout: 180000
         - id: resonance-service
           uri: lb://resonance-service
           predicates:

@@ -50,4 +50,27 @@ public class AdminAssetController {
         } catch (Exception ignore) { /* never break response */ }
         return ResponseEntity.ok(ApiResponse.success(result));
     }
+
+    /**
+     * 扫描 / 迁移白名单外顶层目录对象。
+     *
+     * <p>范围：{@code chat/}、{@code support/}、{@code tickets/}、{@code tmp/}、{@code __pycache__/}
+     * 等"被污染"顶层目录（不在 {@code PUBLIC_TOP_LEVEL_DIRS} 中）里的对象。
+     * 根级裸文件不带 UUID-前缀的（如 {@code random.png}）也归入此处的清理范围。
+     * 命中后搬到 {@code legacy-orphan/{originalPath}}，使其不再出现在前端公共素材列表中。
+     *
+     * @param dryRun true（默认）= 仅预览；false = 实际移动
+     */
+    @PostMapping("/migrate-legacy-images")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> migrateLegacyImages(
+            @RequestParam(value = "dryRun", defaultValue = "true") boolean dryRun,
+            HttpServletRequest request) {
+        Map<String, Object> result = assetService.migrateOffAllowlist(dryRun);
+        try {
+            audit.info("admin-asset-migrate-images adminUserId={} dryRun={} candidates={} wouldMigrate={}",
+                    request.getHeader("X-User-Id"), dryRun,
+                    result.get("candidates"), result.get("wouldMigrate"));
+        } catch (Exception ignore) { /* never break response */ }
+        return ResponseEntity.ok(ApiResponse.success(result));
+    }
 }

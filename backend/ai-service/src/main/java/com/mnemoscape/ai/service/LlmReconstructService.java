@@ -112,6 +112,9 @@ public class LlmReconstructService {
         long t0 = System.currentTimeMillis();
         String raw = chatClient.prompt()
                 .user(prompt)
+                .options(org.springframework.ai.openai.OpenAiChatOptions.builder()
+                        .withModel(props.getAgenticModel())
+                        .build())
                 .call()
                 .content();
         long elapsed = System.currentTimeMillis() - t0;

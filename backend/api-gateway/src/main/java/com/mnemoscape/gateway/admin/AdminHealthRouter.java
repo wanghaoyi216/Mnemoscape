@@ -11,35 +11,30 @@ import static org.springframework.web.reactive.function.server.RequestPredicates
 import static org.springframework.http.MediaType.APPLICATION_JSON;
 
 /**
- * Wires {@link HealthHandler} onto an internal-only path so Spring Cloud
- * Gateway can {@code forward://} to it after the global filter chain has
+ * Wires {@link HealthHandler} and {@link AuditHandler} onto internal-only paths so Spring Cloud
+ * Gateway can {@code forward://} to them after the global filter chain has
  * authenticated the caller and {@link com.mnemoscape.gateway.filter.AdminGuardFilter}
  * has confirmed they are an admin.
  *
- * <p>The public path {@code /api/v1/admin/health} is mapped to
- * {@code forward:/__internal/admin/health} in {@code application.yml}. Using
- * {@code forward://} (instead of binding the handler directly to
- * {@code /api/v1/admin/health} via {@code @RestController} or a top-level
- * router) is essential: Spring Cloud Gateway's {@code GlobalFilter}s run on
- * the {@code FilteringWebHandler} dispatcher path, so binding a handler on
- * a routed path through the gateway pipeline is the only way to ensure
- * {@code AdminGuardFilter} runs before the aggregator does (R3.2 + R18.4).
- *
- * <p>The internal path itself is intentionally outside the public
- * {@code /api/v1/...} prefix so it cannot be reached without going through
- * the public route.
+ * <p>The public paths are mapped in {@code application.yml} and forward to their
+ * respective internal targets.
  */
 @Configuration
 public class AdminHealthRouter {
 
-    /** Internal-only forward target — never call this directly from outside. */
+    /** Internal-only forward targets — never call these directly from outside. */
     public static final String INTERNAL_HEALTH_PATH = "/__internal/admin/health";
+    public static final String INTERNAL_AUDIT_PATH = "/__internal/admin/audit/logs";
 
     @Bean
-    public RouterFunction<ServerResponse> adminHealthRoutes(HealthHandler handler) {
+    public RouterFunction<ServerResponse> adminHealthRoutes(HealthHandler healthHandler, AuditHandler auditHandler) {
         return RouterFunctions.route(
                 GET(INTERNAL_HEALTH_PATH).and(accept(APPLICATION_JSON)),
-                handler::handle
+                healthHandler::handle
+        ).andRoute(
+                GET(INTERNAL_AUDIT_PATH).and(accept(APPLICATION_JSON)),
+                auditHandler::handle
         );
     }
 }
+

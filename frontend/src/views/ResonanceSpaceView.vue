@@ -22,7 +22,7 @@ const resonanceStore = useResonanceStore()
 const auth = useAuthStore()
 const memoryStore = useMemoryStore()
 const containerRef = ref<HTMLElement | null>(null)
-const { init, loadScene, getCameraPosition, getLookingAt, syncGhost, removeGhost, placeNoteMesh, scene, camera } = usePremiumThree(containerRef)
+const { init, loadScene, getCameraPosition, getLookingAt, syncGhost, removeGhost, placeNoteMesh, ready, scene, camera } = usePremiumThree(containerRef)
 const { connected, connect, send, on } = useWebSocket()
 const ghosts = ref<Map<string, { userId: string; position: number[]; lookingAt: { x: number; y: number; z: number } }>>(new Map())
 const showComposer = ref(false)
@@ -51,6 +51,12 @@ const sceneKeyMap: Record<string, string> = {
   rainy_street: 'rain',
   flower_garden: 'spring',
   autumn_path: 'autumn',
+  schoolyard: 'spring',
+  indoor_room: 'summer',
+  city_street: 'rain',
+  seaside: 'summer',
+  mountain_path: 'autumn',
+  kitchen: 'summer',
 }
 
 function getSceneKey(env?: string): string {
@@ -69,25 +75,67 @@ onMounted(async () => {
   await resonanceStore.fetchSpace(spaceId)
   await resonanceStore.fetchNotes(spaceId)
 
-  init()
+  await init()
   connect(auth.token)
 
   // 载入真实记忆的 3D 模型
   const space = resonanceStore.currentSpace
-  if (space && space.memoryId1) {
-    try {
-      await memoryStore.fetchOne(space.memoryId1)
-      const visualData = memoryStore.current?.visualData
-      if (visualData && typeof visualData === 'string') {
-        const parsed = JSON.parse(visualData)
-        const data = normalizeScene(parsed)
-        if (data) {
-          const key = getSceneKey(data.environment)
-          loadScene(data, key)
+  let sceneLoaded = false
+  if (space) {
+    // 优先加载 memoryId1 场景
+    if (space.memoryId1) {
+      try {
+        await memoryStore.fetchOne(space.memoryId1)
+        const visualData = memoryStore.current?.visualData
+        if (visualData && typeof visualData === 'string') {
+          const parsed = JSON.parse(visualData)
+          const data = normalizeScene(parsed)
+          if (data) {
+            const key = getSceneKey(data.environment)
+            loadScene(data, key)
+            sceneLoaded = true
+          }
         }
+      } catch (e) {
+        console.warn('Failed to parse and load memoryId1 3D scene data:', e)
       }
-    } catch (e) {
-      console.warn('Failed to parse and load seed memory 3D scene data:', e)
+    }
+
+    // 兜底加载 memoryId2 场景
+    if (!sceneLoaded && space.memoryId2) {
+      try {
+        await memoryStore.fetchOne(space.memoryId2)
+        const visualData = memoryStore.current?.visualData
+        if (visualData && typeof visualData === 'string') {
+          const parsed = JSON.parse(visualData)
+          const data = normalizeScene(parsed)
+          if (data) {
+            const key = getSceneKey(data.environment)
+            loadScene(data, key)
+            sceneLoaded = true
+          }
+        }
+      } catch (e) {
+        console.warn('Failed to parse and load memoryId2 3D scene data:', e)
+      }
+    }
+
+    // 终极兜底：均失败时使用默认绝美星空微缩场景 profile 避免黑屏
+    if (!sceneLoaded) {
+      console.warn('Both matched memory scenes failed to load; using default stardust sky baseline')
+      const defaultData: SceneData = {
+        environment: 'night_courtyard',
+        lighting: { type: 'moonlight', color: '#4A6FA5', intensity: 0.8 },
+        terrain: { type: 'flat', color: '#1a1a2e' },
+        atmosphere: { fogColor: '#0a0a1a', fogDensity: 0.04, backgroundColor: '#070714' },
+        objects: [
+          { id: 'default-center', type: 'sphere', name: '共鸣星核', position: [0, 1.5, 0], color: '#36d8b4', scale: [1.2, 1.2, 1.2] },
+          { id: 'default-bench', type: 'bench', name: '共鸣长椅', position: [0, 0, -2.5], color: '#846edc', scale: [1, 1, 1] }
+        ],
+        audioData: { ambient: [], positional: [] },
+        fragments: []
+      }
+      loadScene(defaultData, 'night')
     }
   }
 
@@ -202,12 +250,8 @@ function handlePlaceNote(content: string, mood: string) {
 
 /**
  * 点击画布 = "在地面种一颗信标种子"。
- *   - 用 useBeaconLayer 的 raycaster 求出地面上的世界坐标
- *   - 弹出 composer 在屏幕坐标处
- *   - 提交后 handlePlaceNote 通过 WS 发出，NOTE_PLACED 回来再触发 syncBeacons
  */
 function handleCanvasClick(ev: MouseEvent) {
-  // 已展开全息卡 → 优先关掉，避免误触种植
   if (activeBeacon.value) {
     activeBeacon.value = null
     return
@@ -223,6 +267,16 @@ function handleCanvasClick(ev: MouseEvent) {
 
 <template>
   <div class="page-shell page-shell--wide">
+    <div class="detail-nav-bar" style="margin-bottom: 16px;">
+      <RouterLink to="/resonance" class="button button--ghost" style="backdrop-filter: blur(10px); background: rgba(255, 255, 255, 0.05); display: inline-flex; align-items: center; gap: 8px;">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="19" y1="12" x2="5" y2="12"></line>
+          <polyline points="12 19 5 12 12 5"></polyline>
+        </svg>
+        <span>返回共鸣大厅</span>
+      </RouterLink>
+    </div>
+
     <section
       v-if="resonanceStore.currentSpace"
       class="hero-card hero-card--split resonance-space-hero"
@@ -268,55 +322,61 @@ function handleCanvasClick(ev: MouseEvent) {
         </div>
       </div>
 
-      <div ref="containerRef" class="canvas-container" @click="handleCanvasClick"></div>
+      <!-- 挂载状态和留言信标数的浮动看板在 3D 画布内部，完全避免压盖 -->
+      <div class="canvas-container" @click="handleCanvasClick">
+        <!-- 独立的 3D 画布渲染节点，防止 Three.js 初始化时清空 overlays -->
+        <div ref="containerRef" class="canvas-3d"></div>
 
-      <!-- 屏幕上落点指示 — 点击的瞬间在该处显示一个小十字，给用户即时反馈 -->
-      <div
-        v-if="composerScreen && showComposer"
-        class="beacon-drop-marker"
-        :style="{ left: `${composerScreen.x}px`, top: `${composerScreen.y}px` }"
-        aria-hidden="true"
-      ></div>
-
-
-
-      <NoteBubble
-        v-for="note in resonanceStore.notes"
-        :key="note.id"
-        :note="note"
-      />
-
-      <div class="space-status status-pill" :class="connected ? 'status-pill--success' : 'status-pill--warning'">
-        {{ connected ? t('resonance.space.metrics.connected') : t('resonance.space.metrics.reconnecting') }}
-      </div>
-
-      <div class="note-count chip">
-        {{ t('resonance.space.hud.notesInSpace', { count: noteCount }) }}
-      </div>
-
-      <!-- 靠近信标时的提示气泡，告诉用户按 E 键查看 -->
-      <transition name="proximity">
-        <div
-          v-if="proximityHint && !activeBeacon && !showComposer"
-          class="beacon-proximity"
-          role="status"
-        >
-          <kbd class="beacon-proximity__key">E</kbd>
-          {{ t('resonance.space.hud.pressEHint') }}
+        <div class="space-status status-pill" :class="connected ? 'status-pill--success' : 'status-pill--warning'">
+          {{ connected ? t('resonance.space.metrics.connected') : t('resonance.space.metrics.reconnecting') }}
         </div>
-      </transition>
 
-      <BeaconCard
-        v-if="activeBeacon"
-        :note="activeBeacon"
-        @close="activeBeacon = null"
-      />
+        <div class="note-count chip">
+          {{ t('resonance.space.hud.notesInSpace', { count: noteCount }) }}
+        </div>
 
-      <NoteComposer
-        v-if="showComposer"
-        @place="handlePlaceNote"
-        @close="showComposer = false"
-      />
+        <!-- 屏幕上落点指示 — 点击的瞬间在该处显示一个小十字，给用户即时反馈 -->
+        <div
+          v-if="composerScreen && showComposer"
+          class="beacon-drop-marker"
+          :style="{ left: `${composerScreen.x}px`, top: `${composerScreen.y}px` }"
+          aria-hidden="true"
+        ></div>
+
+        <NoteBubble
+          v-for="note in resonanceStore.notes"
+          :key="note.id"
+          :note="note"
+          @click.stop
+        />
+
+        <!-- 靠近信标时的提示气泡，告诉用户按 E 键查看 -->
+        <transition name="proximity">
+          <div
+            v-if="proximityHint && !activeBeacon && !showComposer"
+            class="beacon-proximity"
+            role="status"
+            @click.stop
+          >
+            <kbd class="beacon-proximity__key">E</kbd>
+            {{ t('resonance.space.hud.pressEHint') }}
+          </div>
+        </transition>
+
+        <BeaconCard
+          v-if="activeBeacon"
+          :note="activeBeacon"
+          @close="activeBeacon = null"
+          @click.stop
+        />
+
+        <NoteComposer
+          v-if="showComposer"
+          @place="handlePlaceNote"
+          @close="showComposer = false"
+          @click.stop
+        />
+      </div>
     </section>
   </div>
 </template>
@@ -329,6 +389,13 @@ function handleCanvasClick(ev: MouseEvent) {
   border: 1px solid rgba(255, 255, 255, 0.06);
 }
 
+.space-hud {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: flex-start;
+}
+
 .space-hud__hint {
   text-align: right;
   max-width: 260px;
@@ -339,7 +406,54 @@ function handleCanvasClick(ev: MouseEvent) {
   color: var(--text-muted);
 }
 
-/* 点击落点的十字标记 — 在用户填 composer 时帮助记忆"我刚才点在哪里" */
+.canvas-container {
+  position: relative;
+  min-height: min(72vh, 760px);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  background:
+    linear-gradient(135deg, rgba(32, 199, 164, 0.1), rgba(240, 179, 91, 0.06)),
+    rgba(8, 9, 8, 0.34);
+  border: 1px solid var(--border);
+}
+
+.canvas-3d {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 1;
+}
+
+/* Z-index layering system to prevent overlap:
+   1 = 3D canvas
+   5 = note bubbles (non-interactive background)
+   8 = status indicators (top corners)
+   12 = drop marker
+   15 = beacon card / note composer (interactive overlays)
+   18 = proximity hint (bottom center)
+*/
+
+.space-status {
+  position: absolute;
+  top: 16px;
+  right: 16px;
+  z-index: 8;
+  pointer-events: none;
+  font-size: 0.75rem;
+  padding: 4px 10px;
+}
+
+.note-count {
+  position: absolute;
+  top: 16px;
+  left: 16px;
+  z-index: 8;
+  pointer-events: none;
+  font-size: 0.75rem;
+}
+
+/* Beacon drop marker */
 .beacon-drop-marker {
   position: absolute;
   width: 22px;
@@ -367,7 +481,7 @@ function handleCanvasClick(ev: MouseEvent) {
   margin-top: -0.75px;
 }
 
-/* 「按 E 键查看」提示 */
+/* Proximity hint — always bottom center, never overlaps corners */
 .beacon-proximity {
   position: absolute;
   bottom: 24px;
@@ -378,7 +492,7 @@ function handleCanvasClick(ev: MouseEvent) {
   gap: 10px;
   padding: 8px 14px 8px 10px;
   border-radius: 999px;
-  background: rgba(10, 14, 22, 0.7);
+  background: rgba(10, 14, 22, 0.82);
   backdrop-filter: blur(12px);
   border: 1px solid rgba(255, 255, 255, 0.12);
   color: var(--text);
@@ -386,6 +500,7 @@ function handleCanvasClick(ev: MouseEvent) {
   z-index: 18;
   pointer-events: none;
   box-shadow: 0 16px 40px -20px rgba(0, 0, 0, 0.6);
+  white-space: nowrap;
 }
 .beacon-proximity__key {
   display: inline-grid;
@@ -412,41 +527,13 @@ function handleCanvasClick(ev: MouseEvent) {
   transform: translate(-50%, 8px);
 }
 
-.space-hud {
-  display: flex;
-  justify-content: space-between;
-  gap: 16px;
-  align-items: flex-start;
-}
-
-.canvas-container {
-  position: relative;
-  min-height: min(72vh, 760px);
-  border-radius: var(--radius-lg);
-  overflow: hidden;
-  background:
-    linear-gradient(135deg, rgba(32, 199, 164, 0.1), rgba(240, 179, 91, 0.06)),
-    rgba(8, 9, 8, 0.34);
-  border: 1px solid var(--border);
-}
-
-.space-status {
-  position: absolute;
-  top: 24px;
-  right: 24px;
-  z-index: 8;
-}
-
-.note-count {
-  position: absolute;
-  top: 24px;
-  left: 24px;
-  z-index: 8;
-}
-
 @media (max-width: 768px) {
   .space-hud {
     flex-direction: column;
+  }
+  .space-hud__hint {
+    text-align: left;
+    max-width: none;
   }
 }
 </style>

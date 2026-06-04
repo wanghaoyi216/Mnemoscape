@@ -12,6 +12,9 @@ public interface MemoryFragmentRepository extends JpaRepository<MemoryFragment, 
     List<MemoryFragment> findByMemoryId(String memoryId);
     List<MemoryFragment> findByMemoryIdAndIsDiscovered(String memoryId, Boolean isDiscovered);
 
+    @Query("SELECT COUNT(f) FROM MemoryFragment f WHERE f.memoryId IN (SELECT m.id FROM com.mnemoscape.memory.model.entity.Memory m WHERE m.userId = :userId) AND f.isDiscovered = true")
+    long countDiscoveredByUserId(@org.springframework.data.repository.query.Param("userId") String userId);
+
     @Modifying
     @Transactional
     @Query("DELETE FROM MemoryFragment f WHERE f.memoryId = :memoryId")

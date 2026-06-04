@@ -1,5 +1,6 @@
 package com.mnemoscape.memory;
 
+import com.mnemoscape.common.EnvLoader;
 import org.springframework.boot.SpringApplication;
 import org.springframework.boot.autoconfigure.SpringBootApplication;
 import org.springframework.cache.annotation.EnableCaching;
@@ -15,6 +16,7 @@ import org.springframework.scheduling.annotation.EnableScheduling;
 @org.springframework.scheduling.annotation.EnableAsync
 public class MemoryApplication {
     public static void main(String[] args) {
+        EnvLoader.load();
         SpringApplication.run(MemoryApplication.class, args);
     }
 }

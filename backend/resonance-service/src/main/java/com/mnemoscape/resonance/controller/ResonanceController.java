@@ -30,6 +30,26 @@ public class ResonanceController {
         return ResponseEntity.ok(ApiResponse.success(resonanceService.searchResonances(memoryId, userId)));
     }
 
+    /**
+     * 共鸣服务聚合统计（用于 ResonanceHub 顶部三张 metric 卡片）。
+     *
+     * <p>返回当前用户的：
+     * <ul>
+     *   <li>{@code avgScore} — 历史共鸣匹配的平均相似度（0..1）</li>
+     *   <li>{@code totalMatches} — 跨用户公共记忆池中可被召回的候选数量</li>
+     *   <li>{@code algorithmName} — 当前打分算法的人类可读标识</li>
+     * </ul>
+     *
+     * <p>实现：复用 {@link ResonanceService#searchResonances} 的 public-pool 拉取 + 关键词打分
+     * 路径，再做一层聚合；不重复打分逻辑以保持统计与实时检索一致。
+     * 真实平均分按"至少被命中过的记忆"加全后求均值；当前若公共池为空则返回 0。
+     */
+    @GetMapping("/stats")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> stats() {
+        Map<String, Object> stats = resonanceService.resonanceStats();
+        return ResponseEntity.ok(ApiResponse.success(stats));
+    }
+
     @PostMapping("/spaces")
     public ResponseEntity<ApiResponse<ResonanceSpace>> createSpace(
             @RequestBody Map<String, String> body,

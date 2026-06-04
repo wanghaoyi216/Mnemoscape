@@ -253,3 +253,24 @@ export interface AdminHealth {
 export function getAdminHealth() {
   return client.get<ApiResponse<AdminHealth>>('/admin/health')
 }
+
+// ---------- 端点 10：audit logs (SIEM) ----------
+
+export interface AuditLog {
+  id: string
+  time: string
+  service: string
+  user: string
+  action: string
+  status: 'SUCCESS' | 'WARNING' | 'ERROR'
+  latencyMs: number
+  ip: string
+  url: string
+  userAgent: string
+  payloadHash: string
+}
+
+export function getAdminAuditLogs() {
+  return client.get<ApiResponse<AuditLog[]>>('/admin/audit/logs')
+}
+

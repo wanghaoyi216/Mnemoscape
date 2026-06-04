@@ -173,11 +173,27 @@ public class AssetService {
                     if (it.isDir()) continue;
                     String name = it.objectName();
 
-                    // 身份过滤：私有对象只返回给所有者；其他用户私有对象一律隐藏
-                    if (!includeAllUsers && name.startsWith(USER_PREFIX)) {
-                        if (userScope == null || !name.startsWith(userScope)) {
-                            continue;
+                    // 顶层目录白名单判定：
+                    //   1) 根级裸文件（无 /）→ 跳过（防止 random.png 等混入公共列表）
+                    //   2) 顶层目录是 users/ → 走 owner 检查（保持原 @Deprecated 兼容）
+                    //   3) 顶层目录 ∈ PUBLIC_TOP_LEVEL_DIRS → 放行
+                    //   4) 其它（chat/、support/、tickets/、tmp/、__pycache__/、legacy-orphan/ 等）→ 跳过
+                    int slash = name.indexOf('/');
+                    if (slash < 0) continue; // 根级裸文件：默认不放行
+                    String topDir = name.substring(0, slash);
+
+                    if (topDir.equals("users")) {
+                        // 私有对象 owner 检查：与原 name.startsWith(USER_PREFIX) 分支语义一致
+                        if (!includeAllUsers) {
+                            if (userScope == null || !name.startsWith(userScope)) {
+                                continue;
+                            }
                         }
+                    } else if (StorageProperties.PUBLIC_TOP_LEVEL_DIRS.contains(topDir)) {
+                        // 白名单公共对象放行
+                    } else {
+                        // 顶层目录不在白名单且不是 users/ —— 一律跳过
+                        continue;
                     }
 
                     String type = classify(name);
@@ -349,6 +365,130 @@ public class AssetService {
         if (name.charAt(36) != '-') return false;
         String uuidPart = name.substring(0, 36);
         return uuidPart.matches("[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}");
+    }
+
+    /**
+     * 把所有"非白名单顶层目录"对象搬到 {@code legacy-orphan/{originalPath}}。
+     *
+     * <p>背景：AssetService 改造后，{@link #listMinioStaticInternal} 不会把
+     * {@code chat/}、{@code support/}、{@code tickets/}、{@code tmp/}、{@code __pycache__/} 等
+     * 顶层目录里的对象暴露给前端。但这些"被污染"位置的历史对象仍占着 bucket 容量，
+     * 管理员需要把它们集中隔离。
+     *
+     * <p>本方法扫所有非空对象，判定"是否需要迁移"：
+     * <ul>
+     *   <li>跳过：{@code users/} 前缀（已隔离的私有对象）、{@code legacy-orphan/} 前缀（已迁移）、</li>
+     *   <li>跳过：顶层目录 ∈ {@code PUBLIC_TOP_LEVEL_DIRS}（合法公共素材）；</li>
+     *   <li>跳过：根级裸文件且形如 {@code <uuid>-...}（属于 {@link #migrateLegacyOrphans} 的工作面）；</li>
+     *   <li>候选：根级裸文件不带 UUID-前缀的（如 {@code random.png}），或顶层目录不在白名单也不在
+     *       {@code users/}/{@code legacy-orphan/} 内的（如 {@code chat/}、{@code support/} 等）。</li>
+     * </ul>
+     *
+     * @param dryRun true → 只统计与列出候选，不实际移动（让管理员先预览）
+     * @return 扫描结果 {scanned, candidates, wouldMigrate, dryRun, samples, error?}
+     */
+    public java.util.Map<String, Object> migrateOffAllowlist(boolean dryRun) {
+        java.util.Map<String, Object> result = new java.util.LinkedHashMap<>();
+        int scanned = 0, candidates = 0, wouldMigrate = 0;
+        List<String> samples = new ArrayList<>();
+
+        if (!properties.hasCredentials()) {
+            result.put("error", "MinIO credentials not configured");
+            result.put("scanned", 0);
+            result.put("candidates", 0);
+            result.put("wouldMigrate", 0);
+            result.put("dryRun", dryRun);
+            result.put("samples", samples);
+            return result;
+        }
+        try {
+            boolean exists = minioClient.bucketExists(BucketExistsArgs.builder()
+                    .bucket(properties.getBucket()).build());
+            if (!exists) {
+                result.put("error", "bucket not found");
+                result.put("scanned", 0);
+                result.put("candidates", 0);
+                result.put("wouldMigrate", 0);
+                result.put("dryRun", dryRun);
+                result.put("samples", samples);
+                return result;
+            }
+
+            Iterable<Result<Item>> results = minioClient.listObjects(ListObjectsArgs.builder()
+                    .bucket(properties.getBucket())
+                    .recursive(true)
+                    .build());
+
+            for (Result<Item> r : results) {
+                Item it;
+                try { it = r.get(); } catch (Exception e) { continue; }
+                if (it.isDir()) continue;
+                String name = it.objectName();
+                scanned++;
+
+                if (name.startsWith(USER_PREFIX)) continue;          // 已隔离的私有对象
+                if (name.startsWith(LEGACY_ORPHAN_PREFIX)) continue;  // 已迁移
+
+                int slash = name.indexOf('/');
+                if (slash < 0) {
+                    // 根级裸文件：留给 migrateLegacyOrphans（带 UUID 前缀的那种）处理
+                    if (looksLikeLegacyUpload(name)) continue;
+                    // 根级裸文件且不带 UUID-前缀（如 random.png）→ 也算污染
+                    candidates++;
+                    if (samples.size() < 20) samples.add(name);
+                    if (!dryRun) {
+                        moveToLegacyOrphan(name);
+                        wouldMigrate++;
+                    }
+                    continue;
+                }
+
+                String topDir = name.substring(0, slash);
+                if (StorageProperties.PUBLIC_TOP_LEVEL_DIRS.contains(topDir)) {
+                    continue; // 合法公共目录
+                }
+                // 顶层目录在白名单外（chat/、support/、tickets/、tmp/、__pycache__/ 等）→ 候选
+                candidates++;
+                if (samples.size() < 20) samples.add(name);
+                if (!dryRun) {
+                    moveToLegacyOrphan(name);
+                    wouldMigrate++;
+                }
+            }
+        } catch (Exception e) {
+            log.warn("[migrate] migrateOffAllowlist failed: {}", e.toString());
+            result.put("error", e.getClass().getSimpleName() + ": " + e.getMessage());
+        }
+
+        result.put("scanned", scanned);
+        result.put("candidates", candidates);
+        result.put("wouldMigrate", wouldMigrate);
+        result.put("dryRun", dryRun);
+        result.put("samples", samples);
+        log.info("[migrate] off-allowlist scan done: scanned={} candidates={} wouldMigrate={} dryRun={}",
+                scanned, candidates, wouldMigrate, dryRun);
+        return result;
+    }
+
+    /** 把对象从原 key 搬到 {@code legacy-orphan/{原 key}}（MinIO 无原生 move）。 */
+    private void moveToLegacyOrphan(String originalName) {
+        String target = LEGACY_ORPHAN_PREFIX + originalName;
+        try {
+            minioClient.copyObject(CopyObjectArgs.builder()
+                    .bucket(properties.getBucket())
+                    .object(target)
+                    .source(CopySource.builder()
+                            .bucket(properties.getBucket())
+                            .object(originalName)
+                            .build())
+                    .build());
+            minioClient.removeObject(RemoveObjectArgs.builder()
+                    .bucket(properties.getBucket())
+                    .object(originalName)
+                    .build());
+        } catch (Exception e) {
+            log.warn("[migrate] failed to move off-allowlist {} -> {}: {}", originalName, target, e.toString());
+        }
     }
 
     /** 历史孤儿对象迁移目标前缀。 */

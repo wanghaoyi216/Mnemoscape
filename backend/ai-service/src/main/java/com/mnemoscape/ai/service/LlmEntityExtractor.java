@@ -60,6 +60,9 @@ public class LlmEntityExtractor {
         long t0 = System.currentTimeMillis();
         String raw = chatClient.prompt()
                 .user(buildPrompt(desc, request.getMemoryLocation(), request.getMemoryYear()))
+                .options(org.springframework.ai.openai.OpenAiChatOptions.builder()
+                        .withModel(props.getAgenticModel())
+                        .build())
                 .call()
                 .content();
         long elapsed = System.currentTimeMillis() - t0;

@@ -112,13 +112,11 @@ public class AiClientConfig {
     public ChatClient.Builder mnemoscapeChatClientBuilder(
             ChatModel chatModel,
             @Autowired(required = false) List<FunctionCallback> functionCallbacks) {
-        ChatClient.Builder builder = ChatClient.builder(chatModel)
+        // 为了根除 NVIDIA 托管 Gemma-3 模型（google/gemma-3n-e2b-it 等）在不支持 auto tool choice 时的 400 Bad Request 报错，
+        // 并且由于 Mnemoscape 所有的记忆检索（强制 RAG）和多模态图片预读都是在 Java 请求预处理层并发跑完拼装进 Prompt 里的，
+        // 根本不需要使用模型自发的 Function Calling。因此，我们在此移除全局的 defaultFunctions 自动挂载。
+        return ChatClient.builder(chatModel)
                 .defaultSystem(DEFAULT_SYSTEM_PROMPT);
-        if (functionCallbacks != null && !functionCallbacks.isEmpty()) {
-            builder = builder.defaultFunctions(
-                    functionCallbacks.toArray(new FunctionCallback[0]));
-        }
-        return builder;
     }
 
     /**

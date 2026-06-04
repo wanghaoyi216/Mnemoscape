@@ -19,8 +19,8 @@ import org.springframework.context.annotation.Configuration;
  *       创建 / 删除主流程。</li>
  * </ul>
  *
- * <p><b>Embedding 模型</b>：默认 {@code nvidia/nv-embedqa-e5-v5}（1024 维，
- * NVIDIA Integrate 上的检索专用 embedding，OpenAI 兼容 {@code /v1/embeddings}
+ * <p><b>Embedding 模型</b>：默认 {@code nvidia/nv-embed-v1}（4096 维，
+ * NVIDIA Integrate 上的通用 embedding，OpenAI 兼容 {@code /v1/embeddings}
  * 协议 + NVIDIA 扩展的 {@code input_type=query|passage}）。换模型时务必同步改
  * {@link #embeddingDimension}，否则 Milvus collection 维度对不上会插入失败。
  *
@@ -39,10 +39,10 @@ public class VectorStoreProperties {
     /* ---------------- Embedding ---------------- */
 
     /** NVIDIA Integrate 上的 embedding 模型 id。 */
-    private String embeddingModel = "nvidia/nv-embedqa-e5-v5";
+    private String embeddingModel = "nvidia/nv-embed-v1";
 
     /** embedding 维度，必须与 {@link #embeddingModel} 实际输出一致 + Milvus collection 对齐。 */
-    private int embeddingDimension = 1024;
+    private int embeddingDimension = 4096;
 
     /** embedding 调用硬上限（毫秒）。 */
     private long embeddingTimeoutMs = 15_000;

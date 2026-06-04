@@ -98,6 +98,16 @@ function viewScene() {
 
 <template>
   <div class="page-shell page-shell--wide">
+    <div class="detail-nav-bar" style="margin-bottom: 16px;">
+      <RouterLink to="/memories" class="button button--ghost" style="backdrop-filter: blur(10px); background: rgba(255, 255, 255, 0.05); display: inline-flex; align-items: center; gap: 8px;">
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="19" y1="12" x2="5" y2="12"></line>
+          <polyline points="12 19 5 12 12 5"></polyline>
+        </svg>
+        <span>{{ t('memory.detail.back') || '返回记忆列表' }}</span>
+      </RouterLink>
+    </div>
+
     <div v-if="store.loadingDetail" class="section-card empty-state">
       <h3 class="empty-state__title">{{ t('memory.detail.loading.title') }}</h3>
       <p class="empty-state__text">{{ t('memory.detail.loading.text') }}</p>

@@ -426,7 +426,6 @@ public class MemoryService {
 
     /** 异步执行单条记忆的碎片清空与重新构建 */
     @org.springframework.scheduling.annotation.Async
-    @Transactional
     public void runFragmentRebuildAsync(String memoryId) {
         Memory memory;
         try {
@@ -799,7 +798,6 @@ public class MemoryService {
      * <p>权限：{@link #getMemory(String, String)} 已经做过 checkAccess；只有 owner
      * 能触发（FRIENDS / PUBLIC 即使可读也不允许其他人改写）。
      */
-    @Transactional
     public Memory regenerateScene(String memoryId, String userId) {
         Memory memory = getMemory(memoryId, userId);
         if (!memory.getUserId().equals(userId)) {

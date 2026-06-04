@@ -83,65 +83,50 @@ async function saveTheme(bgUrl: string, avatarUrl: string) {
   }
 }
 
-// 情绪积分 — 动态从用户真实的记忆库中统计计算得出 (Lorenz Attractor 真实轨迹数据源)。
-// 统计全部记忆的 emotionProfile 并求均值，若无数据则平滑兜底。
-const realEmotion = computed<EmotionProfile>(() => {
-  const list = memory.memories
-  if (!list || list.length === 0) {
-    return {
-      joy: 0.62,
-      sorrow: 0.31,
-      fear: 0.18,
-      calm: 0.55,
-      nostalgia: 0.71,
+// ── 情绪画像 ────────────────────────────────────────────────────────────
+// v2: 调后端 /api/v1/users/me/emotion-summary 真实聚合（之前是 client-side 算术平均）。
+// 后端走 Feign 调 memory-service 拉最近 50 条记忆，解析 emotionProfile 后求均值，
+// 失败时返回 { enabled: false, message } 让 UI 走"暂不可用"占位。
+const realEmotion = ref<EmotionProfile | null>(null)
+const emotionSummaryState = ref<'loading' | 'ok' | 'empty' | 'disabled' | 'err'>('loading')
+const emotionSummaryMessage = ref<string>('')
+
+async function loadEmotionSummary() {
+  emotionSummaryState.value = 'loading'
+  emotionSummaryMessage.value = ''
+  try {
+    const res = await client.get('/api/v1/users/me/emotion-summary')
+    const data = res.data?.data
+    if (!data) {
+      emotionSummaryState.value = 'disabled'
+      emotionSummaryMessage.value = t('profile.emotion.unavailable')
+      return
     }
-  }
-
-  let totalJoy = 0
-  let totalSorrow = 0
-  let totalFear = 0
-  let totalCalm = 0
-  let totalNostalgia = 0
-  let validCount = 0
-
-  for (const m of list) {
-    const raw = (m as any).emotionProfile
-    if (!raw || typeof raw !== 'string') continue
-    try {
-      const vec = JSON.parse(raw) as Record<string, number>
-      if (vec && typeof vec === 'object') {
-        totalJoy += typeof vec.joy === 'number' ? vec.joy : 0
-        const sad = typeof vec.sadness === 'number' ? vec.sadness : 0
-        const mel = typeof vec.melancholy === 'number' ? vec.melancholy : 0
-        totalSorrow += Math.max(sad, mel)
-        totalFear += typeof vec.fear === 'number' ? vec.fear : 0
-        totalCalm += typeof vec.peace === 'number' ? vec.peace : (typeof vec.calm === 'number' ? vec.calm : 0)
-        totalNostalgia += typeof vec.nostalgia === 'number' ? vec.nostalgia : 0
-        validCount++
-      }
-    } catch {
-      // ignore
+    if (data.enabled === false) {
+      emotionSummaryState.value = 'disabled'
+      emotionSummaryMessage.value = data.message || t('profile.emotion.unavailable')
+      return
     }
-  }
-
-  if (validCount === 0) {
-    return {
-      joy: 0.62,
-      sorrow: 0.31,
-      fear: 0.18,
-      calm: 0.55,
-      nostalgia: 0.71,
+    const profile = data.profile
+    const sampleSize = Number(data.sampleSize ?? 0)
+    if (!profile || sampleSize === 0) {
+      // 后端 enabled=true 但无样本 — 不渲染占位，让 EmotionAttractor 用其默认
+      emotionSummaryState.value = 'empty'
+      return
     }
+    realEmotion.value = {
+      joy: Number(profile.joy ?? 0),
+      sorrow: Number(profile.sorrow ?? 0),
+      fear: Number(profile.fear ?? 0),
+      calm: Number(profile.calm ?? 0),
+      nostalgia: Number(profile.nostalgia ?? 0),
+    }
+    emotionSummaryState.value = 'ok'
+  } catch (e) {
+    emotionSummaryState.value = 'err'
+    emotionSummaryMessage.value = t('profile.emotion.loadFailed')
   }
-
-  return {
-    joy: Math.min(1, Math.max(0, totalJoy / validCount)),
-    sorrow: Math.min(1, Math.max(0, totalSorrow / validCount)),
-    fear: Math.min(1, Math.max(0, totalFear / validCount)),
-    calm: Math.min(1, Math.max(0, totalCalm / validCount)),
-    nostalgia: Math.min(1, Math.max(0, totalNostalgia / validCount)),
-  }
-})
+}
 
 const memoryCount = computed(() => memory.memories.length)
 
@@ -158,6 +143,8 @@ onMounted(async () => {
   }
   // 加载 3D 刻画档案
   loadAvatarProfile()
+  // 加载情绪画像（走后端真实聚合）
+  loadEmotionSummary()
 })
 </script>
 
@@ -392,12 +379,44 @@ onMounted(async () => {
 
       <div class="attractor-section__grid">
         <div class="attractor-section__canvas">
-          <EmotionAttractor :emotion="realEmotion" />
+          <EmotionAttractor v-if="realEmotion" :emotion="realEmotion" />
+          <div v-else class="attractor-placeholder" :class="`attractor-placeholder--${emotionSummaryState}`">
+            <div class="attractor-placeholder__icon">
+              {{
+                emotionSummaryState === 'loading' ? '⏳'
+                : emotionSummaryState === 'err' ? '⚠️'
+                : emotionSummaryState === 'disabled' ? '🌫️'
+                : '🌀'
+              }}
+            </div>
+            <p class="attractor-placeholder__title">
+              <template v-if="emotionSummaryState === 'loading'">
+                {{ t('profile.emotion.loading') }}
+              </template>
+              <template v-else-if="emotionSummaryState === 'err'">
+                {{ t('profile.emotion.loadFailed') }}
+              </template>
+              <template v-else-if="emotionSummaryState === 'disabled'">
+                {{ emotionSummaryMessage || t('profile.emotion.unavailable') }}
+              </template>
+              <template v-else>
+                {{ t('profile.emotion.empty') }}
+              </template>
+            </p>
+            <p class="attractor-placeholder__hint">{{ t('profile.emotion.hint') }}</p>
+            <button
+              v-if="emotionSummaryState === 'err' || emotionSummaryState === 'disabled'"
+              class="button button--ghost attractor-placeholder__retry"
+              @click="loadEmotionSummary"
+            >
+              {{ t('profile.emotion.retry') }}
+            </button>
+          </div>
         </div>
 
         <aside class="attractor-section__legend stack">
           <p class="help-text attractor-section__intro">{{ t('profile.attractor.intro') }}</p>
-          <div class="stack stack--sm">
+          <div v-if="realEmotion" class="stack stack--sm">
             <div class="attractor-bar" v-for="dim in [
               { key: 'joy',       label: t('profile.attractor.dim.joy'),       color: '#f2b95c' },
               { key: 'nostalgia', label: t('profile.attractor.dim.nostalgia'), color: '#846edc' },
@@ -417,6 +436,13 @@ onMounted(async () => {
               </div>
             </div>
           </div>
+          <p v-else class="help-text attractor-placeholder__hint">
+            {{
+              locale === 'zh-CN'
+                ? '暂无情绪画像 — 发布至少一段带情绪标签的记忆后将自动出现。'
+                : 'No emotion profile yet — publish a memory with emotion tags to unlock it.'
+            }}
+          </p>
           <p class="help-text attractor-section__note">{{ t('profile.attractor.mockNote') }}</p>
         </aside>
       </div>
@@ -474,6 +500,62 @@ onMounted(async () => {
   border-radius: var(--radius-md);
   overflow: hidden;
   box-shadow: 0 24px 60px -28px rgba(0, 0, 0, 0.7);
+}
+
+/* D3 占位 — 当 realEmotion 为 null（用户没有带情绪标签的记忆时）显示，
+   替代 EmotionAttractor 渲染。 */
+.attractor-placeholder {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  height: 100%;
+  min-height: 360px;
+  padding: 32px 24px;
+  background:
+    radial-gradient(ellipse at center, rgba(132, 110, 220, 0.08) 0%, rgba(8, 10, 14, 0.6) 70%),
+    #08090d;
+}
+.attractor-placeholder__icon {
+  font-size: 2.6rem;
+  line-height: 1;
+  margin-bottom: 14px;
+  filter: drop-shadow(0 0 12px rgba(132, 110, 220, 0.45));
+  opacity: 0.85;
+}
+.attractor-placeholder__title {
+  margin: 0 0 6px;
+  font-size: 1.05rem;
+  font-weight: 700;
+  color: var(--text);
+  letter-spacing: 0.3px;
+}
+.attractor-placeholder__hint {
+  margin: 0;
+  font-size: 0.82rem;
+  color: var(--text-soft);
+  line-height: 1.6;
+  max-width: 36ch;
+  /* 英文长 hint 也安全换行 */
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+.attractor-placeholder__retry {
+  margin-top: 12px;
+  padding: 6px 14px;
+  font-size: 0.84rem;
+  min-width: 0;
+}
+.attractor-placeholder--err .attractor-placeholder__icon {
+  filter: drop-shadow(0 0 10px rgba(216, 82, 95, 0.5));
+}
+.attractor-placeholder--loading .attractor-placeholder__icon {
+  animation: attractor-pulse 1.6s ease-in-out infinite;
+}
+@keyframes attractor-pulse {
+  0%, 100% { transform: scale(1); opacity: 0.85; }
+  50% { transform: scale(1.1); opacity: 1; }
 }
 
 .attractor-section__legend {

@@ -560,6 +560,164 @@ select:disabled {
   letter-spacing: -0.02em;
 }
 
+/* ============================== i18n Overflow (en/zh) ============================== */
+/* 英文相对中文通常长 2-3 倍，标题/标签/卡片头容易溢出窄容器。
+   本节统一处理：
+   1) 文字层 — overflow-wrap + min-width:0
+   2) flex/grid 子项 — min-width:0 让其能缩到比内容更窄
+   3) 卡片/面板头 — title/lead 走 min-width:0 + 断词
+   4) 按钮/标签/芯片 — 单行截断带省略号
+   5) 表格/列表 — 单元列可换行
+   6) 输入框 — 长英文单词强制换行
+*/
+:where(h1, h2, h3, h4, h5, h6, p, span, a, button, li, td, th, dd, dt, label, small) {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+:where(p, .lead, .subtitle, .help-text) {
+  /* 长句保持可读：多行省略 */
+  text-wrap: pretty;
+  hyphens: auto;
+}
+
+/* 弹性/网格子项必须可缩（默认 min-content 会撑大） */
+:where(.surface, .section-card, .hero-card, .auth-card, .builder-card,
+       .profile-card, .memory-card, .result-card, .detail-card,
+       .drift-panel, .fragments-panel, .note-composer, .app-header,
+       .toast, .pill, .chip, .tag) > * {
+  min-width: 0;
+}
+
+:where(.page-shell, .page-shell--wide, .auth-card__body,
+       .section-card__body, .hero-card__body) {
+  /* 主内容容器限制最大宽度并允许滚动 */
+  max-width: 100%;
+  min-width: 0;
+}
+
+/* 卡片标题、章节标题、页头 */
+:where(.display-title, .section-title, .card-title, .section-card__title,
+       .hero-card__title, .auth-card__title, .builder-card__title,
+       .panel-title, .widget-title, .form-title, .page-shell__title,
+       h1, h2, h3) {
+  max-width: 100%;
+  min-width: 0;
+  text-wrap: balance;
+}
+
+/* 多行描述、列表文本（卡片内容、详情页） */
+:where(.card-description, .result-card__desc, .memory-card__desc,
+       .detail-card__body, .section-card__lead, .lead) {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  /* 默认 clamp 到 4 行，调用方可用 .--unclamped 取消 */
+  -webkit-line-clamp: 4;
+}
+:where(.card-description--2, .result-card__desc--2) {
+  -webkit-line-clamp: 2;
+}
+:where(.card-description--6, .result-card__desc--6) {
+  -webkit-line-clamp: 6;
+}
+
+/* 按钮（避免文字长撑大按钮导致布局错乱） */
+:where(.button, button.button, a.button) {
+  max-width: 100%;
+  min-width: 0;
+  text-align: center;
+}
+:where(.button) > :not(svg):not(.icon) {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+/* 标签/芯片/单行 meta — 单行省略（多行场景调用方用 .tag--multi） */
+:where(.tag, .chip, .pill, .badge, .meta-pill, .emotion-pill) {
+  max-width: 100%;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+:where(.tag--multi, .chip--multi) {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+/* input/textarea 长英文单词强制换行 */
+:where(input[type="text"], input[type="email"], input[type="password"],
+       input[type="search"], input[type="url"], input[type="tel"],
+       textarea, .form-input, .form-textarea) {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+/* 表格单元格 */
+:where(table, .data-table) :where(td, th) {
+  max-width: 0;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+/* nav 链接 / 面包屑 / tab */
+:where(.app-nav__link, .admin-subnav__link, .breadcrumb a, .cs-tab, .nav-link) {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+/* 模态框/dialog 内容 */
+:where(.modal__body, .dialog__body, .drawer__body) {
+  max-width: 100%;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+/* 媒体对象（图+文字） */
+:where(.media, .media-row, .list-item) {
+  min-width: 0;
+  gap: 12px;
+}
+:where(.media, .media-row, .list-item) > :not(:first-child) {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+/* 小屏：进一步收紧 */
+@media (max-width: 768px) {
+  :where(.lead, .subtitle) {
+    font-size: 0.96rem;
+  }
+  :where(.display-title) {
+    font-size: clamp(2rem, 8vw, 3rem);
+  }
+  :where(.section-title) {
+    font-size: clamp(1.2rem, 4.5vw, 1.6rem);
+  }
+}
+
+@media (max-width: 480px) {
+  :where(.lead, .subtitle) {
+    font-size: 0.88rem;
+  }
+  :where(.section-card, .hero-card, .auth-card, .builder-card,
+         .profile-card, .memory-card, .result-card, .detail-card) {
+    padding: 18px;
+  }
+  :where(.button) {
+    padding: 8px 12px;
+    font-size: 0.86rem;
+  }
+}
+
 /* ============================== Surfaces ============================== */
 
 .surface,

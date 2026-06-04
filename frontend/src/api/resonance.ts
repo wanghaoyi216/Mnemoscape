@@ -1,8 +1,16 @@
 import client from './client'
-import type { ApiResponse, ResonanceMatch, ResonanceSpace, MemoryNote } from '../types'
+import type { ApiResponse, ResonanceMatch, ResonanceSpace, MemoryNote, ResonanceStats } from '../types'
 
 export function searchResonances(memoryId: string) {
   return client.get<ApiResponse<ResonanceMatch[]>>('/resonances/search', { params: { memoryId } })
+}
+
+/**
+ * 拉取共鸣服务聚合统计（avgScore / totalMatches / algorithmName），
+ * 用于 ResonanceHub 顶部三张 metric 卡片。
+ */
+export function fetchResonanceStats() {
+  return client.get<ApiResponse<ResonanceStats>>('/resonances/stats')
 }
 
 export function createResonanceSpace(memoryId1: string, memoryId2: string) {

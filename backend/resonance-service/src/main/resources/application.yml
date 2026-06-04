@@ -88,3 +88,10 @@ logging:
   level:
     root: INFO
     com.mnemoscape: INFO
+
+feign:
+  client:
+    config:
+      default:
+        connectTimeout: 5000
+        readTimeout: 120000

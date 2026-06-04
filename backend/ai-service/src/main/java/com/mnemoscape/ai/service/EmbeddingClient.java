@@ -9,6 +9,7 @@ import com.mnemoscape.ai.config.VectorStoreProperties;
 import com.mnemoscape.ai.exception.AiUpstreamException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 
@@ -53,15 +54,34 @@ public class EmbeddingClient {
     private final String baseUrl;
     private final HttpClient httpClient;
     private final ObjectMapper json = new ObjectMapper();
+    /**
+     * 可选依赖：用于把"最近一次真实 embed 的维度"回写给
+     * {@link VectorIndexService#recordObservedDimension(int)}，让
+     * {@code VectorIndexService.isReady()} 能做"实际维度 vs 配置维度"对齐校验。
+     *
+     * <p><b>为何用 {@link ObjectProvider} 而非直接注入</b>：
+     * {@code VectorIndexService} 的构造器反向依赖 {@code EmbeddingClient}，
+     * 而 {@code MilvusSearchTool}（@Configuration）又被 Spring AI 的
+     * {@code OpenAiAutoConfiguration#openAiChatModel} 通过 {@code List<FunctionCallback>}
+     * 牵进 ChatModel 装配链，最终在 Spring Boot 3.x 严格模式
+     * （{@code spring.main.allow-circular-references=false}）下形成不可解的环。
+     * <p>{@code ObjectProvider} 是惰性 lookup —— 构造期只拿到 provider 句柄，
+     * 不解析真正的 bean，因此彻底打破环。{@code embed()} 真正运行时再用
+     * {@link ObjectProvider#getIfAvailable()} 取 bean；缺 bean / 单测环境
+     * 返回 null，回调直接跳过，绝不阻塞主流程。
+     */
+    private final ObjectProvider<VectorIndexService> vectorIndexServiceProvider;
 
     public EmbeddingClient(AiUpstreamProperties aiProps,
                            VectorStoreProperties vecProps,
                            org.springframework.core.env.Environment env,
+                           ObjectProvider<VectorIndexService> vectorIndexServiceProvider,
                            @Value("${spring.ai.openai.base-url:https://integrate.api.nvidia.com}")
                            String baseUrl) {
         this.aiProps = aiProps;
         this.vecProps = vecProps;
         this.configuredApiKey = env.getProperty("spring.ai.openai.api-key", "");
+        this.vectorIndexServiceProvider = vectorIndexServiceProvider;
         this.baseUrl = baseUrl;
         this.httpClient = HttpClient.newBuilder()
                 .connectTimeout(Duration.ofSeconds(6))
@@ -109,8 +129,8 @@ public class EmbeddingClient {
             input.add(clipped);
             // NVIDIA 检索 embedding 的非对称扩展字段；OpenAI 原生模型会忽略它。
             body.put("input_type", inputType);
-            // 截断策略：交给上游，避免超长直接 422。
-            body.put("truncate", "END");
+            // 截断策略：根据 nv-embed-v1 模型规格调整为 NONE
+            body.put("truncate", "NONE");
             body.put("encoding_format", "float");
 
             String requestBody = json.writeValueAsString(body);
@@ -137,6 +157,16 @@ public class EmbeddingClient {
             float[] vec = extractVector(responseJson);
             log.info("[EmbeddingClient] model={} type={} dim={} elapsedMs={}",
                     vecProps.getEmbeddingModel(), inputType, vec.length, System.currentTimeMillis() - t0);
+            // 把"实际拿到的维度"回写给 VectorIndexService（如果 bean 存在）。
+            // ObjectProvider.getIfAvailable() 在缺 bean / 单测环境返回 null，静默跳过。
+            VectorIndexService vis = vectorIndexServiceProvider.getIfAvailable();
+            if (vis != null) {
+                try {
+                    vis.recordObservedDimension(vec.length);
+                } catch (Exception ignored) {
+                    // dimension observation is best-effort; never break embedding on observation failure.
+                }
+            }
             return vec;
         } catch (AiUpstreamException e) {
             throw e;

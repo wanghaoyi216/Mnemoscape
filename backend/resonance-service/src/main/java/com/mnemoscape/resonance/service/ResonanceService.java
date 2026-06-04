@@ -41,6 +41,8 @@ public class ResonanceService {
     private static final int MAX_PUBLIC_POOL_SIZE = 200;
     /** 低于此分数视为不相关（避免把空泛结果灌给前端） */
     private static final double SCORE_FLOOR = 0.50;
+    /** resonanceStats() 两两 jaccard 采样的最大池子大小。80 → 3160 对，<50ms。 */
+    private static final int STATS_PAIR_LIMIT = 80;
 
     private final ResonanceSpaceRepository spaceRepository;
     private final MemoryNoteRepository noteRepository;
@@ -220,6 +222,72 @@ public class ResonanceService {
 
     public List<MemoryNote> getNotes(String resonanceId) {
         return noteRepository.findByResonanceIdOrderByCreatedAtAsc(resonanceId);
+    }
+
+    /**
+     * 共鸣服务聚合统计：用于 {@code GET /api/v1/resonances/stats}。
+     *
+     * <p>策略：
+     * <ol>
+     *   <li>复用 {@link MemoryServiceClient#publicPool} 拉跨用户 PUBLIC 记忆池；</li>
+     *   <li>对池内前 {@value #STATS_PAIR_LIMIT} 条记忆做"两两 jaccard + 时间/地点/季节加权"，
+     *       取所有得分的算术平均作为 {@code avgScore}；{@code totalMatches} 取池大小；</li>
+     *   <li>返回附加字段 {@code poolSampled} / {@code pairCount} 让前端能看到真实计算量，
+     *       避免"avgScore=0.55 是凑出来的还是真算出来的"这种疑虑。</li>
+     * </ol>
+     *
+     * <p>memory-service 不可达或池为空时 → 全部回退到 0；这跟
+     * {@link #searchResonances} 的 fail-closed 语义保持一致（不伪造数字）。
+     *
+     * <p>{@code algorithmName} 是写死的展示字段，未来切到真实 Milvus 召回后改这里即可。
+     */
+    public Map<String, Object> resonanceStats() {
+        Map<String, Object> out = new LinkedHashMap<>();
+        // 统计是全局视图，不属于某个 caller，所以用一个 system sentinel 让 memory-service
+        // 跳过 caller 过滤、返回完整公共池。
+        final String statsUserId = "__stats__";
+        try {
+            ApiResponse<List<Map<String, Object>>> resp = memoryClient.publicPool(MAX_PUBLIC_POOL_SIZE, statsUserId);
+            List<Map<String, Object>> pool = (resp == null || resp.getData() == null) ? List.of() : resp.getData();
+            if (pool.isEmpty()) {
+                out.put("avgScore", 0.0);
+                out.put("totalMatches", 0);
+                out.put("algorithmName", "Mnemoscape Multi-Signal v1");
+                out.put("poolSampled", 0);
+                return out;
+            }
+            // 真实统计：用公共池的"两两 jaccard + 时间/地点/季节加权"算平均相似度。
+            // 采样上限 STATS_PAIR_LIMIT = 80 → 最多 80*79/2 = 3160 对，避免 200 条全量
+            // 跑 O(n²) 拖累 /stats。pool 实际 < 80 时按真实大小算。
+            final int sampled = Math.min(pool.size(), STATS_PAIR_LIMIT);
+            double sum = 0.0;
+            int pairs = 0;
+            for (int i = 0; i < sampled; i++) {
+                Map<String, Object> a = pool.get(i);
+                List<String> aKws = extractKeywords(stringField(a, "title") + " "
+                        + stringField(a, "memoryLocation") + " "
+                        + stringField(a, "description"));
+                Integer aYear = intField(a, "memoryYear");
+                String aSeason = stringField(a, "memorySeason");
+                String aLoc = stringField(a, "memoryLocation");
+                for (int j = i + 1; j < sampled; j++) {
+                    sum += scoreOverlap(aKws, aYear, aSeason, aLoc, pool.get(j));
+                    pairs++;
+                }
+            }
+            double avg = pairs > 0 ? round(sum / pairs) : 0.0;
+            out.put("avgScore", avg);
+            out.put("totalMatches", pool.size());
+            out.put("poolSampled", sampled);
+            out.put("pairCount", pairs);
+            out.put("algorithmName", "Mnemoscape Multi-Signal v1");
+        } catch (Exception e) {
+            log.warn("resonanceStats: public-pool unreachable, returning zeros: {}", e.toString());
+            out.put("avgScore", 0.0);
+            out.put("totalMatches", 0);
+            out.put("algorithmName", "Mnemoscape Multi-Signal v1");
+        }
+        return out;
     }
 
     /* ============ 打分 / 工具 ============ */

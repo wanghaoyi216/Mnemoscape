@@ -77,7 +77,7 @@ class AiResponseDeterminismExplorationTest {
         }
         VisionDescriber visionDescriber = new VisionDescriber(props, env, "https://integrate.api.nvidia.com");
         MilvusSearchTool milvusTool = new MilvusSearchTool(null, null, null);
-        return new ChatReasoner(builder, streamingBuilder, props, env, visionDescriber, milvusTool);
+        return new ChatReasoner(builder, streamingBuilder, props, env, visionDescriber, milvusTool, "https://integrate.api.nvidia.com");
     }
 
     /** Lexicon of safe, non-prompt-injection prompts that should hit either

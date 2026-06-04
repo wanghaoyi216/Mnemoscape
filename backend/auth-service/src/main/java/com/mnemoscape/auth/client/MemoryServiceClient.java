@@ -9,6 +9,7 @@ import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 
 import java.util.List;
+import java.util.Map;
 
 /**
  * Feign client to memory-service for the admin dashboard
@@ -80,4 +81,20 @@ public interface MemoryServiceClient {
             @RequestParam("dimension") Dimension dimension,
             @RequestParam(value = "from", required = false) String from,
             @RequestParam(value = "to", required = false) String to);
+
+    /**
+     * 服务端代理获取当前用户最近记忆的摘要（仅含 avatar 需要的字段）。
+     *
+     * <p>Wire route (memory-service side):
+     * {@code GET /api/v1/memories?page=0&size=N} — 借助 memory-service
+     * 自身的 owner 过滤 + MemoryResponse DTO 投影。
+     *
+     * <p>Authorization header 由全局
+     * {@link com.mnemoscape.common.client.FeignAuthForwardingInterceptor}
+     * 自动从当前请求透传，无需显式声明。
+     */
+    @GetMapping("/memories")
+    ApiResponse<Map<String, Object>> listMemoriesForEmotion(
+            @RequestParam(value = "page", defaultValue = "0") int page,
+            @RequestParam(value = "size", defaultValue = "50") int size);
 }

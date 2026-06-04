@@ -39,7 +39,7 @@ public class AssetController {
         return ApiResponse.success(Map.of("objectName", objectName, "url", url));
     }
 
-    @GetMapping("/download/{objectName}")
+    @GetMapping("/download/{*objectName}")
     public void download(@PathVariable String objectName,
                          HttpServletRequest request,
                          HttpServletResponse response) {
