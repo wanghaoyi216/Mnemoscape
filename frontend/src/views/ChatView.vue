@@ -8,7 +8,6 @@ import { useReconnectingWebSocket } from '../composables/useReconnectingWebSocke
 // v8：从 16 个硬编码 emoji 升级到 200+ 分类 catalog。
 // 保留 EMOJI_LIST_FLAT 作为兜底（兼容万一 catalog 加载失败），正常路径用 catalog。
 import {
-  KAOMOJI_CATALOG,
   KAOMOJI_CATEGORIES,
   kaomojiByCategory,
   searchKaomoji,

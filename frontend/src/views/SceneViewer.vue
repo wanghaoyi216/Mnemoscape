@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useMemoryStore } from '../stores/memory'
@@ -13,7 +13,7 @@ import { TooltipComponent } from 'echarts/components'
 
 echartsUse([CanvasRenderer, GraphChart, TooltipComponent])
 
-const { t, locale } = useI18n()
+const { t } = useI18n()
 const route = useRoute()
 const memoryStore = useMemoryStore()
 const chartRef = ref<any>(null)
@@ -349,8 +349,8 @@ const graphOption = computed(() => {
               </summary>
               <div class="accordion-content fragment-list">
                 <div v-if="memoryStore.currentFragments.length === 0" class="meta-item empty">暂无记忆碎片流程</div>
-                <div 
-                  v-for="(f, idx) in memoryStore.currentFragments" 
+                <div
+                  v-for="f in memoryStore.currentFragments"
                   :key="f.id"
                   class="fragment-item"
                   :class="{ 'fragment-item--discovered': f.isDiscovered }"

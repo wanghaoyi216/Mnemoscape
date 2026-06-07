@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
+import { ref, onMounted, watch } from 'vue'
 import { useMemoryStore } from '../../stores/memory'
 import { useDynamicMedia } from '../../composables/useDynamicMedia'
 import { useI18n } from 'vue-i18n'

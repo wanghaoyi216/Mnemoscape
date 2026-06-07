@@ -702,7 +702,7 @@ export function usePremiumThree(containerRef: Ref<HTMLElement | null>) {
     const camPos = camera.value.position
     let best: MemoryFragment | null = null
     let bestDist = Infinity
-    for (const [id, mesh] of fragmentMeshes.entries()) {
+    for (const [, mesh] of fragmentMeshes.entries()) {
       const f = mesh.userData.fragment as MemoryFragment
       if (f.isDiscovered) continue
       const d = camPos.distanceTo(mesh.position)

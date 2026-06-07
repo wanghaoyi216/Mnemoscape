@@ -11,7 +11,6 @@ import AdminPanel from '../../components/admin/AdminPanel.vue'
 import { useAdminHealth } from '../../composables/useAdminHealth'
 import { getAdminAuditLogs } from '../../api/admin'
 import type { AdminHealthComponent, AdminHealthStatus, AuditLog } from '../../api/admin'
-import { renderMarkdown } from '../../composables/useMarkdown'
 
 const { t } = useI18n()
 const { data, loading, error, degraded, degradedReasons, fetch } = useAdminHealth()

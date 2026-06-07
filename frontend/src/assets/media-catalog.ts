@@ -113,10 +113,36 @@ export const images = {
   neonFields:        img('neon-fields',        '霓虹原野',          '场景占位（开阔、能量、未来）'),
 } as const satisfies Record<string, MediaAsset>
 
-/** 在 sceneDataUrl 为空时，根据 memory 的情绪/季节做一个稳定的兜底选择。 */
+/**
+ * 程序化 SVG 氛围封面 — 矢量、零网络依赖、随主题色系协调的渐变意境图。
+ *
+ * Why：内置位图封面只有 15 张，记忆卡片在素材池为空时容易撞图。这些 SVG 体积
+ * 极小（每张 1~2KB）、可无损缩放，作为 fallback 封面的扩充，让"无场景渲染"的
+ * 记忆也有六种情绪基调可选。raster 真实照片由用户后续按 ASSET_SPEC 投放到
+ * resource/photo/，会通过 useDynamicMedia 自动优先于这些兜底图。
+ */
+function svgCover(slug: string, origin: string, role: string): MediaAsset {
+  return { src: `${PUBLIC}/covers/${slug}.svg`, origin, role }
+}
+
+export const covers = {
+  auroraVeil: svgCover('aurora-veil', '极光帷幕', '场景占位（清冷、辽阔、青蓝极光）'),
+  amberDusk:  svgCover('amber-dusk',  '琥珀黄昏', '场景占位（温暖、落日、怀旧）'),
+  violetTide: svgCover('violet-tide', '紫罗兰潮', '场景占位（梦幻、绯紫、情绪）'),
+  mintMist:   svgCover('mint-mist',   '薄荷雾霭', '场景占位（宁静、薄荷绿、治愈）'),
+  abyssGlow:  svgCover('abyss-glow',  '深渊微光', '场景占位（深邃、海蓝、神秘）'),
+  emberField: svgCover('ember-field', '余烬之原', '场景占位（热烈、橙红、能量）'),
+} as const satisfies Record<string, MediaAsset>
+
+/** 在 sceneDataUrl 为空时，根据 memory 的情绪/季节做一个稳定的兜底选择。
+ *  位图占位 + 六张矢量氛围封面合并成 11 项调色板，显著降低撞图概率。 */
 export function fallbackSceneCover(seedKey: string | null | undefined): MediaAsset {
-  const palette = [images.goldenAfternoon, images.cyberWatertown, images.neonFields,
-                   images.driftingBubble, images.memoryCorona] as const
+  const palette = [
+    images.goldenAfternoon, images.cyberWatertown, images.neonFields,
+    images.driftingBubble, images.memoryCorona,
+    covers.auroraVeil, covers.amberDusk, covers.violetTide,
+    covers.mintMist, covers.abyssGlow, covers.emberField,
+  ] as const
   if (!seedKey) return palette[0]
   let h = 0
   for (let i = 0; i < seedKey.length; i++) h = (h * 31 + seedKey.charCodeAt(i)) | 0

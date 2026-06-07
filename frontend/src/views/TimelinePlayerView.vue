@@ -1,11 +1,11 @@
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
-import { useI18n } from 'vue-i18n'
 import { useMemoryStore } from '../stores/memory'
+import { fallbackSceneCover } from '../assets/media-catalog'
+import type { MemoryItem } from '../types'
 import * as THREE from 'three'
 
-const { t } = useI18n()
 const router = useRouter()
 const memoryStore = useMemoryStore()
 
@@ -17,7 +17,8 @@ const playbackSpeed = ref(1.0)
 
 let renderer: THREE.WebGLRenderer | null = null
 let scene: THREE.Scene | null = null
-let camera: THREE.PerspectiveCamera | null = null
+// 全屏 quad shader 过渡用正交相机；用基类 Camera 兼容 OrthographicCamera
+let camera: THREE.Camera | null = null
 let currentTexture: THREE.Texture | null = null
 let nextTexture: THREE.Texture | null = null
 let transitionMaterial: THREE.ShaderMaterial | null = null
@@ -36,6 +37,15 @@ const memories = computed(() => {
 const currentMemory = computed(() => memories.value[currentIndex.value])
 const hasNext = computed(() => currentIndex.value < memories.value.length - 1)
 const hasPrev = computed(() => currentIndex.value > 0)
+
+// 时光机贴图封面：优先用后端真实 sceneDataUrl（http/绝对路径），
+// 否则按记忆 id 稳定哈希到内置 / 矢量氛围封面（与 MemoryListView 同一套兜底）。
+function coverUrlFor(memory: MemoryItem): string {
+  const scene = memory.sceneDataUrl
+  if (scene && (/^https?:\/\//.test(scene) || scene.startsWith('/'))) return scene
+  const asset = fallbackSceneCover(memory.id)
+  return asset.thumb ?? asset.src
+}
 
 const transitionShader = {
   vertexShader: `
@@ -172,7 +182,7 @@ function loadMemoryTexture(index: number) {
   if (!memory) return
 
   const loader = new THREE.TextureLoader()
-  const fallbackUrl = memory.coverImageUrl || '/placeholder-memory.jpg'
+  const fallbackUrl = coverUrlFor(memory)
 
   loader.load(
     fallbackUrl,
@@ -215,7 +225,7 @@ function playNext() {
   if (!nextMem) return
 
   const loader = new THREE.TextureLoader()
-  const fallbackUrl = nextMem.coverImageUrl || '/placeholder-memory.jpg'
+  const fallbackUrl = coverUrlFor(nextMem)
 
   loader.load(fallbackUrl, (texture) => {
     nextTexture = texture

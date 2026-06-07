@@ -26,14 +26,11 @@ import java.util.stream.Collectors;
 @RequestMapping("/api/v1/memories")
 public class MemoryController {
     private final MemoryService memoryService;
-    private final com.mnemoscape.memory.repository.MemoryRepository memoryRepository;
     private final IdempotencyGuard idempotencyGuard;
 
     public MemoryController(MemoryService memoryService,
-                            com.mnemoscape.memory.repository.MemoryRepository memoryRepository,
                             IdempotencyGuard idempotencyGuard) {
         this.memoryService = memoryService;
-        this.memoryRepository = memoryRepository;
         this.idempotencyGuard = idempotencyGuard;
     }
 
@@ -173,9 +170,8 @@ public class MemoryController {
             @RequestParam(defaultValue = "200") int limit,
             HttpServletRequest httpReq) {
         String userId = RequestContext.requireUserId(httpReq);
-        int safeLimit = Math.max(10, Math.min(limit, 500));
-        List<Memory> rows = memoryRepository.findPublicPoolExcludingUser(
-                userId, org.springframework.data.domain.PageRequest.of(0, safeLimit));
+        // 走 service 层的 Caffeine 缓存（60s），避免每次共鸣搜索都全表扫描公共池。
+        List<Memory> rows = memoryService.getPublicPool(userId, limit);
         List<MemoryResponse> items = rows.stream()
                 .map(MemoryResponse::fromEntity)
                 .collect(Collectors.toList());
