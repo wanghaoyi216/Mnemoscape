@@ -1,0 +1,36 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 800" preserveAspectRatio="xMidYMid slice" role="img" aria-label="Ember field">
+  <defs>
+    <radialGradient id="ef-bg" cx="50%" cy="100%" r="110%">
+      <stop offset="0%" stop-color="#4a1410"/>
+      <stop offset="45%" stop-color="#2a0c0e"/>
+      <stop offset="100%" stop-color="#0d0406"/>
+    </radialGradient>
+    <radialGradient id="ef-spark" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#ffd27a" stop-opacity="0.95"/>
+      <stop offset="100%" stop-color="#f2843c" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="ef-blur"><feGaussianBlur stdDeviation="20"/></filter>
+    <filter id="ef-grain">
+      <feTurbulence type="fractalNoise" baseFrequency="0.85" numOctaves="2" stitchTiles="stitch"/>
+      <feColorMatrix type="saturate" values="0"/>
+      <feComponentTransfer><feFuncA type="linear" slope="0.05"/></feComponentTransfer>
+      <feComposite operator="over" in2="SourceGraphic"/>
+    </filter>
+  </defs>
+  <rect width="1200" height="800" fill="url(#ef-bg)"/>
+  <g filter="url(#ef-blur)" opacity="0.85">
+    <ellipse cx="600" cy="820" rx="620" ry="200" fill="#7a2418" opacity="0.6"/>
+    <ellipse cx="600" cy="860" rx="420" ry="160" fill="#f2843c" opacity="0.3"/>
+  </g>
+  <g>
+    <circle cx="260" cy="540" r="30" fill="url(#ef-spark)"/>
+    <circle cx="480" cy="440" r="22" fill="url(#ef-spark)"/>
+    <circle cx="700" cy="520" r="34" fill="url(#ef-spark)"/>
+    <circle cx="900" cy="420" r="20" fill="url(#ef-spark)"/>
+    <circle cx="1040" cy="540" r="26" fill="url(#ef-spark)"/>
+    <circle cx="360" cy="360" r="14" fill="url(#ef-spark)" opacity="0.8"/>
+    <circle cx="820" cy="320" r="12" fill="url(#ef-spark)" opacity="0.7"/>
+    <circle cx="600" cy="300" r="10" fill="url(#ef-spark)" opacity="0.6"/>
+  </g>
+  <rect width="1200" height="800" filter="url(#ef-grain)" opacity="0.5"/>
+</svg>

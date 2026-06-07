@@ -104,8 +104,19 @@ async function createSpace(match: ResonanceMatch) {
       </div>
     </section>
 
-    <section v-if="hasResults" class="card-grid" style="margin-top: 24px;">
-      <article v-for="match in resonanceStore.searchResults" :key="match.memoryId" class="result-card resonance-result">
+    <transition-group
+      v-if="hasResults"
+      tag="section"
+      name="list-stagger"
+      class="card-grid"
+      style="margin-top: 24px;"
+    >
+      <article
+        v-for="(match, idx) in resonanceStore.searchResults"
+        :key="match.memoryId"
+        class="result-card resonance-result"
+        :style="{ transitionDelay: `${Math.min(idx * 60, 360)}ms` }"
+      >
         <video class="resonance-result__video" :src="signalVideo" autoplay muted loop playsinline aria-hidden="true"></video>
         <div class="stack">
           <div class="result-card__head">
@@ -139,7 +150,7 @@ async function createSpace(match: ResonanceMatch) {
           {{ creating === match.memoryId ? t('resonance.hub.result.creating') : t('resonance.hub.result.openSpace') }}
         </button>
       </article>
-    </section>
+    </transition-group>
 
     <section v-else class="section-card empty-state" style="margin-top: 24px;">
       <h3 class="empty-state__title">{{ t('resonance.hub.empty.title') }}</h3>

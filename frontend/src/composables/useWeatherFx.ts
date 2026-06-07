@@ -78,7 +78,6 @@ export function useWeatherFx(canvasRef: Ref<HTMLCanvasElement | null>) {
   let lightningTimer = 0
   let auroraPhase = 0
   let fogPhase = 0
-  let embersPhase = 0
 
   function resize() {
     if (!canvasRef.value) return
@@ -102,7 +101,6 @@ export function useWeatherFx(canvasRef: Ref<HTMLCanvasElement | null>) {
     lightningFlash = 0
     auroraPhase = 0
     fogPhase = 0
-    embersPhase = 0
   }
 
   function spawnParticles() {
@@ -657,7 +655,6 @@ export function useWeatherFx(canvasRef: Ref<HTMLCanvasElement | null>) {
     lightningTimer = 0
     auroraPhase = 0
     fogPhase = 0
-    embersPhase = 0
   })
 
   onUnmounted(dispose)

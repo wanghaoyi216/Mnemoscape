@@ -29,9 +29,32 @@ public class AssetService {
     private final MinioClient minioClient;
     private final StorageProperties properties;
 
+    /**
+     * MinIO 列表的轻量 TTL 缓存（无外部依赖）。
+     *
+     * <p>{@code /static/resources} 是前端每次进页面都打的热路径，而它每次都要全桶
+     * recursive 扫描 + 给每个对象现生成 presigned URL（N 次 HMAC 签名），素材一多就是
+     * 几百 ms。素材的增删频率远低于读取，所以这里按 {@code userId} 缓存结果 30s：
+     * presigned URL 有效期是 1h（见 getPresignedUrl），30s 内复用完全安全。
+     * 上传 / 删除 / 迁移等写操作会主动 {@link #invalidateListCache()} 清空，保证新素材
+     * 最迟下一次请求（或热加载窗口）就能看到。
+     */
+    private static final long LIST_CACHE_TTL_MS = 30_000L;
+    private final java.util.concurrent.ConcurrentHashMap<String, CachedListing> listCache =
+            new java.util.concurrent.ConcurrentHashMap<>();
+
+    private record CachedListing(List<StaticResource> items, long expiresAt) {
+        boolean fresh() { return System.currentTimeMillis() < expiresAt; }
+    }
+
     public AssetService(MinioClient minioClient, StorageProperties properties) {
         this.minioClient = minioClient;
         this.properties = properties;
+    }
+
+    /** 写操作后清空列表缓存，避免读到不含新对象的陈旧列表。 */
+    public void invalidateListCache() {
+        listCache.clear();
     }
 
     /**
@@ -61,6 +84,7 @@ public class AssetService {
                     .contentType(file.getContentType())
                     .build());
             log.info("Uploaded for user={} purpose={} object={}", userId, purpose, objectName);
+            invalidateListCache();
             return objectName;
         } catch (Exception e) {
             throw new RuntimeException("Upload failed", e);
@@ -84,6 +108,7 @@ public class AssetService {
                     .contentType(file.getContentType())
                     .build());
             log.info("Uploaded (legacy, public): {}", objectName);
+            invalidateListCache();
             return objectName;
         } catch (Exception e) {
             throw new RuntimeException("Upload failed", e);
@@ -126,6 +151,7 @@ public class AssetService {
                     .object(objectName)
                     .build());
             log.info("Deleted: {}", objectName);
+            invalidateListCache();
         } catch (Exception e) {
             throw new RuntimeException("Delete failed", e);
         }
@@ -151,7 +177,14 @@ public class AssetService {
      * </ul>
      */
     public List<StaticResource> listMinioStaticForUser(String userId) {
-        return listMinioStaticInternal(userId, false /* includeAllUsers */);
+        String cacheKey = userId == null ? "__anon__" : userId;
+        CachedListing cached = listCache.get(cacheKey);
+        if (cached != null && cached.fresh()) {
+            return cached.items();
+        }
+        List<StaticResource> fresh = listMinioStaticInternal(userId, false /* includeAllUsers */);
+        listCache.put(cacheKey, new CachedListing(fresh, System.currentTimeMillis() + LIST_CACHE_TTL_MS));
+        return fresh;
     }
 
     private List<StaticResource> listMinioStaticInternal(String userId, boolean includeAllUsers) {
@@ -361,6 +394,7 @@ public class AssetService {
         result.put("migrated", migrated);
         result.put("dryRun", dryRun);
         result.put("samples", samples);
+        if (!dryRun && migrated > 0) invalidateListCache();
         log.info("[migrate] legacy-orphan scan done: scanned={} candidates={} migrated={} dryRun={}",
                 scanned, candidates, migrated, dryRun);
         return result;
@@ -475,6 +509,7 @@ public class AssetService {
         result.put("wouldMigrate", wouldMigrate);
         result.put("dryRun", dryRun);
         result.put("samples", samples);
+        if (!dryRun && wouldMigrate > 0) invalidateListCache();
         log.info("[migrate] off-allowlist scan done: scanned={} candidates={} wouldMigrate={} dryRun={}",
                 scanned, candidates, wouldMigrate, dryRun);
         return result;

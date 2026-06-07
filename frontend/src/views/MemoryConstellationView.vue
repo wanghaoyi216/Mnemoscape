@@ -6,7 +6,6 @@ import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import { useMemoryStore } from '../stores/memory'
 
-const { t } = useI18n()
 const router = useRouter()
 const memoryStore = useMemoryStore()
 const containerRef = ref<HTMLElement | null>(null)
@@ -21,7 +20,6 @@ let controls: OrbitControls | null = null
 let animId = 0
 let raycaster: THREE.Raycaster | null = null
 let mouse = new THREE.Vector2()
-let lastMouseEvent: MouseEvent | null = null
 /**
  * starMeshes 现在装的是「不可见的大命中球」，
  * 视觉的 star/glow/core 仍各自渲染但不再参与 raycast 命中。
@@ -382,8 +380,6 @@ function animate() {
   // 粒子轨迹流动
   particleTrails.forEach((trail) => {
     const positions = trail.geometry.getAttribute('position')
-    const offset = trail.userData.offset || 0
-    const flow = (t * 0.3 + offset) % 1
 
     for (let i = 0; i < positions.count; i++) {
       const baseY = positions.getY(i)
@@ -399,7 +395,6 @@ function animate() {
 
 function onMouseMove(ev: MouseEvent) {
   if (!containerRef.value || !raycaster || !camera || !scene) return
-  lastMouseEvent = ev
   const rect = containerRef.value.getBoundingClientRect()
   mouse.x = ((ev.clientX - rect.left) / rect.width) * 2 - 1
   mouse.y = -((ev.clientY - rect.top) / rect.height) * 2 + 1

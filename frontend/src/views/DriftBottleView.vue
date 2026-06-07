@@ -1,11 +1,9 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '../stores/auth'
 import { useMemoryStore } from '../stores/memory'
 import axios from 'axios'
 
-const { t } = useI18n()
 const auth = useAuthStore()
 const memoryStore = useMemoryStore()
 

@@ -3,7 +3,6 @@ import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useMemoryStore } from '../stores/memory'
-import { images } from '../assets/media-catalog'
 
 const route = useRoute()
 const router = useRouter()

@@ -201,13 +201,18 @@ function formatDate(value?: string) {
         <button type="button" class="button button--secondary" @click="applyPrivacyFilter">{{ t('common.retry') }}</button>
       </div>
 
-      <div v-else-if="filteredMemories.length > 0" class="card-grid">
+      <transition-group
+        v-else-if="filteredMemories.length > 0"
+        tag="div"
+        name="list-stagger"
+        class="card-grid"
+      >
         <RouterLink
           v-for="(memory, idx) in filteredMemories"
           :key="memory.id"
           :to="`/memories/${memory.id}`"
-          class="memory-card-link reveal"
-          :style="{ animationDelay: `${Math.min(idx * 40, 320)}ms` }"
+          class="memory-card-link"
+          :style="{ transitionDelay: `${Math.min(idx * 40, 320)}ms` }"
         >
           <article class="memory-card">
             <!-- 封面：若后端给了真实缩略 URL 就用，否则按 id 稳定哈希到一张占位画 -->
@@ -257,7 +262,7 @@ function formatDate(value?: string) {
             </div>
           </article>
         </RouterLink>
-      </div>
+      </transition-group>
 
       <div class="section-card empty-state memory-empty" v-else>
         <!-- 「记忆守护者」插画 — 没有记忆时的视觉锚 -->

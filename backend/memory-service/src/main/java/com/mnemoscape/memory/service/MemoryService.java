@@ -97,6 +97,7 @@ public class MemoryService {
      * <p>之前主线程顺序跑 enrichWithReconstruction（10-30s）会让前端建造完按提交后
      * 卡很久，体验差且 axios 默认 15s 超时容易直接报错。
      */
+    @CacheEvict(value = "publicPool", allEntries = true)
     public Memory createMemory(CreateMemoryRequest request, String userId) {
         log.info("Starting memory creation process for user: {}", userId);
         Memory memory = persistBaseMemory(request, userId);
@@ -667,8 +668,31 @@ public class MemoryService {
                 userId, parsedPrivacy, PageRequest.of(page, size));
     }
 
+    /**
+     * 跨用户公共记忆池——专供 resonance-service 真实化检索。
+     *
+     * <p>这是一个高频读、低频写的热路径：每个用户每次共鸣搜索都会拉一遍全量公共池，
+     * 而公共记忆的增删频率远低于读取。因此用 Caffeine 缓存 60s（{@code publicPool}
+     * cache，见 application.yml），key = {@code 调用方userId + ':' + limit}。
+     * 任何记忆写操作（创建/更新/删除/改隐私）都会 {@code @CacheEvict allEntries}
+     * 把整个池清空，保证不会读到陈旧的公共记忆。
+     *
+     * <p>不缓存单用户自己的列表（{@link #listMemories}）——那条路径每个用户只看自己，
+     * 命中率低且写后立即要看到，缓存收益不划算。
+     */
+    @org.springframework.cache.annotation.Cacheable(
+            value = "publicPool", key = "#excludeUserId + ':' + #limit")
+    public List<Memory> getPublicPool(String excludeUserId, int limit) {
+        int safeLimit = Math.max(10, Math.min(limit, 500));
+        return memoryRepository.findPublicPoolExcludingUser(
+                excludeUserId, PageRequest.of(0, safeLimit));
+    }
+
     @Transactional
-    @CacheEvict(value = "memories", key = "#memoryId")
+    @org.springframework.cache.annotation.Caching(evict = {
+            @CacheEvict(value = "memories", key = "#memoryId"),
+            @CacheEvict(value = "publicPool", allEntries = true)
+    })
     public Memory updateMemory(String memoryId, UpdateMemoryRequest request, String userId) {
         Memory memory = getMemory(memoryId, userId);
         String title = normalizeNonBlank(request.getTitle(), "Title");
@@ -725,7 +749,10 @@ public class MemoryService {
     }
 
     @Transactional
-    @CacheEvict(value = "memories", key = "#memoryId")
+    @org.springframework.cache.annotation.Caching(evict = {
+            @CacheEvict(value = "memories", key = "#memoryId"),
+            @CacheEvict(value = "publicPool", allEntries = true)
+    })
     public void deleteMemory(String memoryId, String userId) {
         Memory memory = getMemory(memoryId, userId);
         memoryRepository.delete(memory);
@@ -738,7 +765,10 @@ public class MemoryService {
     }
 
     @Transactional
-    @CacheEvict(value = "memories", key = "#memoryId")
+    @org.springframework.cache.annotation.Caching(evict = {
+            @CacheEvict(value = "memories", key = "#memoryId"),
+            @CacheEvict(value = "publicPool", allEntries = true)
+    })
     public Memory lockMemory(String memoryId, String userId) {
         Memory memory = getMemory(memoryId, userId);
         memory.setIsLocked(true);
@@ -748,7 +778,10 @@ public class MemoryService {
     }
 
     @Transactional
-    @CacheEvict(value = "memories", key = "#memoryId")
+    @org.springframework.cache.annotation.Caching(evict = {
+            @CacheEvict(value = "memories", key = "#memoryId"),
+            @CacheEvict(value = "publicPool", allEntries = true)
+    })
     public Memory unlockMemory(String memoryId, String userId) {
         Memory memory = getMemory(memoryId, userId);
         memory.setIsLocked(false);
@@ -769,7 +802,10 @@ public class MemoryService {
     }
 
     @Transactional
-    @CacheEvict(value = "memories", key = "#memoryId")
+    @org.springframework.cache.annotation.Caching(evict = {
+            @CacheEvict(value = "memories", key = "#memoryId"),
+            @CacheEvict(value = "publicPool", allEntries = true)
+    })
     public Memory restoreVersion(String memoryId, int versionNumber, String userId) {
         Memory memory = getMemory(memoryId, userId);
         List<MemoryVersion> versions = versionRepository.findByMemoryIdOrderByVersionNumberDesc(memoryId);

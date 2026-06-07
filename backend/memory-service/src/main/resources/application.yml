@@ -65,7 +65,26 @@ spring:
     type: caffeine
     caffeine:
       spec: maximumSize=2000,expireAfterWrite=10m
-    cache-names: memories,driftStates
+    cache-names: memories,driftStates,publicPool
+  # @Async 线程池显式收口。Spring Boot 默认 applicationTaskExecutor 的队列是
+  # 无界的（Integer.MAX_VALUE），高并发写记忆时三路增强任务（重建/图谱/向量）
+  # 会无限堆积，把内存吃满且无法触发 max-pool 扩容。这里改成有界队列 +
+  # CALLER_RUNS 拒绝策略：队列打满后由提交线程自己跑，形成天然背压（流量削峰）。
+  task:
+    execution:
+      pool:
+        core-size: 8
+        max-size: 32
+        queue-capacity: 200
+        keep-alive: 60s
+      thread-name-prefix: mem-async-
+      shutdown:
+        await-termination: true
+        await-termination-period: 20s
+    scheduling:
+      pool:
+        size: 4
+      thread-name-prefix: mem-sched-
   cloud:
     inetutils:
       preferred-networks:
