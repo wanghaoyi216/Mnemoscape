@@ -1,0 +1,163 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>com.mnemoscape</groupId>
+        <artifactId>mnemoscape-platform</artifactId>
+        <version>1.0.0-SNAPSHOT</version>
+    </parent>
+    <artifactId>memory-service</artifactId>
+    <packaging>jar</packaging>
+    <name>Mnemoscape Memory Service</name>
+
+    <dependencies>
+        <dependency>
+            <groupId>com.mnemoscape</groupId>
+            <artifactId>common</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-web</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-validation</artifactId>
+        </dependency>
+        <!-- Spring Security auto-configuration so the SecurityFilterChain bean
+             defined in SecurityConfig is picked up.  Used for the admin-dashboard
+             dual-layer enforcement: any direct call to /api/v1/admin/** that
+             bypasses the gateway is rejected here with hasRole('ADMIN').
+             (admin-dashboard Requirements 3.2) -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-security</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-jpa</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-neo4j</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-amqp</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-actuator</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.mysql</groupId>
+            <artifactId>mysql-connector-j</artifactId>
+            <scope>runtime</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.alibaba.cloud</groupId>
+            <artifactId>spring-cloud-starter-alibaba-nacos-discovery</artifactId>
+        </dependency>
+        <!-- Nacos Config + bootstrap starter (Spring Cloud 2023.x 需显式启用 bootstrap.yml) -->
+        <dependency>
+            <groupId>com.alibaba.cloud</groupId>
+            <artifactId>spring-cloud-starter-alibaba-nacos-config</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.cloud</groupId>
+            <artifactId>spring-cloud-starter-bootstrap</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.cloud</groupId>
+            <artifactId>spring-cloud-starter-openfeign</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.cloud</groupId>
+            <artifactId>spring-cloud-starter-loadbalancer</artifactId>
+        </dependency>
+        <!-- Caffeine for in-memory cache backend (Spring Cache abstraction) -->
+        <dependency>
+            <groupId>com.github.ben-manes.caffeine</groupId>
+            <artifactId>caffeine</artifactId>
+        </dependency>
+        <!-- Redis client + cache abstraction for the admin aggregation
+             endpoints (active-users, memory-trends, emotion-distribution,
+             heatmap, top-contributors, fragment-discovery — see task 7.1).
+             spring-boot-starter-data-redis brings the Lettuce driver and the
+             RedisConnectionFailureException type that BypassOnFailureCacheManager
+             (in common) catches to gracefully degrade when Redis is unavailable
+             (admin-dashboard Requirements 14.3). The @Cacheable annotation
+             surface itself is already pulled in transitively via the common
+             module's spring-boot-starter-cache (Requirements 14.1, 14.2). -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-redis</artifactId>
+        </dependency>
+
+        <!-- Resilience4j — circuit breaker for the Feign call to ai-service.
+             memory-service drives AI enrichment asynchronously
+             (runEnrichmentAsync / runGraphProjectionAsync /
+             runVectorIndexingAsync) but a hung LLM call (10+ s) or a flapping
+             Milvus upsert can still pile up threads in the @Async pool. The
+             circuit breaker lets us trip → fast-fail → resume quickly once
+             ai-service recovers, and gives us a metrics endpoint at
+             /actuator/prometheus via Micrometer integration. -->
+        <dependency>
+            <groupId>io.github.resilience4j</groupId>
+            <artifactId>resilience4j-spring-boot3</artifactId>
+        </dependency>
+
+        <!-- Test scope: pure JUnit5 — first test in the repo, validates the
+             Feign correlation interceptor without spinning a Spring context. -->
+        <dependency>
+            <groupId>org.junit.jupiter</groupId>
+            <artifactId>junit-jupiter</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <!-- Mockito for unit-testing services that need to mock repositories
+             (admin-dashboard task 7.10 / 7.12 / 7.18 / 7.20 / 7.22). -->
+        <dependency>
+            <groupId>org.mockito</groupId>
+            <artifactId>mockito-core</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <!-- Jackson assertion helpers for the privacy-leak guard test
+             (admin-dashboard task 7.22 / Property 9). -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <!-- jqwik for property-based testing of the TimeBucketing utility
+             (admin-dashboard tasks 7.3 / 7.4 / 7.5 / 7.6 / 7.14 / 7.15 /
+             7.16, Properties 3 / 4 / 5 / 6 / 7 / 8 / 10). Pinned to the
+             same version as ai-service so the workspace runs a single
+             jqwik-database file format across modules. -->
+        <dependency>
+            <groupId>net.jqwik</groupId>
+            <artifactId>jqwik</artifactId>
+            <version>1.8.4</version>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+            </plugin>
+            <!-- Surefire — pass the byte-buddy experimental flag so Mockito's
+                 inline mock maker tolerates JVMs newer than Byte Buddy's
+                 officially supported set (we run on Java 25 in dev). -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <configuration>
+                    <argLine>-Xmx1024m -Dnet.bytebuddy.experimental=true</argLine>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
+</project>

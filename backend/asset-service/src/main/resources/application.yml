@@ -1,0 +1,67 @@
+server:
+  port: 8085
+  shutdown: graceful
+
+spring:
+  application:
+    name: asset-service
+  lifecycle:
+    timeout-per-shutdown-phase: 30s
+  servlet:
+    multipart:
+      max-file-size: 100MB
+      max-request-size: 100MB
+  cloud:
+    inetutils:
+      preferred-networks:
+        - 172.
+        - 100.
+    nacos:
+      discovery:
+        server-addr: ${NACOS_HOST:localhost}:8848
+        enabled: true
+        ip: ${SPRING_CLOUD_NACOS_DISCOVERY_IP:}
+      config:
+        enabled: false
+
+minio:
+  endpoint: ${MINIO_ENDPOINT:http://localhost:9000}
+  access-key: ${MINIO_ACCESS_KEY:}
+  secret-key: ${MINIO_SECRET_KEY:}
+  bucket: ${MINIO_BUCKET:mnemoscape-assets}
+  presigned-ttl-seconds: ${MINIO_PRESIGNED_TTL_SECONDS:3600}
+
+# JWT shared with auth-service / api-gateway. Required by SecurityConfig so the
+# admin-scoped SecurityFilterChain can validate bearer tokens on
+# /api/v1/admin/** when callers bypass the gateway (admin-dashboard R3.2).
+mnemoscape:
+  jwt:
+    secret: ${JWT_SECRET:bW5lbW9zY2FwZS1zZWNyZXQta2V5LWZvci1obWFjLXNoYTI1Ni1hbGdvcml0aG0tMjAyNQ==}
+    access-token-expiration: 3600000
+    refresh-token-expiration: 604800000
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+  packages-to-scan: com.mnemoscape.asset
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus,loggers
+  endpoint:
+    health:
+      show-details: when_authorized
+      probes:
+        enabled: true
+  metrics:
+    tags:
+      application: ${spring.application.name}
+
+logging:
+  level:
+    root: INFO
+    com.mnemoscape: INFO

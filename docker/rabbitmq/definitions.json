@@ -1,0 +1,98 @@
+{
+  "rabbit_version": "3.12",
+  "exchanges": [
+    {
+      "name": "mnemoscape.memory",
+      "vhost": "/",
+      "type": "topic",
+      "durable": true,
+      "auto_delete": false,
+      "internal": false
+    },
+    {
+      "name": "mnemoscape.ai",
+      "vhost": "/",
+      "type": "direct",
+      "durable": true,
+      "auto_delete": false,
+      "internal": false
+    },
+    {
+      "name": "mnemoscape.notification",
+      "vhost": "/",
+      "type": "fanout",
+      "durable": true,
+      "auto_delete": false,
+      "internal": false
+    }
+  ],
+  "queues": [
+    {
+      "name": "memory.created.queue",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false
+    },
+    {
+      "name": "memory.updated.queue",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false
+    },
+    {
+      "name": "memory.drift.queue",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false
+    },
+    {
+      "name": "ai.reconstruct.queue",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false
+    },
+    {
+      "name": "notification.queue",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false
+    }
+  ],
+  "bindings": [
+    {
+      "source": "mnemoscape.memory",
+      "vhost": "/",
+      "destination": "memory.created.queue",
+      "destination_type": "queue",
+      "routing_key": "memory.created"
+    },
+    {
+      "source": "mnemoscape.memory",
+      "vhost": "/",
+      "destination": "memory.updated.queue",
+      "destination_type": "queue",
+      "routing_key": "memory.updated"
+    },
+    {
+      "source": "mnemoscape.memory",
+      "vhost": "/",
+      "destination": "memory.drift.queue",
+      "destination_type": "queue",
+      "routing_key": "memory.drift.updated"
+    },
+    {
+      "source": "mnemoscape.ai",
+      "vhost": "/",
+      "destination": "ai.reconstruct.queue",
+      "destination_type": "queue",
+      "routing_key": "reconstruct"
+    },
+    {
+      "source": "mnemoscape.notification",
+      "vhost": "/",
+      "destination": "notification.queue",
+      "destination_type": "queue",
+      "routing_key": ""
+    }
+  ]
+}

@@ -1,0 +1,20 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  resonance-service logging configuration.
+
+  Pulls in:
+    * logback-base-config.xml — root console / JSON appender, library noise
+                                filters, com.mnemoscape namespace level.
+    * logback-admin.xml       — dedicated rolling files for admin-audit
+                                (R15.4), admin-degradation (R18.3) and
+                                admin-authz (R3.5).
+
+  Both fragments live in the common module's resources and are loaded
+  off the classpath via <include resource="..."/>.
+  -->
+<configuration scan="true" scanPeriod="30 seconds">
+
+  <include resource="logback-base-config.xml"/>
+  <include resource="logback-admin.xml"/>
+
+</configuration>

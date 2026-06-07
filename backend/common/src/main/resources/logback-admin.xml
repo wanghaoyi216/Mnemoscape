@@ -1,0 +1,68 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Mnemoscape — admin-specific logger routing.
+
+  Wrapped in <included> so each admin-bearing service (auth-service /
+  memory-service / resonance-service / api-gateway) can pull it in from its
+  own logback-spring.xml via <include resource="logback-admin.xml"/>.
+
+  Three dedicated rolling file appenders, each with logstash JSON encoding,
+  routed from three logger names with additivity=false so admin events do
+  NOT pollute the application console / root JSON stream:
+
+    admin-audit       → logs/admin-audit.log         R15.4
+    admin-degradation → logs/admin-degradation.log   R18.3
+    admin-authz       → logs/admin-authz.log         R3.5
+
+  See design.md §Structured Log Fields for the JSON schema produced by each
+  logger; the LogstashEncoder automatically renders timestamp / level /
+  logger / message / MDC (correlationId, requestId, ...) plus any
+  StructuredArguments key/value pairs supplied by callers.
+  -->
+<included>
+
+  <appender name="ADMIN_AUDIT" class="ch.qos.logback.core.rolling.RollingFileAppender">
+    <file>logs/admin-audit.log</file>
+    <encoder class="net.logstash.logback.encoder.LogstashEncoder"/>
+    <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
+      <fileNamePattern>logs/admin-audit.%d{yyyy-MM-dd}.%i.log</fileNamePattern>
+      <maxFileSize>50MB</maxFileSize>
+      <maxHistory>90</maxHistory>
+    </rollingPolicy>
+  </appender>
+
+  <appender name="ADMIN_DEGRADATION" class="ch.qos.logback.core.rolling.RollingFileAppender">
+    <file>logs/admin-degradation.log</file>
+    <encoder class="net.logstash.logback.encoder.LogstashEncoder"/>
+    <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
+      <fileNamePattern>logs/admin-degradation.%d{yyyy-MM-dd}.%i.log</fileNamePattern>
+      <maxFileSize>50MB</maxFileSize>
+      <maxHistory>90</maxHistory>
+    </rollingPolicy>
+  </appender>
+
+  <appender name="ADMIN_AUTHZ" class="ch.qos.logback.core.rolling.RollingFileAppender">
+    <file>logs/admin-authz.log</file>
+    <encoder class="net.logstash.logback.encoder.LogstashEncoder"/>
+    <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
+      <fileNamePattern>logs/admin-authz.%d{yyyy-MM-dd}.%i.log</fileNamePattern>
+      <maxFileSize>50MB</maxFileSize>
+      <maxHistory>90</maxHistory>
+    </rollingPolicy>
+  </appender>
+
+  <!-- additivity=false: admin events go ONLY to their dedicated file,
+       never duplicated to the root console / JSON appender. -->
+  <logger name="admin-audit" level="INFO" additivity="false">
+    <appender-ref ref="ADMIN_AUDIT"/>
+  </logger>
+
+  <logger name="admin-degradation" level="WARN" additivity="false">
+    <appender-ref ref="ADMIN_DEGRADATION"/>
+  </logger>
+
+  <logger name="admin-authz" level="INFO" additivity="false">
+    <appender-ref ref="ADMIN_AUTHZ"/>
+  </logger>
+
+</included>

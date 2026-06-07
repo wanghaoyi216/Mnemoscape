@@ -1,0 +1,373 @@
+{
+  "baseUrl": "http://127.0.0.1:57346",
+  "screenshotDir": "M:\\Study\\ProjectTest\\Mnemoscape\\scratch\\visual-qa\\20260607-004749",
+  "results": [
+    {
+      "name": "memories-desktop",
+      "path": "/memories",
+      "url": "http://127.0.0.1:57346/memories",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "screenshot": "M:\\Study\\ProjectTest\\Mnemoscape\\scratch\\visual-qa\\20260607-004749\\memories-desktop.png",
+      "metrics": {
+        "bodyTextLength": 907,
+        "h1": "我的记忆库"
+      },
+      "videos": [
+        {
+          "index": 0,
+          "width": 1390,
+          "height": 358,
+          "src": "http://127.0.0.1:57346/media/videos/aurora-memory-river.mp4"
+        },
+        {
+          "index": 1,
+          "width": 1390,
+          "height": 142,
+          "src": "http://127.0.0.1:57346/media/videos/memory-ripple.mp4"
+        }
+      ],
+      "horizontalOverflow": false,
+      "overflow": {
+        "clientWidth": 1440,
+        "scrollWidth": 1440,
+        "elements": [
+          {
+            "tag": "div",
+            "className": "app-shell__aura",
+            "text": "",
+            "left": -101,
+            "right": 1513,
+            "width": 1613
+          },
+          {
+            "tag": "span",
+            "className": "ai-orb__halo ai-orb__halo--b",
+            "text": "",
+            "left": 1305,
+            "right": 1447,
+            "width": 143
+          }
+        ]
+      },
+      "blankLike": false,
+      "badVideos": [],
+      "wrongPage": false
+    },
+    {
+      "name": "timeline-desktop",
+      "path": "/memories/timeline",
+      "url": "http://127.0.0.1:57346/memories/timeline",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "screenshot": "M:\\Study\\ProjectTest\\Mnemoscape\\scratch\\visual-qa\\20260607-004749\\timeline-desktop.png",
+      "metrics": {
+        "bodyTextLength": 536,
+        "h1": "把记忆放回时间的几何里。"
+      },
+      "videos": [
+        {
+          "index": 0,
+          "width": 1390,
+          "height": 410,
+          "src": "http://127.0.0.1:57346/media/videos/nebula-tide.mp4"
+        },
+        {
+          "index": 1,
+          "width": 620,
+          "height": 340,
+          "src": "http://127.0.0.1:57346/media/videos/nasa-aurora-steve-loop.mp4"
+        }
+      ],
+      "horizontalOverflow": false,
+      "overflow": {
+        "clientWidth": 1440,
+        "scrollWidth": 1440,
+        "elements": [
+          {
+            "tag": "div",
+            "className": "app-shell__aura",
+            "text": "",
+            "left": -101,
+            "right": 1513,
+            "width": 1613
+          },
+          {
+            "tag": "span",
+            "className": "ai-orb__halo ai-orb__halo--b",
+            "text": "",
+            "left": 1305,
+            "right": 1447,
+            "width": 142
+          }
+        ]
+      },
+      "blankLike": false,
+      "badVideos": [],
+      "wrongPage": false
+    },
+    {
+      "name": "resonance-desktop",
+      "path": "/resonance",
+      "url": "http://127.0.0.1:57346/resonance",
+      "viewport": {
+        "width": 1440,
+        "height": 1000
+      },
+      "screenshot": "M:\\Study\\ProjectTest\\Mnemoscape\\scratch\\visual-qa\\20260607-004749\\resonance-desktop.png",
+      "metrics": {
+        "bodyTextLength": 458,
+        "h1": "寻找与你情感共振的记忆。"
+      },
+      "videos": [
+        {
+          "index": 0,
+          "width": 1390,
+          "height": 410,
+          "src": "http://127.0.0.1:57346/media/videos/drift-perception.mp4"
+        },
+        {
+          "index": 1,
+          "width": 1390,
+          "height": 217,
+          "src": "http://127.0.0.1:57346/media/videos/neural-resonance.mp4"
+        },
+        {
+          "index": 2,
+          "width": 684,
+          "height": 308,
+          "src": "http://127.0.0.1:57346/media/videos/neural-resonance.mp4"
+        },
+        {
+          "index": 3,
+          "width": 684,
+          "height": 308,
+          "src": "http://127.0.0.1:57346/media/videos/neural-resonance.mp4"
+        }
+      ],
+      "horizontalOverflow": false,
+      "overflow": {
+        "clientWidth": 1440,
+        "scrollWidth": 1440,
+        "elements": [
+          {
+            "tag": "div",
+            "className": "app-shell__aura",
+            "text": "",
+            "left": -100,
+            "right": 1515,
+            "width": 1615
+          },
+          {
+            "tag": "span",
+            "className": "ai-orb__halo ai-orb__halo--b",
+            "text": "",
+            "left": 1308,
+            "right": 1444,
+            "width": 136
+          }
+        ]
+      },
+      "blankLike": false,
+      "badVideos": [],
+      "wrongPage": false
+    },
+    {
+      "name": "memories-mobile",
+      "path": "/memories",
+      "url": "http://127.0.0.1:57346/memories",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "screenshot": "M:\\Study\\ProjectTest\\Mnemoscape\\scratch\\visual-qa\\20260607-004749\\memories-mobile.png",
+      "metrics": {
+        "bodyTextLength": 848,
+        "h1": "我的记忆库"
+      },
+      "videos": [
+        {
+          "index": 0,
+          "width": 364,
+          "height": 677,
+          "src": "http://127.0.0.1:57346/media/videos/aurora-memory-river.mp4"
+        },
+        {
+          "index": 1,
+          "width": 364,
+          "height": 231,
+          "src": "http://127.0.0.1:57346/media/videos/memory-ripple.mp4"
+        }
+      ],
+      "horizontalOverflow": false,
+      "overflow": {
+        "clientWidth": 390,
+        "scrollWidth": 390,
+        "elements": [
+          {
+            "tag": "div",
+            "className": "app-shell__aura",
+            "text": "",
+            "left": -27,
+            "right": 410,
+            "width": 437
+          },
+          {
+            "tag": "span",
+            "className": "ai-orb__halo ai-orb__halo--b",
+            "text": "",
+            "left": 270,
+            "right": 394,
+            "width": 124
+          }
+        ]
+      },
+      "blankLike": false,
+      "badVideos": [],
+      "wrongPage": false
+    },
+    {
+      "name": "timeline-mobile",
+      "path": "/memories/timeline",
+      "url": "http://127.0.0.1:57346/memories/timeline",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "screenshot": "M:\\Study\\ProjectTest\\Mnemoscape\\scratch\\visual-qa\\20260607-004749\\timeline-mobile.png",
+      "metrics": {
+        "bodyTextLength": 478,
+        "h1": "把记忆放回时间的几何里。"
+      },
+      "videos": [
+        {
+          "index": 0,
+          "width": 364,
+          "height": 654,
+          "src": "http://127.0.0.1:57346/media/videos/nebula-tide.mp4"
+        },
+        {
+          "index": 1,
+          "width": 273,
+          "height": 148,
+          "src": "http://127.0.0.1:57346/media/videos/nasa-aurora-steve-loop.mp4"
+        }
+      ],
+      "horizontalOverflow": false,
+      "overflow": {
+        "clientWidth": 390,
+        "scrollWidth": 390,
+        "elements": [
+          {
+            "tag": "div",
+            "className": "app-shell__aura",
+            "text": "",
+            "left": -27,
+            "right": 410,
+            "width": 437
+          },
+          {
+            "tag": "span",
+            "className": "ai-orb__halo ai-orb__halo--b",
+            "text": "",
+            "left": 269,
+            "right": 395,
+            "width": 126
+          }
+        ]
+      },
+      "blankLike": false,
+      "badVideos": [],
+      "wrongPage": false
+    },
+    {
+      "name": "resonance-mobile",
+      "path": "/resonance",
+      "url": "http://127.0.0.1:57346/resonance",
+      "viewport": {
+        "width": 390,
+        "height": 844
+      },
+      "screenshot": "M:\\Study\\ProjectTest\\Mnemoscape\\scratch\\visual-qa\\20260607-004749\\resonance-mobile.png",
+      "metrics": {
+        "bodyTextLength": 400,
+        "h1": "寻找与你情感共振的记忆。"
+      },
+      "videos": [
+        {
+          "index": 0,
+          "width": 364,
+          "height": 654,
+          "src": "http://127.0.0.1:57346/media/videos/drift-perception.mp4"
+        },
+        {
+          "index": 1,
+          "width": 364,
+          "height": 283,
+          "src": "http://127.0.0.1:57346/media/videos/neural-resonance.mp4"
+        },
+        {
+          "index": 2,
+          "width": 364,
+          "height": 539,
+          "src": "http://127.0.0.1:57346/media/videos/neural-resonance.mp4"
+        },
+        {
+          "index": 3,
+          "width": 364,
+          "height": 539,
+          "src": "http://127.0.0.1:57346/media/videos/neural-resonance.mp4"
+        }
+      ],
+      "horizontalOverflow": false,
+      "overflow": {
+        "clientWidth": 390,
+        "scrollWidth": 390,
+        "elements": [
+          {
+            "tag": "div",
+            "className": "app-shell__aura",
+            "text": "",
+            "left": -27,
+            "right": 410,
+            "width": 437
+          }
+        ]
+      },
+      "blankLike": false,
+      "badVideos": [],
+      "wrongPage": false
+    }
+  ],
+  "console": [
+    {
+      "type": "error",
+      "text": "WebSocket connection to 'ws://127.0.0.1:57346/ws/assets' failed: Error during WebSocket handshake: Unexpected response code: 403"
+    },
+    {
+      "type": "error",
+      "text": "WebSocket connection to 'ws://127.0.0.1:57346/ws/assets' failed: Error during WebSocket handshake: Unexpected response code: 403"
+    },
+    {
+      "type": "error",
+      "text": "WebSocket connection to 'ws://127.0.0.1:57346/ws/assets' failed: Error during WebSocket handshake: Unexpected response code: 403"
+    },
+    {
+      "type": "error",
+      "text": "WebSocket connection to 'ws://127.0.0.1:57346/ws/assets' failed: Error during WebSocket handshake: Unexpected response code: 403"
+    },
+    {
+      "type": "error",
+      "text": "WebSocket connection to 'ws://127.0.0.1:57346/ws/assets' failed: Error during WebSocket handshake: Unexpected response code: 403"
+    },
+    {
+      "type": "error",
+      "text": "WebSocket connection to 'ws://127.0.0.1:57346/ws/assets' failed: Error during WebSocket handshake: Unexpected response code: 403"
+    }
+  ],
+  "pageErrors": []
+}

@@ -1,0 +1,34 @@
+# =============================================================================
+# api-gateway 业务配置 (Nacos 推送)
+# dataId: api-gateway.yaml  group: DEFAULT_GROUP
+# 路由 ID / CORS 白名单 / 限流阈值集中放这里
+# =============================================================================
+mnemoscape:
+  gateway:
+    cors:
+      allowed-origins:
+        - "http://localhost:3000"
+        - "http://localhost:5173"
+      allowed-methods: "*"
+      max-age: 3600
+    ratelimit:
+      # 全局每用户 60s 内最多 N 次请求
+      per-user-per-minute: 120
+      # 白名单 IP（不走限流）
+      bypass-ips:
+        - "127.0.0.1"
+        - "100.66.166.46"
+    routes:
+      auth-path-prefix: "/api/v1/auth/**"
+      memory-path-prefix: "/api/v1/memories/**"
+      ai-path-prefix: "/api/v1/ai/**"
+      asset-path-prefix: "/api/v1/assets/**"
+      resonance-path-prefix: "/api/v1/resonance/**"
+spring:
+  cloud:
+    gateway:
+      discovery:
+        locator:
+          # 开启后自动按 serviceId 转发（默认按大写 service 名）
+          enabled: true
+          lower-case-service-id: true

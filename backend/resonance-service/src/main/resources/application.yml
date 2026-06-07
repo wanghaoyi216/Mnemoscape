@@ -1,0 +1,118 @@
+server:
+  port: 8084
+  shutdown: graceful
+
+spring:
+  application:
+    name: resonance-service
+  lifecycle:
+    timeout-per-shutdown-phase: 30s
+  datasource:
+    url: jdbc:mysql://${MYSQL_HOST:100.66.166.46}:3306/mnemoscape_resonance?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true&characterEncoding=UTF-8
+    username: ${MYSQL_USER:root}
+    password: ${MYSQL_PASSWORD:root123}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    hikari:
+      maximum-pool-size: 15
+      minimum-idle: 3
+      connection-timeout: ${HIKARI_CONNECTION_TIMEOUT_MS:20000}
+      validation-timeout: ${HIKARI_VALIDATION_TIMEOUT_MS:5000}
+      idle-timeout: ${HIKARI_IDLE_TIMEOUT_MS:300000}
+      max-lifetime: ${HIKARI_MAX_LIFETIME_MS:1200000}
+      leak-detection-threshold: ${HIKARI_LEAK_DETECTION_THRESHOLD_MS:60000}
+      pool-name: MnemoscapeResonancePool
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: false
+    open-in-view: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.MySQLDialect
+  # Redis client for the upcoming admin aggregation endpoints (tasks 8.1–8.2).
+  # spring-boot-starter-data-redis auto-configures a LettuceConnectionFactory
+  # from this block; BypassOnFailureCacheManager (in common) wraps the resulting
+  # RedisCacheManager so the service degrades gracefully when Redis is down
+  # (admin-dashboard R14.3).
+  data:
+    redis:
+      host: ${REDIS_HOST:100.66.166.46}
+      port: ${REDIS_PORT:6379}
+      timeout: 3s
+      connect-timeout: 3s
+      lettuce:
+        pool:
+          max-active: 16
+          max-idle: 8
+          min-idle: 2
+          max-wait: 2s
+  rabbitmq:
+    host: ${RABBITMQ_HOST:100.66.166.46}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USER:guest}
+    password: ${RABBITMQ_PASSWORD:guest}
+    listener:
+      simple:
+        prefetch: 16
+        acknowledge-mode: auto
+        default-requeue-rejected: false
+        retry:
+          enabled: true
+          initial-interval: 1s
+          multiplier: 2.0
+          max-interval: 8s
+          max-attempts: 3
+  cloud:
+    inetutils:
+      preferred-networks:
+        - 172.
+        - 100.
+    nacos:
+      discovery:
+        server-addr: ${NACOS_HOST:100.66.166.46}:8848
+        enabled: true
+        ip: ${SPRING_CLOUD_NACOS_DISCOVERY_IP:}
+      config:
+        enabled: false
+
+# JWT shared with auth-service / api-gateway. Required by SecurityConfig so the
+# admin-scoped SecurityFilterChain can validate bearer tokens on
+# /api/v1/admin/** when callers bypass the gateway (admin-dashboard R3.2).
+mnemoscape:
+  jwt:
+    secret: ${JWT_SECRET:bW5lbW9zY2FwZS1zZWNyZXQta2V5LWZvci1obWFjLXNoYTI1Ni1hbGdvcml0aG0tMjAyNQ==}
+    access-token-expiration: 3600000
+    refresh-token-expiration: 604800000
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+  packages-to-scan: com.mnemoscape.resonance
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus,loggers
+  endpoint:
+    health:
+      show-details: when_authorized
+      probes:
+        enabled: true
+  metrics:
+    tags:
+      application: ${spring.application.name}
+
+logging:
+  level:
+    root: INFO
+    com.mnemoscape: INFO
+
+feign:
+  client:
+    config:
+      default:
+        connectTimeout: 5000
+        readTimeout: 120000

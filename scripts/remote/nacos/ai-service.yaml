@@ -1,0 +1,68 @@
+# =============================================================================
+# ai-service 远端业务配置 (Nacos 推送模板)
+# dataId: ai-service.yaml  group: DEFAULT_GROUP
+#
+# 推送方式（任选其一，详见同目录 push-nacos-config.*）：
+#   pwsh:  .\push-nacos-config.ps1 -DataId ai-service.yaml -ContentFile ai-service.yaml
+#   bash:  ./push-nacos-config.sh ai-service.yaml
+#
+# 修改后，spring-cloud-context 会自动 @RefreshScope 重建相关 Bean —
+# 不需要重启 ai-service 进程。
+# =============================================================================
+
+mnemoscape:
+  ai:
+    # ---------- 上游 LLM / Embedding 模型选择 (NVIDIA Integrate) ----------
+    upstream:
+      # AI 走空跑降级（不调上游）的 API key 前缀
+      placeholder-key-prefix: "nvapi-placeholder"
+      # 单次上游请求硬上限
+      timeout-ms: 30000
+      # 上游 4xx/5xx 时回给前端的友好文案
+      fallback-message: "AI 暂时不可用。请确认服务端已注入 NVIDIA_API_KEY 环境变量后重试。"
+      vision-model: "meta/llama-3.2-11b-vision-instruct"
+      chat-model: "google/gemma-3n-e4b-it"
+      reasoning-model: "bytedance/seed-oss-36b-instruct"
+      agentic-model: "google/gemma-3n-e2b-it"
+      generation-model: "meta/llama-4-maverick-17b-128e-instruct"
+      embedding-model: "nvidia/nv-embedqa-e5-v5"
+      sentiment-model: "google/gemma-3n-e2b-it"
+      vision-fallback-model: "meta/llama-3.2-90b-vision-instruct"
+      vision-max-images: 4
+      vision-timeout-ms: 45000
+
+    # ---------- Milvus / 向量库接入 ----------
+    vector:
+      # 总开关：false → 走关键词降级
+      enabled: true
+      embedding-model: "nvidia/nv-embed-v1"
+      # 切模型时务必同步改这里 + Milvus collection
+      embedding-dimension: 4096
+      embedding-timeout-ms: 15000
+      milvus-host: "100.66.166.46"
+      milvus-port: 19530
+      milvus-token: ""
+      milvus-database: "default"
+      collection-name: "mnemoscape_memories"
+      milvus-timeout-ms: 8000
+      default-top-k: 5
+
+    # ---------- Redis 缓存层 (embedding / search) ----------
+    cache:
+      embedding:
+        enabled: true
+        # 7 天：同一段文字的 embedding 很少变，重算成本 = 一次上游调用
+        ttl-seconds: 604800
+      search:
+        enabled: true
+        # 60s：搜索结果对"略微过期"容忍度高；过短反而撑不住 QPS
+        ttl-seconds: 60
+
+    # ---------- 限流 (Redis INCR 滑动窗口) ----------
+    rate-limit:
+      enabled: true
+      default-rpm: 40
+      # embedding 调上游最贵，调最严
+      embed-rpm: 100
+      # vision 模型慢但贵，调严
+      vision-rpm: 20

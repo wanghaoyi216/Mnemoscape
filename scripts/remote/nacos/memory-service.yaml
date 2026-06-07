@@ -1,0 +1,27 @@
+# =============================================================================
+# memory-service 业务配置 (Nacos 推送)
+# dataId: memory-service.yaml  group: DEFAULT_GROUP
+# =============================================================================
+mnemoscape:
+  jwt:
+    access-token-expiration: 3600000
+    refresh-token-expiration: 604800000
+  memory:
+    geocoder:
+      enabled: true
+      remote-enabled: true
+      nominatim-base: https://nominatim.openstreetmap.org
+spring:
+  jpa:
+    properties:
+      hibernate:
+        jdbc:
+          batch_size: 30
+  data:
+    redis:
+      lettuce:
+        pool:
+          max-active: 16
+          max-idle: 8
+          min-idle: 2
+          max-wait: 2s

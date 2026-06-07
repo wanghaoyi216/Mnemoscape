@@ -1,0 +1,105 @@
+server:
+  port: 8081
+  shutdown: graceful
+
+spring:
+  application:
+    name: auth-service
+  lifecycle:
+    timeout-per-shutdown-phase: 30s
+  datasource:
+    url: jdbc:mysql://${MYSQL_HOST:100.66.166.46}:3306/mnemoscape_auth?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true&characterEncoding=UTF-8
+    username: ${MYSQL_USER:root}
+    password: ${MYSQL_PASSWORD:root123}
+    driver-class-name: com.mysql.cj.jdbc.Driver
+    hikari:
+      maximum-pool-size: 20
+      minimum-idle: 5
+      connection-timeout: ${HIKARI_CONNECTION_TIMEOUT_MS:20000}
+      validation-timeout: ${HIKARI_VALIDATION_TIMEOUT_MS:5000}
+      idle-timeout: ${HIKARI_IDLE_TIMEOUT_MS:300000}
+      max-lifetime: ${HIKARI_MAX_LIFETIME_MS:1200000}
+      leak-detection-threshold: ${HIKARI_LEAK_DETECTION_THRESHOLD_MS:60000}
+      pool-name: MnemoscapeAuthPool
+  jpa:
+    hibernate:
+      ddl-auto: update
+    show-sql: false
+    open-in-view: false
+    properties:
+      hibernate:
+        dialect: org.hibernate.dialect.MySQLDialect
+  data:
+    redis:
+      host: ${REDIS_HOST:100.66.166.46}
+      port: ${REDIS_PORT:6379}
+      timeout: 3s
+      connect-timeout: 3s
+      lettuce:
+        pool:
+          max-active: 16
+          max-idle: 8
+          min-idle: 2
+          max-wait: 2s
+  cloud:
+    inetutils:
+      preferred-networks:
+        - 172.
+        - 100.
+    nacos:
+      discovery:
+        server-addr: ${NACOS_HOST:100.66.166.46}:8848
+        enabled: true
+        ip: ${SPRING_CLOUD_NACOS_DISCOVERY_IP:}
+      config:
+        enabled: false
+  # NVIDIA Integrate API（用于用户 3D 刻画 AI 生成）
+  # auth-service 直接用 JDK HttpClient 调用，不依赖 Spring AI
+  ai:
+    openai:
+      api-key: ${NVIDIA_API_KEY:nvapi-placeholder-not-configured}
+      base-url: ${NVIDIA_BASE_URL:https://integrate.api.nvidia.com/v1}
+  admin:
+    # Bootstrap secret for the role-promotion endpoint (R1.5 / R1.6).
+    # Default empty = bootstrap channel disabled; AdminBootstrapService logs a
+    # WARN at startup and rejects every non-ADMIN caller with HTTP 403.
+    # Set ADMIN_BOOTSTRAP_SECRET in the deployment env (or .env.workpc) to
+    # enable; rotate or unset after the first ADMIN has been provisioned.
+    bootstrap-secret: ${ADMIN_BOOTSTRAP_SECRET:}
+
+mnemoscape:
+  jwt:
+    secret: ${JWT_SECRET:bW5lbW9zY2FwZS1zZWNyZXQta2V5LWZvci1obWFjLXNoYTI1Ni1hbGdvcml0aG0tMjAyNQ==}
+    access-token-expiration: 3600000
+    refresh-token-expiration: 604800000
+  ai:
+    upstream:
+      default-model: ${NVIDIA_GENERATION_MODEL:meta/llama-4-maverick-17b-128e-instruct}
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+    operations-sorter: method
+    tags-sorter: alpha
+  packages-to-scan: com.mnemoscape.auth
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus,loggers
+  endpoint:
+    health:
+      show-details: when_authorized
+      probes:
+        enabled: true
+  metrics:
+    tags:
+      application: ${spring.application.name}
+
+logging:
+  level:
+    root: INFO
+    com.mnemoscape: INFO

@@ -1,0 +1,151 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>com.mnemoscape</groupId>
+        <artifactId>mnemoscape-platform</artifactId>
+        <version>1.0.0-SNAPSHOT</version>
+    </parent>
+
+    <artifactId>common</artifactId>
+    <packaging>jar</packaging>
+    <name>Mnemoscape Common</name>
+
+    <dependencies>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-web</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-validation</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.jsonwebtoken</groupId>
+            <artifactId>jjwt-api</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.jsonwebtoken</groupId>
+            <artifactId>jjwt-impl</artifactId>
+            <scope>runtime</scope>
+        </dependency>
+        <dependency>
+            <groupId>io.jsonwebtoken</groupId>
+            <artifactId>jjwt-jackson</artifactId>
+            <scope>runtime</scope>
+        </dependency>
+        <!-- Lightweight Spring Security primitives so JwtAuthFilter can populate
+             SecurityContextHolder.  This brings no auto-configuration on its own —
+             services that don't add spring-boot-starter-security stay unauthenticated. -->
+        <dependency>
+            <groupId>org.springframework.security</groupId>
+            <artifactId>spring-security-core</artifactId>
+        </dependency>
+        <!-- spring-tx supplies DataAccessException / UnexpectedRollbackException so
+             GlobalExceptionHandler can map DB / transaction failures to clean
+             ApiResponse envelopes without each service redefining the advice. -->
+        <dependency>
+            <groupId>org.springframework</groupId>
+            <artifactId>spring-tx</artifactId>
+        </dependency>
+        <!-- OpenAPI / Swagger UI — available to every service via common -->
+        <dependency>
+            <groupId>org.springdoc</groupId>
+            <artifactId>springdoc-openapi-starter-webmvc-ui</artifactId>
+        </dependency>
+        <!-- Structured (JSON) logging encoder used by the admin-audit /
+             admin-degradation / admin-authz appenders.  Pinned to 7.4 because
+             the Spring Boot 3.2.x BOM does not manage this artifact. -->
+        <dependency>
+            <groupId>net.logstash.logback</groupId>
+            <artifactId>logstash-logback-encoder</artifactId>
+            <version>7.4</version>
+        </dependency>
+        <!-- @Cacheable annotation surface for the admin aggregation endpoints
+             (Requirements 14.1, 14.2).  No cache provider is bundled here —
+             each service supplies its own RedisCacheManager wired through
+             BypassOnFailureCacheManager. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-cache</artifactId>
+        </dependency>
+        <!-- @AspectJ support for the RateLimit AOP aspect.  spring-boot-starter-aop
+             brings spring-aop + aspectjweaver; RateLimitAspect uses
+             @Around("@annotation(...)") to wrap controller methods with the
+             sliding-window check.  spring-context (already transitive via
+             spring-boot-starter-web) supplies @EnableAspectJAutoProxy. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-aop</artifactId>
+        </dependency>
+        <!-- spring-data-redis exposes the RedisConnectionFailureException /
+             RedisSystemException types that BypassOnFailureCacheManager catches
+             to transparently degrade to "no cache" when Redis is down
+             (Requirements 14.3).  Only the core artifact is pulled in — Lettuce
+             and the auto-configuration come from each service's own
+             spring-boot-starter-data-redis(-reactive) dependency. -->
+        <dependency>
+            <groupId>org.springframework.data</groupId>
+            <artifactId>spring-data-redis</artifactId>
+        </dependency>
+        <!-- Micrometer core — supplies MeterRegistry / Counter / Timer used by
+             the admin-dashboard observability decorator (AdminMetrics).  Every
+             service that consumes these metrics already pulls in
+             spring-boot-starter-actuator, which transitively brings the same
+             micrometer-core artifact at runtime; declaring it here lets the
+             classes in common/ compile and lets unit tests depend on a
+             SimpleMeterRegistry without adding the actuator starter. -->
+        <dependency>
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-core</artifactId>
+        </dependency>
+
+        <!-- OpenFeign primitives — needed by FeignAuthForwardingInterceptor so
+             cross-service calls can propagate the caller's bearer token to the
+             downstream service (admin-dashboard R3.2 + R6.6 / R10.3 / R11.1).
+             Marked optional so common itself stays a pure jar; every service
+             that uses Feign already pulls openfeign-core via
+             spring-cloud-starter-openfeign and re-uses this interceptor. -->
+        <dependency>
+            <groupId>io.github.openfeign</groupId>
+            <artifactId>feign-core</artifactId>
+            <optional>true</optional>
+        </dependency>
+
+        <!-- ============================== Test scope ==============================
+             JUnit5 + Mockito for unit tests; jqwik for property-based testing
+             (admin-dashboard Correctness Properties 1 / 2 / 3 / 4 / 5 / 6 / 7 /
+             8 / 9 / 10 / 11 / 12). The jqwik version is pinned to match
+             ai-service so the workspace runs a single jqwik-database file
+             format across modules. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>net.jqwik</groupId>
+            <artifactId>jqwik</artifactId>
+            <version>1.8.4</version>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <!-- Surefire — pass the byte-buddy experimental flag so Mockito's
+                 inline mock maker tolerates JVMs newer than Byte Buddy's
+                 officially supported set (we run on Java 25 in dev). -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <configuration>
+                    <argLine>-Xmx1024m -Dnet.bytebuddy.experimental=true</argLine>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
+</project>
