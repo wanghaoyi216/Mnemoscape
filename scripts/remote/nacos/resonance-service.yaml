@@ -1,0 +1,22 @@
+# =============================================================================
+# resonance-service 业务配置 (Nacos 推送)
+# dataId: resonance-service.yaml  group: DEFAULT_GROUP
+# =============================================================================
+mnemoscape:
+  resonance:
+    admin:
+      # 概览缓存 TTL (秒)
+      overview-cache-ttl: 120
+      # 共鸣 Top 缓存 TTL (秒)
+      top-cache-ttl: 120
+    chat:
+      # 单次聊天历史回看条数
+      history-page-size: 50
+spring:
+  data:
+    redis:
+      lettuce:
+        pool:
+          max-active: 16
+          max-idle: 8
+          min-idle: 2

@@ -1,0 +1,114 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>时空记忆流光 · 已合入主应用</title>
+<style>
+  :root {
+    --bg: #0b0f19;
+    --primary: #36d8b4;
+    --gold: #ffd76a;
+    --violet: #c084fc;
+    --text: #e8eaf0;
+    --muted: #97a1b3;
+  }
+  html, body { margin: 0; padding: 0; height: 100%; }
+  body {
+    background:
+      radial-gradient(ellipse at 20% 10%, rgba(54,216,180,0.15), transparent 60%),
+      radial-gradient(ellipse at 80% 80%, rgba(192,132,252,0.18), transparent 55%),
+      var(--bg);
+    color: var(--text);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    display: grid; place-items: center;
+    overflow: hidden;
+  }
+  .card {
+    width: min(640px, calc(100vw - 32px));
+    padding: 36px 36px 28px;
+    background: rgba(14,18,24,0.72);
+    border: 1px solid rgba(54,216,180,0.22);
+    border-radius: 22px;
+    backdrop-filter: blur(28px) saturate(150%);
+    -webkit-backdrop-filter: blur(28px) saturate(150%);
+    box-shadow: 0 30px 80px rgba(0,0,0,0.45), 0 0 0 1px rgba(255,255,255,0.04) inset;
+    text-align: left;
+  }
+  .eyebrow {
+    font-size: 0.74rem;
+    letter-spacing: 0.18em;
+    color: var(--primary);
+    text-transform: uppercase;
+    margin: 0 0 12px;
+  }
+  h1 {
+    font-size: 1.6rem;
+    line-height: 1.25;
+    margin: 0 0 14px;
+    font-weight: 600;
+    letter-spacing: -0.01em;
+  }
+  p { color: var(--muted); font-size: 0.95rem; line-height: 1.65; margin: 0 0 14px; }
+  ul { color: var(--muted); padding-left: 18px; font-size: 0.88rem; line-height: 1.65; }
+  ul li::marker { color: var(--gold); }
+  .cta {
+    display: inline-flex;
+    align-items: center;
+    gap: 10px;
+    padding: 12px 22px;
+    background: linear-gradient(135deg, var(--primary), #b6f077);
+    color: #052017;
+    border-radius: 999px;
+    text-decoration: none;
+    font-weight: 600;
+    margin-top: 14px;
+    transition: transform 200ms ease, box-shadow 200ms ease;
+  }
+  .cta:hover { transform: translateY(-2px); box-shadow: 0 16px 40px rgba(54,216,180,0.4); }
+  .meta { margin-top: 18px; font-size: 0.78rem; color: rgba(151,161,179,0.7); }
+  code {
+    font-family: ui-monospace, "JetBrains Mono", Menlo, Consolas, monospace;
+    background: rgba(255,255,255,0.06);
+    border: 1px solid rgba(255,255,255,0.08);
+    padding: 1px 6px;
+    border-radius: 4px;
+    font-size: 0.85em;
+    color: #cfe9e2;
+  }
+  .globe {
+    position: absolute;
+    top: -120px; right: -120px;
+    width: 360px; height: 360px;
+    border-radius: 50%;
+    background: radial-gradient(circle at 30% 30%, rgba(54,216,180,0.25), transparent 60%),
+                radial-gradient(circle at 70% 70%, rgba(192,132,252,0.25), transparent 60%);
+    filter: blur(40px);
+    pointer-events: none;
+  }
+</style>
+</head>
+<body>
+  <div class="globe" aria-hidden="true"></div>
+  <main class="card">
+    <p class="eyebrow">Atlas · v1.1</p>
+    <h1>时空记忆流光已合入主应用</h1>
+    <p>
+      这份独立 HTML 原型已被替换为 Vue 单文件组件，现已成为系统的一部分。
+      新版本基于 MapLibre 5.5 的 <code>projection: 'globe'</code>，以彩色 OpenFreeMap Liberty 为底图，
+      接入真实记忆数据 + 跑马灯网格 + 五级下钻 + 双层动线。
+    </p>
+    <ul>
+      <li>真实数据：通过 <code>memoryStore.fetchList()</code> 拉取登录用户的记忆。</li>
+      <li>球形投影：地球边界，可自转，2D ↔ 3D 切换。</li>
+      <li>更大的 UI：320–340px 面板、42px 按钮、13–16px 字号。</li>
+      <li>多模态：本地素材库 + Minio 预留接口。</li>
+    </ul>
+    <a class="cta" href="/memories/atlas">
+      <svg viewBox="0 0 24 24" width="18" height="18" fill="none"><path d="M5 12h14M13 6l6 6-6 6" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/></svg>
+      进入 /memories/atlas
+    </a>
+    <p class="meta">如果你仍想查看原型实现，可在 git history 中检索 <code>spatiotemporal-memory-trails.html</code> 的早期版本。</p>
+  </main>
+</body>
+</html>

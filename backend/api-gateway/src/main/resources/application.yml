@@ -1,0 +1,234 @@
+server:
+  port: 8080
+  compression:
+    enabled: ${GATEWAY_COMPRESSION_ENABLED:true}
+    min-response-size: ${GATEWAY_COMPRESSION_MIN_RESPONSE_SIZE:1KB}
+    mime-types:
+      - application/json
+      - application/problem+json
+      - text/plain
+      - text/html
+      - text/css
+      - application/javascript
+      - application/xml
+      - text/xml
+
+spring:
+  application:
+    name: api-gateway
+  data:
+    redis:
+      host: ${REDIS_HOST:100.66.166.46}
+      port: ${REDIS_PORT:6379}
+      timeout: 3s
+      connect-timeout: 3s
+      lettuce:
+        pool:
+          max-active: 16
+          max-idle: 8
+          min-idle: 2
+          max-wait: 2s
+  cloud:
+    inetutils:
+      preferred-networks:
+        - 172.
+        - 100.
+    nacos:
+      discovery:
+        server-addr: ${NACOS_HOST:100.66.166.46}:8848
+        enabled: true
+        ip: ${SPRING_CLOUD_NACOS_DISCOVERY_IP:}
+      config:
+        enabled: false
+    gateway:
+      discovery:
+        locator:
+          enabled: true
+          lower-case-service-name: true
+      actuator:
+        verbose:
+          enabled: false
+      httpclient:
+        connect-timeout: ${GATEWAY_CONNECT_TIMEOUT:5000}
+        response-timeout: ${GATEWAY_RESPONSE_TIMEOUT:60s}
+        pool:
+          max-connections: ${GATEWAY_MAX_CONNECTIONS:200}
+          max-idle-time: 30s
+      globalcors:
+        cors-configurations:
+          '[/**]':
+            allowed-origins:
+              - http://localhost:5173
+            allowed-methods:
+              - GET
+              - POST
+              - PUT
+              - PATCH
+              - DELETE
+              - OPTIONS
+            allowed-headers:
+              - Authorization
+              - Content-Type
+              - X-Requested-With
+              - X-Correlation-Id
+            exposed-headers:
+              - X-Correlation-Id
+            allow-credentials: true
+            max-age: 3600
+      routes:
+        # Admin health aggregator: terminate the request inside the gateway
+        # itself by forwarding to an internal RouterFunction. This route is
+        # listed first so it wins predicate matching against the more
+        # generic Path=/api/v1/admin/** rules other services might add.
+        # Going through a gateway route (instead of binding the handler
+        # directly) ensures the request still traverses every GlobalFilter
+        # in the gateway pipeline, including AdminGuardFilter (-90), so
+        # only ADMIN callers can reach HealthHandler.
+        - id: admin-health
+          uri: forward:/__internal/admin/health
+          predicates:
+            - Path=/api/v1/admin/health
+            - Method=GET
+        # Admin audit logs SIEM terminal aggregator
+        - id: admin-audit-logs
+          uri: forward:/__internal/admin/audit/logs
+          predicates:
+            - Path=/api/v1/admin/audit/logs
+            - Method=GET
+        # Admin role-promotion (bootstrap + ongoing) lives on auth-service.
+        # Listed before the catch-all /api/v1/admin/stats/** so the more
+        # specific path wins.
+        - id: admin-users-auth
+          uri: lb://auth-service
+          predicates:
+            - Path=/api/v1/admin/users/**
+        # Admin diagnostics endpoint (auth-service). Active probe across all
+        # downstream services to answer "why is the dashboard 502?". Listed
+        # alongside admin-users-auth because it lives in the same service.
+        - id: admin-diagnostics
+          uri: lb://auth-service
+          predicates:
+            - Path=/api/v1/admin/diagnostics/**
+        # Admin user-management table (paginated list / role / verified /
+        # delete). Lives in auth-service alongside the existing
+        # /api/v1/admin/users/**. Listed before stats catch-all to avoid
+        # being intercepted.
+        - id: admin-users-management
+          uri: lb://auth-service
+          predicates:
+            - Path=/api/v1/admin/users-management/**
+        # Admin memory-management table (paginated list / batch ops on
+        # memories). Lives in memory-service.
+        - id: admin-memories-management
+          uri: lb://memory-service
+          predicates:
+            - Path=/api/v1/admin/memories/**
+        # Admin resonance-management table + admin support tickets. Both
+        # live in resonance-service. Listed before resonance stats catch-all.
+        - id: admin-resonance-management
+          uri: lb://resonance-service
+          predicates:
+            - Path=/api/v1/admin/resonance-management/**
+        # Admin MinIO 历史资源迁移工具（asset-service）。列在 stats catch-all 之前，
+        # 这样 /api/v1/admin/assets/** 不会被其它 admin 规则误拦。
+        - id: admin-assets
+          uri: lb://asset-service
+          predicates:
+            - Path=/api/v1/admin/assets/**
+        # Admin vector store self-check (ai-service). Listed before admin-support
+        # to avoid being shadowed by it.
+        - id: admin-vector
+          uri: lb://ai-service
+          predicates:
+            - Path=/api/v1/admin/vector/**
+        - id: admin-support
+          uri: lb://resonance-service
+          predicates:
+            - Path=/api/v1/admin/support/**
+        # Public active-users endpoint that auth-service owns (it Feign-calls
+        # memory-service internally to get the actual time-bucketed counts).
+        # Listed before the memory-service catch-all so this exact path
+        # routes to auth-service, not memory-service.
+        - id: admin-stats-active-users
+          uri: lb://auth-service
+          predicates:
+            - Path=/api/v1/admin/stats/active-users
+        # Resonance admin endpoints. Listed before the memory-service
+        # catch-all for the same reason.
+        - id: admin-stats-resonance
+          uri: lb://resonance-service
+          predicates:
+            - Path=/api/v1/admin/stats/resonance-overview, /api/v1/admin/stats/resonance-top
+        # Catch-all for the remaining admin/stats paths owned by
+        # memory-service: memory-trends / emotion-distribution / heatmap /
+        # top-contributors / fragment-discovery (and the internal
+        # active-user-counts that auth-service Feign-calls).  MUST come AFTER
+        # the more-specific admin-stats-active-users / admin-stats-resonance
+        # routes above so first-match-wins picks the right downstream.
+        - id: admin-stats-memory
+          uri: lb://memory-service
+          predicates:
+            - Path=/api/v1/admin/stats/**
+        - id: auth-service
+          uri: lb://auth-service
+          predicates:
+            - Path=/api/v1/auth/**, /api/v1/friends/**, /api/v1/users/me/avatar-profile, /api/v1/users/*/avatar-profile, /api/v1/users/me/emotion-summary
+        - id: memory-service
+          uri: lb://memory-service
+          predicates:
+            - Path=/api/v1/memories/**, /api/v1/fragments/**, /api/v1/atlas/**, /api/v1/users/me/location, /api/v1/achievements/**, /api/v1/bottles/**
+        - id: ai-service
+          uri: lb://ai-service
+          predicates:
+            - Path=/api/v1/reconstruct/**, /api/v1/diary/**
+          metadata:
+            response-timeout: 180000
+        - id: resonance-service
+          uri: lb://resonance-service
+          predicates:
+            - Path=/api/v1/resonances/**, /api/v1/chat/**, /api/v1/support/**
+        # asset-service 静态资源热更新 WS —— 必须排在 resonance-ws 的 /ws/** catch-all 之前，
+        # 否则 /ws/assets 会被错误路由到 resonance-service。first-match-wins。
+        - id: asset-ws
+          uri: lb:ws://asset-service
+          predicates:
+            - Path=/ws/assets/**, /ws/assets
+        - id: resonance-ws
+          uri: lb:ws://resonance-service
+          predicates:
+            - Path=/ws/**
+        - id: asset-service
+          uri: lb://asset-service
+          predicates:
+            - Path=/api/v1/assets/**
+
+mnemoscape:
+  jwt:
+    secret: ${JWT_SECRET:bW5lbW9zY2FwZS1zZWNyZXQta2V5LWZvci1obWFjLXNoYTI1Ni1hbGdvcml0aG0tMjAyNQ==}
+    access-token-expiration: 3600000
+    refresh-token-expiration: 604800000
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus,gateway
+  endpoint:
+    health:
+      show-details: when_authorized
+      probes:
+        enabled: true
+  info:
+    env:
+      enabled: true
+    git:
+      mode: simple
+  metrics:
+    tags:
+      application: ${spring.application.name}
+
+logging:
+  level:
+    root: INFO
+    com.mnemoscape: INFO
+    org.springframework.cloud.gateway: INFO

@@ -1,0 +1,13 @@
+# =============================================================================
+# asset-service 业务配置 (Nacos 推送)
+# dataId: asset-service.yaml  group: DEFAULT_GROUP
+# StorageProperties 加了 @RefreshScope；改 endpoint / bucket 不需重启
+# =============================================================================
+minio:
+  endpoint: http://100.66.166.46:9000
+  access-key: minioadmin
+  secret-key: minioadmin123
+  bucket: mnemoscape-assets
+  part-size: 5242880
+  max-connections: 20
+  presigned-ttl-seconds: 3600

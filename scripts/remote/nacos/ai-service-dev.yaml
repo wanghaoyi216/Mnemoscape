@@ -1,0 +1,15 @@
+# =============================================================================
+# ai-service / dev profile — workpc 本地开发
+# dataId: ai-service-dev.yaml  group: DEFAULT_GROUP
+# =============================================================================
+mnemoscape:
+  ai:
+    upstream:
+      timeout-ms: 60000
+    vector:
+      enabled: true
+    cache:
+      embedding:
+        ttl-seconds: 86400
+    rate-limit:
+      enabled: false

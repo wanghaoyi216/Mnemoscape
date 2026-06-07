@@ -1,0 +1,1570 @@
+/* ================================================================
+   Mnemoscape — Premium Design System
+   Museum-grade dark UI: layered glass, cinematic gradients,
+   refined typography, choreographed motion.
+   ================================================================ */
+
+@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Playfair+Display:ital,wght@0,500;0,600;0,700;1,500&family=JetBrains+Mono:wght@400;500&display=swap");
+
+/* ────────────────────────────────────────────────────────────────────
+   v3：用户要求全站文字采用「ComicShannsMono + 华文行楷」组合。
+   - ComicShannsMonoNerdFont(Mono/Propo) 是用户已经安装到本机
+     %LOCALAPPDATA%\Microsoft\Windows\Fonts\ 的 Nerd Font。
+   - 华文行楷 (STXingkai) 是 macOS 默认中文字体；Windows 自带的最接近的
+     是「华文楷体 / STKaiti」(simkai.ttf)、「楷体 / KaiTi」、「仿宋 / FangSong」。
+     用户机器上已有 simfang.ttf（仿宋）作为最终兜底。
+   - 用 src: local() 列表 — 浏览器找到第一个本地存在的就用，找不到就走下一个。
+   - 为字体声明取了通用别名 "Mnemoscape Display"：项目里所有引用 var(--font-art)
+     的地方都会得到 ComicShannsMono 排英文 + STXingkai 排中文的混排效果。
+   ──────────────────────────────────────────────────────────────────── */
+@font-face {
+  font-family: "Mnemoscape Mono";
+  src: local("ComicShannsMonoNerdFont-Regular"),
+       local("ComicShannsMono Nerd Font"),
+       local("ComicShannsMono"),
+       local("ComicShanns Mono"),
+       local("Comic Mono"),
+       local("JetBrains Mono"),
+       local("Consolas");
+  font-display: swap;
+  font-style: normal;
+  font-weight: 400;
+}
+@font-face {
+  font-family: "Mnemoscape Mono";
+  src: local("ComicShannsMonoNerdFont-Bold"),
+       local("ComicShannsMono Nerd Font Bold"),
+       local("ComicShannsMono Bold"),
+       local("ComicShanns Mono Bold"),
+       local("JetBrains Mono Bold");
+  font-display: swap;
+  font-style: normal;
+  font-weight: 700;
+}
+@font-face {
+  font-family: "Mnemoscape Hand";
+  src: local("华文行楷"),
+       local("STXingkai"),
+       local("STXingKai"),
+       local("华文楷体"),
+       local("STKaiti"),
+       local("KaiTi"),
+       local("楷体"),
+       local("FangSong"),
+       local("仿宋");
+  font-display: swap;
+  unicode-range: U+4E00-9FFF, U+3000-303F, U+FF00-FFEF;
+}
+
+:root {
+  color-scheme: dark;
+
+  /* Base canvas */
+  --bg-0: #050608;
+  --bg-1: #0a0d12;
+  --bg-2: #11151b;
+  --bg-3: #161b22;
+
+  /* Glass surfaces */
+  --surface: rgba(20, 24, 31, 0.78);
+  --surface-strong: rgba(26, 30, 38, 0.94);
+  --surface-soft: rgba(34, 38, 46, 0.62);
+  --surface-elevated: rgba(22, 26, 33, 0.86);
+
+  /* Borders & dividers */
+  --border: rgba(210, 218, 228, 0.10);
+  --border-strong: rgba(210, 218, 228, 0.22);
+  --border-accent: rgba(64, 224, 195, 0.32);
+
+  /* Typography */
+  --text: #f4f7fa;
+  --text-soft: #cdd5dd;
+  --text-muted: #8b95a1;
+  --text-faint: #5a6573;
+
+  /* Brand palette — emerald & ochre */
+  --primary: #36d8b4;
+  --primary-strong: #14a98b;
+  --primary-glow: rgba(54, 216, 180, 0.42);
+  --accent: #6cc6ff;
+  --accent-glow: rgba(108, 198, 255, 0.32);
+  --gold: #f2b95c;
+  --gold-glow: rgba(242, 185, 92, 0.28);
+
+  /* Semantic */
+  --success: #4ade80;
+  --warning: #facc15;
+  --danger: #f87171;
+  --info: #60a5fa;
+
+  /* Shadows — layered for depth */
+  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.35);
+  --shadow-sm: 0 4px 12px rgba(0, 0, 0, 0.32);
+  --shadow-md: 0 12px 32px rgba(0, 0, 0, 0.36), 0 2px 8px rgba(0, 0, 0, 0.24);
+  --shadow-lg: 0 32px 80px rgba(0, 0, 0, 0.46), 0 8px 24px rgba(0, 0, 0, 0.28);
+  --shadow-glow: 0 0 0 1px rgba(54, 216, 180, 0.18), 0 24px 60px rgba(54, 216, 180, 0.14);
+
+  /* Radii */
+  --radius-xs: 6px;
+  --radius-sm: 10px;
+  --radius-md: 14px;
+  --radius-lg: 20px;
+  --radius-xl: 28px;
+  --radius-full: 999px;
+
+  /* Motion */
+  --ease-out-quart: cubic-bezier(0.165, 0.84, 0.44, 1);
+  --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-in-out-quart: cubic-bezier(0.77, 0, 0.175, 1);
+  --duration-fast: 160ms;
+  --duration-base: 240ms;
+  --duration-slow: 420ms;
+
+  /* Layout */
+  --page-width: min(1280px, calc(100vw - 48px));
+  --page-width-wide: min(1480px, calc(100vw - 48px));
+
+  /* Type families — v3 切到 ComicShannsMono + 华文行楷组合
+     - --font-sans / --font-display：英文走 ComicShannsMono（自带 Nerd 图标），
+       中文走 Mnemoscape Hand（华文行楷 / 兜底楷体仿宋）；浏览器对每个字符
+       会按 src/unicode-range 自己选合适的 face。
+     - --font-mono：保留 ComicShannsMono 等宽形态，给代码块用。
+     - --font-art：纯艺术显示用（落款 / brand），强制行楷优先。
+  */
+  --font-sans: "Inter", "Outfit", "Noto Sans SC", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+  --font-display: "Mnemoscape Mono", "Mnemoscape Hand", "Outfit", "Playfair Display", "Noto Serif SC", "Songti SC", "STSong", Georgia, serif;
+  --font-mono: "Mnemoscape Mono", "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+  --font-art: "Mnemoscape Hand", "Playfair Display", "STSong", serif;
+}
+
+/* ================================================================
+   多主题支持：在 html 上挂载对应的 class 激活
+   ================================================================ */
+
+/* 1. 薄荷绿主题 (默认) */
+html.theme-mint, :root {
+  --primary: #36d8b4;
+  --primary-strong: #14a98b;
+  --primary-glow: rgba(54, 216, 180, 0.42);
+  --accent: #6cc6ff;
+  --accent-glow: rgba(108, 198, 255, 0.32);
+  --gold: #f2b95c;
+  --gold-glow: rgba(242, 185, 92, 0.28);
+  --border-accent: rgba(64, 224, 195, 0.32);
+  --shadow-glow: 0 0 0 1px rgba(54, 216, 180, 0.18), 0 24px 60px rgba(54, 216, 180, 0.14);
+}
+
+/* 2. 梦幻粉/紫星空主题 (与图标契合) */
+html.theme-pink {
+  --primary: #ff6eb4; /* 绯粉 */
+  --primary-strong: #d84b8f;
+  --primary-glow: rgba(255, 110, 180, 0.45);
+  --accent: #b18eff; /* 梦幻紫 */
+  --accent-glow: rgba(177, 142, 255, 0.35);
+  --gold: #fda085; /* 粉金 */
+  --gold-glow: rgba(253, 160, 133, 0.3);
+  --border-accent: rgba(255, 110, 180, 0.35);
+  --shadow-glow: 0 0 0 1px rgba(255, 110, 180, 0.18), 0 24px 60px rgba(255, 110, 180, 0.14);
+  
+  --ai-glow-stops: 
+    var(--primary) 0deg,
+    #ff9a9e 90deg,
+    var(--gold) 180deg,
+    var(--accent) 270deg,
+    var(--primary) 360deg;
+}
+
+/* 3. 暖阳金沙漏主题 */
+html.theme-gold {
+  --primary: #f2b95c;
+  --primary-strong: #c28d34;
+  --primary-glow: rgba(242, 185, 92, 0.45);
+  --accent: #ff9f43;
+  --accent-glow: rgba(255, 159, 67, 0.35);
+  --gold: #f5cd79;
+  --gold-glow: rgba(245, 205, 121, 0.3);
+  --border-accent: rgba(242, 185, 92, 0.35);
+  --shadow-glow: 0 0 0 1px rgba(242, 185, 92, 0.18), 0 24px 60px rgba(242, 185, 92, 0.14);
+  
+  --ai-glow-stops:
+    var(--primary) 0deg,
+    #ffe066 90deg,
+    var(--accent) 180deg,
+    var(--primary-strong) 270deg,
+    var(--primary) 360deg;
+}
+
+/* 4. 极光深海蓝主题 */
+html.theme-blue {
+  --primary: #4fc3f7; /* 天蓝 */
+  --primary-strong: #0288d1;
+  --primary-glow: rgba(79, 195, 247, 0.45);
+  --accent: #5c6bc0; /* 钴蓝 */
+  --accent-glow: rgba(92, 107, 192, 0.35);
+  --gold: #81d4fa;
+  --gold-glow: rgba(129, 212, 250, 0.3);
+  --border-accent: rgba(79, 195, 247, 0.35);
+  --shadow-glow: 0 0 0 1px rgba(79, 195, 247, 0.18), 0 24px 60px rgba(79, 195, 247, 0.14);
+  
+  --ai-glow-stops:
+    var(--primary) 0deg,
+    #80deea 90deg,
+    var(--accent) 180deg,
+    #00acc1 270deg,
+    var(--primary) 360deg;
+}
+
+
+/* ============================== Reset ============================== */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  min-height: 100%;
+  background-color: var(--bg-0);
+  background-image:
+    radial-gradient(1200px 600px at 18% -10%, rgba(54, 216, 180, 0.10), transparent 60%),
+    radial-gradient(900px 540px at 92% 6%, rgba(242, 185, 92, 0.08), transparent 60%),
+    radial-gradient(1100px 700px at 50% 110%, rgba(108, 198, 255, 0.06), transparent 60%),
+    linear-gradient(180deg, var(--bg-0) 0%, var(--bg-1) 45%, var(--bg-2) 100%);
+  background-attachment: fixed;
+}
+
+body {
+  margin: 0;
+  min-height: 100vh;
+  color: var(--text);
+  background: transparent;
+  /* v8 → v9：字体放大 (15 → 17px) + 整体加粗 (默认 500)；
+     行高保持舒适，letter-spacing 略放宽配合 ComicShannsMono 偏窄的字身。 */
+  font-family: var(--font-sans);
+  font-size: 17px;
+  font-weight: 500;
+  line-height: 1.62;
+  letter-spacing: 0.005em;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+  font-feature-settings: "ss01", "cv01", "cv11";
+}
+
+/* ────────────────────────────────────────────────────────────────────
+   v9：动态彩色渐变文字
+   - 通过 .text-aurora 工具类把文字"染"上一层流动的渐变（emerald→gold→
+     accent→primary 循环），用 background-clip: text 让渐变只作用在字形本身。
+   - 默认所有的标题 (h1–h6) / 强调 (strong / b) / 链接 (a) / 段落开头标题
+     (.section-title / brand) 自动套上这层效果 —— 视觉上不喧宾夺主、
+     强调字保持清晰并带"星空使者"质感。
+   - 输入框 / 按钮 / 表格内容 / code 块刻意排除：因为它们要求纯色才有最大对比度。
+   ──────────────────────────────────────────────────────────────────── */
+
+@keyframes auroraShift {
+  0%   { background-position: 0%   50%; }
+  50%  { background-position: 100% 50%; }
+  100% { background-position: 0%   50%; }
+}
+
+.text-aurora,
+.display-title,
+.section-title,
+.brand strong,
+.brand__copy strong,
+.ai-msg--assistant .ai-md-body :where(p, li, span, h1, h2, h3, h4, strong, code),
+.ai-msg--assistant .ai-msg__text,
+.message-bubble--ai :where(p, li, span, h1, h2, h3, h4, strong, code),
+.message-bubble--ai > span {
+  background-image: linear-gradient(
+    135deg,
+    var(--primary) 0%,
+    #7ee7c7 45%,
+    var(--gold) 100%
+  ) !important;
+  background-size: 200% 200% !important;
+  -webkit-background-clip: text !important;
+  background-clip: text !important;
+  -webkit-text-fill-color: transparent !important;
+  color: transparent !important;
+  animation: auroraShift 22s linear infinite !important;
+  font-weight: 600;
+  text-shadow: none !important;
+}
+
+:where(h1, h2, h3, h4, h5, h6) {
+  color: var(--text);
+  -webkit-text-fill-color: initial;
+  background-clip: initial;
+  -webkit-background-clip: initial;
+  background-image: none;
+  font-weight: 700;
+}
+
+:where(strong, b) {
+  color: var(--primary);
+  -webkit-text-fill-color: initial;
+  background-clip: initial;
+  -webkit-background-clip: initial;
+  background-image: none;
+  font-weight: 700;
+}
+
+:where(a:not(.button):not(.app-nav__link):not(.admin-subnav__link):not(.cs-tab):not(.cs-back), .ai-md-body a) {
+  color: var(--primary);
+  -webkit-text-fill-color: initial;
+  background-clip: initial;
+  -webkit-background-clip: initial;
+  background-image: none;
+  font-weight: 600;
+  transition: color var(--duration-fast) var(--ease-out-quart),
+              text-shadow var(--duration-fast) var(--ease-out-quart);
+  position: relative;
+}
+
+:where(a:not(.button):not(.app-nav__link):not(.admin-subnav__link):not(.cs-tab):not(.cs-back):hover, .ai-md-body a:hover) {
+  color: #ffffff;
+  text-shadow: 0 0 8px var(--primary-glow);
+}
+
+/* 防止渐变把表单元素和按钮内文字也吃掉 —— 这些必须保持纯色对比 */
+:where(input, textarea, select, button, .button, code, pre, kbd, samp, .mono, .datestamp) {
+  -webkit-text-fill-color: initial;
+  background-clip: initial;
+  -webkit-background-clip: initial;
+  background-image: none;
+  color: var(--text);
+}
+:where(input::placeholder, textarea::placeholder) {
+  color: var(--text-muted);
+}
+
+/* AI 球聊天泡内 markdown 标题用更明显的渐变（重要场景 + 用户期望感最强） */
+.ai-md-body :where(h1, h2, h3, h4) {
+  background-size: 200% 200%;
+  animation-duration: 6s;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+img,
+svg,
+canvas {
+  display: block;
+  max-width: 100%;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+  color: inherit;
+}
+
+button {
+  cursor: pointer;
+  border: 0;
+  background: transparent;
+}
+
+button:disabled,
+input:disabled,
+textarea:disabled,
+select:disabled {
+  cursor: not-allowed;
+}
+
+::selection {
+  background: rgba(54, 216, 180, 0.32);
+  color: var(--text);
+}
+
+:focus-visible {
+  outline: 2px solid var(--primary);
+  outline-offset: 3px;
+  border-radius: var(--radius-xs);
+}
+
+::-webkit-scrollbar {
+  width: 12px;
+  height: 12px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: rgba(120, 132, 145, 0.28);
+  border: 3px solid transparent;
+  background-clip: padding-box;
+  border-radius: var(--radius-full);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: rgba(160, 172, 185, 0.46);
+  background-clip: padding-box;
+}
+
+#app {
+  min-height: 100vh;
+}
+
+/* ============================== Shell ============================== */
+
+.app-shell {
+  min-height: 100vh;
+  position: relative;
+  isolation: isolate;
+  display: flex;
+  flex-direction: column;
+}
+
+/* Ambient glow + grain texture for cinematic depth */
+.app-shell__ambient {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: -1;
+  overflow: hidden;
+}
+
+.app-shell__ambient::before,
+.app-shell__ambient::after {
+  content: "";
+  position: absolute;
+  inset: -12%;
+  border-radius: 50%;
+  filter: blur(150px) saturate(135%);
+  opacity: 0.58;
+  animation: ambient-drift 28s var(--ease-in-out-quart) infinite alternate;
+  mix-blend-mode: screen;
+}
+
+.app-shell__ambient::before {
+  background:
+    radial-gradient(circle at 14% 18%, rgba(54, 216, 180, 0.34) 0%, rgba(54, 216, 180, 0) 38%),
+    radial-gradient(circle at 82% 16%, rgba(242, 185, 92, 0.24) 0%, rgba(242, 185, 92, 0) 36%),
+    radial-gradient(circle at 26% 82%, rgba(108, 198, 255, 0.18) 0%, rgba(108, 198, 255, 0) 42%);
+}
+
+.app-shell__ambient::after {
+  animation-delay: -14s;
+  opacity: 0.45;
+  background:
+    radial-gradient(circle at 74% 22%, rgba(167, 139, 250, 0.18) 0%, rgba(167, 139, 250, 0) 38%),
+    radial-gradient(circle at 78% 74%, rgba(54, 216, 180, 0.16) 0%, rgba(54, 216, 180, 0) 40%),
+    radial-gradient(circle at 18% 72%, rgba(242, 185, 92, 0.14) 0%, rgba(242, 185, 92, 0) 42%);
+}
+
+@keyframes ambient-drift {
+  0%, 100% { transform: translate3d(0, 0, 0) scale(1); }
+  50% { transform: translate3d(40px, -30px, 0) scale(1.08); }
+}
+
+.app-shell__aura {
+  position: fixed;
+  inset: -10vh;
+  pointer-events: none;
+  z-index: -1;
+  opacity: 0.72;
+  background:
+    radial-gradient(circle at 16% 24%, rgba(54, 216, 180, 0.20) 0%, rgba(54, 216, 180, 0) 42%),
+    radial-gradient(circle at 84% 18%, rgba(242, 185, 92, 0.18) 0%, rgba(242, 185, 92, 0) 40%),
+    radial-gradient(circle at 30% 84%, rgba(108, 198, 255, 0.16) 0%, rgba(108, 198, 255, 0) 44%),
+    radial-gradient(circle at 74% 72%, rgba(167, 139, 250, 0.15) 0%, rgba(167, 139, 250, 0) 42%);
+  filter: blur(72px) saturate(145%);
+  mix-blend-mode: screen;
+  animation: aura-drift 24s var(--ease-in-out-quart) infinite alternate;
+}
+
+.app-shell__frame {
+  position: fixed;
+  inset: 10px;
+  pointer-events: none;
+  z-index: 5;
+  border-radius: 30px;
+  opacity: 0.3;
+  --ai-glow-thickness: 1px !important;
+  --ai-glow-duration: 16s !important;
+  --ai-glow-halo: 12px !important;
+}
+
+@keyframes aura-drift {
+  0% { transform: translate3d(-1%, -1%, 0) scale(1); }
+  50% { transform: translate3d(2%, -3%, 0) scale(1.03); }
+  100% { transform: translate3d(-2%, 2%, 0) scale(1.06); }
+}
+
+.app-shell__grain {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: -1;
+  opacity: 0.04;
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='160' height='160' viewBox='0 0 160 160'><filter id='n'><feTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='2' stitchTiles='stitch'/><feColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 0.4 0'/></filter><rect width='160' height='160' filter='url(%23n)'/></svg>");
+  background-size: 160px 160px;
+}
+
+.app-shell__main {
+  flex: 1 0 auto;
+  animation: page-enter var(--duration-slow) var(--ease-out-quart);
+}
+
+@keyframes page-enter {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+/* ============================== Page layout ============================== */
+
+.page-shell,
+.page-shell--wide {
+  width: var(--page-width);
+  margin: 0 auto;
+  padding: 40px 0 80px;
+}
+
+.page-shell--wide {
+  width: var(--page-width-wide);
+}
+
+.page-shell__header,
+.hero-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-end;
+  gap: 28px;
+  margin-bottom: 28px;
+}
+
+/* ============================== Typography ============================== */
+
+.eyebrow {
+  margin: 0 0 14px;
+  color: var(--primary);
+  font-family: var(--font-sans);
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.eyebrow::before {
+  content: "";
+  width: 28px;
+  height: 1px;
+  background: linear-gradient(90deg, var(--primary), transparent);
+}
+
+.display-title,
+.section-title {
+  margin: 0;
+  font-family: var(--font-display);
+  font-weight: 600;
+  line-height: 1.04;
+  letter-spacing: -0.025em;
+  color: var(--text);
+}
+
+.display-title {
+  font-size: clamp(2.6rem, 5.4vw, 5.4rem);
+  margin-bottom: 6px;
+}
+
+.section-title {
+  font-size: clamp(1.5rem, 2.2vw, 2.4rem);
+  letter-spacing: -0.02em;
+}
+
+.lead,
+.subtitle {
+  margin: 0;
+  color: var(--text-soft);
+  line-height: 1.72;
+  font-weight: 400;
+}
+
+.lead {
+  font-size: 1.06rem;
+  max-width: 56ch;
+}
+
+.subtitle {
+  font-size: 0.96rem;
+  color: var(--text-muted);
+}
+
+.text-gradient {
+  background-image: linear-gradient(
+    135deg,
+    var(--primary) 0%,
+    #7ee7c7 45%,
+    var(--gold) 100%
+  );
+  background-size: 200% 200%;
+  -webkit-background-clip: text;
+  background-clip: text;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  font-weight: 800;
+  animation: auroraShift 22s linear infinite;
+}
+
+@keyframes gradient-shimmer {
+  /* 旧动画名保留以防外部仍有引用，但与 auroraShift 同义 */
+  0%, 100% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
+}
+
+.help-text {
+  color: var(--text-muted);
+  font-size: 0.88rem;
+  line-height: 1.7;
+}
+
+.mono {
+  font-family: var(--font-mono);
+  font-size: 0.86em;
+  letter-spacing: -0.02em;
+}
+
+/* ============================== i18n Overflow (en/zh) ============================== */
+/* 英文相对中文通常长 2-3 倍，标题/标签/卡片头容易溢出窄容器。
+   本节统一处理：
+   1) 文字层 — overflow-wrap + min-width:0
+   2) flex/grid 子项 — min-width:0 让其能缩到比内容更窄
+   3) 卡片/面板头 — title/lead 走 min-width:0 + 断词
+   4) 按钮/标签/芯片 — 单行截断带省略号
+   5) 表格/列表 — 单元列可换行
+   6) 输入框 — 长英文单词强制换行
+*/
+:where(h1, h2, h3, h4, h5, h6, p, span, a, button, li, td, th, dd, dt, label, small) {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+:where(p, .lead, .subtitle, .help-text) {
+  /* 长句保持可读：多行省略 */
+  text-wrap: pretty;
+  hyphens: auto;
+}
+
+/* 弹性/网格子项必须可缩（默认 min-content 会撑大） */
+:where(.surface, .section-card, .hero-card, .auth-card, .builder-card,
+       .profile-card, .memory-card, .result-card, .detail-card,
+       .drift-panel, .fragments-panel, .note-composer, .app-header,
+       .toast, .pill, .chip, .tag) > * {
+  min-width: 0;
+}
+
+:where(.page-shell, .page-shell--wide, .auth-card__body,
+       .section-card__body, .hero-card__body) {
+  /* 主内容容器限制最大宽度并允许滚动 */
+  max-width: 100%;
+  min-width: 0;
+}
+
+/* 卡片标题、章节标题、页头 */
+:where(.display-title, .section-title, .card-title, .section-card__title,
+       .hero-card__title, .auth-card__title, .builder-card__title,
+       .panel-title, .widget-title, .form-title, .page-shell__title,
+       h1, h2, h3) {
+  max-width: 100%;
+  min-width: 0;
+  text-wrap: balance;
+}
+
+/* 多行描述、列表文本（卡片内容、详情页） */
+:where(.card-description, .result-card__desc, .memory-card__desc,
+       .detail-card__body, .section-card__lead, .lead) {
+  display: -webkit-box;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  /* 默认 clamp 到 4 行，调用方可用 .--unclamped 取消 */
+  -webkit-line-clamp: 4;
+}
+:where(.card-description--2, .result-card__desc--2) {
+  -webkit-line-clamp: 2;
+}
+:where(.card-description--6, .result-card__desc--6) {
+  -webkit-line-clamp: 6;
+}
+
+/* 按钮（避免文字长撑大按钮导致布局错乱） */
+:where(.button, button.button, a.button) {
+  max-width: 100%;
+  min-width: 0;
+  text-align: center;
+}
+:where(.button) > :not(svg):not(.icon) {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+/* 标签/芯片/单行 meta — 单行省略（多行场景调用方用 .tag--multi） */
+:where(.tag, .chip, .pill, .badge, .meta-pill, .emotion-pill) {
+  max-width: 100%;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+:where(.tag--multi, .chip--multi) {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+/* input/textarea 长英文单词强制换行 */
+:where(input[type="text"], input[type="email"], input[type="password"],
+       input[type="search"], input[type="url"], input[type="tel"],
+       textarea, .form-input, .form-textarea) {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+/* 表格单元格 */
+:where(table, .data-table) :where(td, th) {
+  max-width: 0;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+/* nav 链接 / 面包屑 / tab */
+:where(.app-nav__link, .admin-subnav__link, .breadcrumb a, .cs-tab, .nav-link) {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  min-width: 0;
+}
+
+/* 模态框/dialog 内容 */
+:where(.modal__body, .dialog__body, .drawer__body) {
+  max-width: 100%;
+  min-width: 0;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+/* 媒体对象（图+文字） */
+:where(.media, .media-row, .list-item) {
+  min-width: 0;
+  gap: 12px;
+}
+:where(.media, .media-row, .list-item) > :not(:first-child) {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+/* 小屏：进一步收紧 */
+@media (max-width: 768px) {
+  :where(.lead, .subtitle) {
+    font-size: 0.96rem;
+  }
+  :where(.display-title) {
+    font-size: clamp(2rem, 8vw, 3rem);
+  }
+  :where(.section-title) {
+    font-size: clamp(1.2rem, 4.5vw, 1.6rem);
+  }
+}
+
+@media (max-width: 480px) {
+  :where(.lead, .subtitle) {
+    font-size: 0.88rem;
+  }
+  :where(.section-card, .hero-card, .auth-card, .builder-card,
+         .profile-card, .memory-card, .result-card, .detail-card) {
+    padding: 18px;
+  }
+  :where(.button) {
+    padding: 8px 12px;
+    font-size: 0.86rem;
+  }
+}
+
+/* ============================== Surfaces ============================== */
+
+.surface,
+.section-card,
+.hero-card,
+.auth-card,
+.builder-card,
+.profile-card,
+.memory-card,
+.result-card,
+.detail-card,
+.drift-panel,
+.fragments-panel,
+.note-composer,
+.app-header {
+  position: relative;
+  border: 1px solid var(--border);
+  background: var(--surface);
+  backdrop-filter: blur(28px) saturate(180%);
+  -webkit-backdrop-filter: blur(28px) saturate(180%);
+  box-shadow: var(--shadow-md);
+}
+
+.section-card,
+.auth-card,
+.builder-card,
+.profile-card,
+.result-card,
+.detail-card,
+.drift-panel,
+.fragments-panel,
+.memory-card {
+  border-radius: var(--radius-lg);
+  padding: 28px;
+}
+
+.hero-card {
+  border-radius: var(--radius-xl);
+  padding: clamp(28px, 4vw, 48px);
+  background:
+    radial-gradient(800px 320px at 10% -20%, rgba(54, 216, 180, 0.12), transparent 60%),
+    radial-gradient(700px 320px at 110% 110%, rgba(242, 185, 92, 0.10), transparent 60%),
+    linear-gradient(180deg, rgba(22, 26, 33, 0.92), rgba(22, 26, 33, 0.74));
+  overflow: hidden;
+}
+
+.hero-card::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: 1px;
+  background: linear-gradient(
+    135deg,
+    rgba(54, 216, 180, 0.45),
+    rgba(54, 216, 180, 0) 35%,
+    rgba(242, 185, 92, 0) 65%,
+    rgba(242, 185, 92, 0.32)
+  );
+  -webkit-mask:
+    linear-gradient(#000, #000) content-box,
+    linear-gradient(#000, #000);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  pointer-events: none;
+}
+
+.hero-card--split {
+  display: grid;
+  grid-template-columns: 1.18fr 0.82fr;
+  gap: 36px;
+  align-items: start;
+}
+
+.section-card {
+  background:
+    linear-gradient(180deg, rgba(22, 26, 33, 0.88), rgba(22, 26, 33, 0.72));
+}
+
+/* ============================== Stacks & grids ============================== */
+
+.stack {
+  display: grid;
+  gap: 16px;
+}
+
+.stack--lg {
+  gap: 28px;
+}
+
+.metric-grid,
+.card-grid,
+.form-grid,
+.chip-grid {
+  display: grid;
+  gap: 16px;
+}
+
+.metric-grid {
+  grid-template-columns: repeat(auto-fit, minmax(168px, 1fr));
+}
+
+.card-grid {
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 20px;
+}
+
+.form-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+
+.chip-grid {
+  grid-template-columns: repeat(auto-fit, minmax(120px, max-content));
+  gap: 10px;
+}
+
+/* ============================== Metrics & chips ============================== */
+
+.metric-card {
+  position: relative;
+  min-height: 96px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 16px 18px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 6px;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.025), transparent 70%), rgba(14, 17, 22, 0.55);
+  transition: border-color var(--duration-base) var(--ease-out-quart),
+              transform var(--duration-base) var(--ease-out-quart);
+}
+
+.metric-card:hover {
+  border-color: var(--border-strong);
+  transform: translateY(-2px);
+}
+
+.metric-card__label {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: 0.14em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.metric-card__value {
+  font-family: var(--font-display);
+  font-size: 1.6rem;
+  font-weight: 600;
+  color: var(--text);
+  letter-spacing: -0.02em;
+}
+
+.chip,
+.status-pill,
+.tag,
+.pill,
+.card-flag,
+.note-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-full);
+  padding: 7px 14px;
+  font-size: 0.82rem;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  color: var(--text-soft);
+  background: rgba(14, 17, 22, 0.6);
+  white-space: nowrap;
+  transition: border-color var(--duration-fast) var(--ease-out-quart),
+              background-color var(--duration-fast) var(--ease-out-quart);
+}
+
+.chip:hover {
+  border-color: var(--border-strong);
+}
+
+.status-pill {
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  font-size: 0.72rem;
+}
+
+.status-pill--success {
+  color: #a7f3d0;
+  border-color: rgba(74, 222, 128, 0.32);
+  background: rgba(74, 222, 128, 0.08);
+}
+
+.status-pill--warning {
+  color: #fde68a;
+  border-color: rgba(250, 204, 21, 0.32);
+  background: rgba(250, 204, 21, 0.08);
+}
+
+.status-pill--accent {
+  color: #a7f3e2;
+  border-color: var(--border-accent);
+  background: rgba(54, 216, 180, 0.08);
+}
+
+.status-pill--danger {
+  color: #fecaca;
+  border-color: rgba(248, 113, 113, 0.32);
+  background: rgba(248, 113, 113, 0.08);
+}
+
+/* ============================== Inputs ============================== */
+
+.field {
+  display: grid;
+  gap: 10px;
+}
+
+.field__label {
+  font-size: 0.8rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--text-soft);
+}
+
+.field__help {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+.input,
+.textarea,
+.select {
+  width: 100%;
+  min-height: 50px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: rgba(10, 13, 18, 0.62);
+  color: var(--text);
+  padding: 14px 16px;
+  font-size: 0.96rem;
+  transition: border-color var(--duration-base) var(--ease-out-quart),
+              box-shadow var(--duration-base) var(--ease-out-quart),
+              background-color var(--duration-base) var(--ease-out-quart);
+}
+
+.textarea {
+  min-height: 160px;
+  resize: vertical;
+  line-height: 1.65;
+}
+
+.input::placeholder,
+.textarea::placeholder {
+  color: var(--text-faint);
+}
+
+.input:hover:not(:disabled),
+.textarea:hover:not(:disabled),
+.select:hover:not(:disabled) {
+  border-color: var(--border-strong);
+}
+
+.input:focus-visible,
+.textarea:focus-visible,
+.select:focus-visible {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 4px rgba(54, 216, 180, 0.14);
+  background-color: rgba(10, 13, 18, 0.82);
+}
+
+.select {
+  appearance: none;
+  background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'><path d='M2 4l4 4 4-4' stroke='%2336d8b4' stroke-width='1.5' fill='none' stroke-linecap='round' stroke-linejoin='round'/></svg>");
+  background-repeat: no-repeat;
+  background-position: right 16px center;
+  padding-right: 44px;
+}
+
+/* ============================== Buttons ============================== */
+
+.button,
+.button--primary,
+.button--secondary,
+.button--ghost,
+.button--danger {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  min-height: 48px;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  padding: 0 24px;
+  /* v10：跟随顶 nav 一起加粗放大；min-height 同步 +2px。 */
+  font-weight: 700;
+  font-size: 1.04rem;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+  transition:
+    transform var(--duration-base) var(--ease-out-quart),
+    border-color var(--duration-base) var(--ease-out-quart),
+    background-color var(--duration-base) var(--ease-out-quart),
+    box-shadow var(--duration-base) var(--ease-out-quart),
+    opacity var(--duration-base) var(--ease-out-quart);
+  overflow: hidden;
+}
+
+.button:hover:not(:disabled),
+.button--primary:hover:not(:disabled),
+.button--secondary:hover:not(:disabled),
+.button--ghost:hover:not(:disabled),
+.button--danger:hover:not(:disabled) {
+  transform: translateY(-2px);
+}
+
+.button:active:not(:disabled),
+.button--primary:active:not(:disabled),
+.button--secondary:active:not(:disabled),
+.button--ghost:active:not(:disabled),
+.button--danger:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.button--primary {
+  color: #052017;
+  background: linear-gradient(135deg, var(--primary) 0%, #b6f077 100%);
+  box-shadow: 0 14px 32px rgba(54, 216, 180, 0.28),
+              0 1px 0 rgba(255, 255, 255, 0.18) inset,
+              0 -1px 0 rgba(0, 0, 0, 0.12) inset;
+}
+
+.button--primary:hover:not(:disabled) {
+  box-shadow: 0 18px 40px rgba(54, 216, 180, 0.36),
+              0 1px 0 rgba(255, 255, 255, 0.22) inset,
+              0 -1px 0 rgba(0, 0, 0, 0.12) inset;
+}
+
+.button--secondary {
+  color: var(--text);
+  border-color: var(--border-strong);
+  background: rgba(20, 24, 30, 0.6);
+}
+
+.button--secondary:hover:not(:disabled) {
+  border-color: var(--border-accent);
+  background: rgba(54, 216, 180, 0.06);
+}
+
+.button--ghost {
+  color: var(--text-soft);
+  border-color: transparent;
+  background: transparent;
+}
+
+.button--ghost:hover:not(:disabled) {
+  color: var(--text);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.button--danger {
+  color: #fee2e2;
+  border-color: rgba(248, 113, 113, 0.42);
+  background: rgba(248, 113, 113, 0.08);
+}
+
+.button--danger:hover:not(:disabled) {
+  background: rgba(248, 113, 113, 0.16);
+  border-color: rgba(248, 113, 113, 0.62);
+}
+
+.button:disabled,
+.button--primary:disabled,
+.button--secondary:disabled,
+.button--ghost:disabled,
+.button--danger:disabled {
+  opacity: 0.5;
+  transform: none;
+  box-shadow: none;
+}
+
+/* ============================== Empty state ============================== */
+
+.empty-state {
+  padding: 80px 24px;
+  text-align: center;
+  color: var(--text-muted);
+}
+
+.empty-state__title {
+  margin: 0 0 14px;
+  color: var(--text);
+  font-family: var(--font-display);
+  font-size: 1.4rem;
+  font-weight: 600;
+}
+
+.empty-state__text {
+  margin: 0 auto 22px;
+  max-width: 46rem;
+  line-height: 1.72;
+}
+
+/* ============================== Layout helpers ============================== */
+
+.split-layout {
+  display: grid;
+  grid-template-columns: 1.12fr 0.88fr;
+  gap: 32px;
+}
+
+.detail-grid {
+  display: grid;
+  gap: 28px;
+}
+
+.detail-columns {
+  display: grid;
+  grid-template-columns: 1fr 340px;
+  gap: 28px;
+}
+
+/* ============================== Drift bar ============================== */
+
+.fade-bar {
+  position: relative;
+  height: 12px;
+  border-radius: var(--radius-full);
+  background: rgba(30, 35, 42, 0.85);
+  overflow: hidden;
+  border: 1px solid var(--border);
+}
+
+.fade-bar__fill {
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--primary), var(--gold));
+  box-shadow: 0 0 12px var(--primary-glow);
+  transition: width var(--duration-slow) var(--ease-out-quart);
+}
+
+.fade-bar__fill::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    rgba(255, 255, 255, 0.32) 50%,
+    transparent 100%
+  );
+  animation: shimmer 2.4s ease-in-out infinite;
+}
+
+/* ============================== Active states ============================== */
+
+.active-link {
+  color: var(--text);
+}
+
+/* ============================== Animations ============================== */
+
+@keyframes shimmer {
+  from { background-position: 200% 0; transform: translateX(-100%); }
+  to { background-position: -200% 0; transform: translateX(100%); }
+}
+
+@keyframes fade-in-up {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes pulse-glow {
+  0%, 100% { box-shadow: 0 0 0 0 rgba(54, 216, 180, 0.32); }
+  50% { box-shadow: 0 0 0 12px rgba(54, 216, 180, 0); }
+}
+
+.reveal {
+  animation: fade-in-up var(--duration-slow) var(--ease-out-quart) backwards;
+}
+
+.reveal-delay-1 { animation-delay: 80ms; }
+.reveal-delay-2 { animation-delay: 160ms; }
+.reveal-delay-3 { animation-delay: 240ms; }
+.reveal-delay-4 { animation-delay: 320ms; }
+
+/* ============================== Responsive ============================== */
+
+@media (max-width: 1100px) {
+  .hero-card--split,
+  .split-layout,
+  .detail-columns {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 768px) {
+  :root {
+    --page-width: min(100vw - 24px, 100%);
+    --page-width-wide: min(100vw - 24px, 100%);
+  }
+
+  .page-shell,
+  .page-shell--wide {
+    padding: 24px 0 56px;
+  }
+
+  .page-shell__header,
+  .hero-row {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+
+  .form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .display-title {
+    font-size: clamp(2rem, 8vw, 3rem);
+  }
+
+  .section-card,
+  .hero-card,
+  .auth-card,
+  .builder-card,
+  .profile-card,
+  .result-card,
+  .detail-card,
+  .drift-panel,
+  .fragments-panel,
+  .memory-card {
+    padding: 20px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ============================== User chip ============================== */
+
+.user-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 14px 8px 8px;
+  border-radius: var(--radius-full);
+  border: 1px solid var(--border);
+  background: rgba(14, 17, 22, 0.6);
+  transition: border-color 180ms ease, background-color 180ms ease;
+}
+
+.user-chip:hover {
+  border-color: var(--border-strong);
+  background: rgba(14, 17, 22, 0.86);
+}
+
+.user-chip__avatar {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: linear-gradient(135deg, var(--primary), var(--gold));
+  color: #052017;
+  font-weight: 800;
+  font-size: 1.02rem;
+}
+
+.user-chip__meta {
+  display: grid;
+  gap: 1px;
+  min-width: 0;
+}
+
+.user-chip__meta strong {
+  font-size: 1.02rem;
+  font-weight: 800;
+  letter-spacing: -0.005em;
+  /* v12：user-chip 是导航类元素，不参与七彩渐变 — 否则用户名会被 transparent 化 */
+  background-image: none;
+  -webkit-background-clip: initial;
+  background-clip: initial;
+  -webkit-text-fill-color: currentColor;
+  color: var(--text);
+  animation: none;
+}
+
+.user-chip__meta small {
+  color: var(--text-muted);
+  font-size: 0.86rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+}
+
+/* ================================================================
+   Apple Intelligence — Flowing Rainbow Border (跑马灯)
+
+   Wraps any element in an animated conic-gradient ribbon that
+   rotates around its perimeter, plus a soft outer halo that
+   breathes with the rotation. Uses @property + mask-composite so
+   the gradient paints ONLY the border, not the interior, and so
+   the rotation is GPU-driven (no JS, no layout work).
+
+   Usage:
+     <div class="card ai-glow-border">…</div>
+     <button class="btn ai-glow-border ai-glow-border--soft">…</button>
+     <header class="app-header ai-glow-edge">…</header>
+
+   Modifiers:
+     --soft     thinner ring, lower opacity (default for utility chrome)
+     --intense  thicker ring, faster spin, used for hero CTAs
+     --static   keeps the gradient but pauses rotation
+   ================================================================ */
+
+@property --ai-glow-angle {
+  syntax: "<angle>";
+  inherits: false;
+  initial-value: 0deg;
+}
+
+@property --ai-glow-opacity {
+  syntax: "<number>";
+  inherits: false;
+  initial-value: 1;
+}
+
+:root {
+  --ai-glow-stops:
+    var(--primary) 0deg,
+    #7ee7c7 90deg,
+    var(--gold) 180deg,
+    var(--primary-strong) 270deg,
+    var(--primary) 360deg;
+  --ai-glow-thickness: 1.6px;
+  --ai-glow-duration: 6s;
+  --ai-glow-halo: 22px;
+}
+
+.ai-glow-border {
+  position: relative;
+  isolation: isolate;
+}
+
+.ai-glow-border::before,
+.ai-glow-border::after {
+  content: "";
+  position: absolute;
+  inset: calc(var(--ai-glow-thickness) * -1);
+  border-radius: inherit;
+  pointer-events: none;
+}
+
+/* Inner ring — the crisp animated outline. mask-composite carves
+   away the interior so only a thin ribbon of the gradient shows. */
+.ai-glow-border::before {
+  z-index: 1;
+  padding: var(--ai-glow-thickness);
+  background: conic-gradient(from var(--ai-glow-angle), var(--ai-glow-stops));
+  -webkit-mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  mask:
+    linear-gradient(#000 0 0) content-box,
+    linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask-composite: exclude;
+  animation: ai-glow-spin var(--ai-glow-duration) linear infinite;
+  filter: saturate(1.15);
+}
+
+/* Outer halo — same gradient, blurred, breathes opacity to feel "alive". */
+.ai-glow-border::after {
+  z-index: 0;
+  inset: calc(var(--ai-glow-halo) * -1);
+  background: conic-gradient(from var(--ai-glow-angle), var(--ai-glow-stops));
+  filter: blur(calc(var(--ai-glow-halo) * 0.7)) saturate(1.4);
+  opacity: calc(var(--ai-glow-opacity) * 0.32);
+  animation:
+    ai-glow-spin var(--ai-glow-duration) linear infinite,
+    ai-glow-breathe calc(var(--ai-glow-duration) * 1.6) ease-in-out infinite;
+}
+
+.ai-glow-border > * {
+  position: relative;
+  z-index: 2;
+}
+
+.ai-glow-border--soft {
+  --ai-glow-thickness: 1px;
+  --ai-glow-duration: 8s;
+  --ai-glow-halo: 14px;
+}
+
+.ai-glow-border--intense {
+  --ai-glow-thickness: 2.2px;
+  --ai-glow-duration: 4.2s;
+  --ai-glow-halo: 32px;
+}
+
+.ai-glow-border--static::before,
+.ai-glow-border--static::after {
+  animation-play-state: paused;
+}
+
+/* Edge-only variant — paints a single animated rule along the
+   bottom of an element. Perfect for sticky headers / dividers. */
+.ai-glow-edge {
+  position: relative;
+}
+
+.ai-glow-edge::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: -1px;
+  height: 1.5px;
+  background: linear-gradient(
+    90deg,
+    transparent 0%,
+    #ff5e8a 18%,
+    #ffd166 34%,
+    #4ade80 50%,
+    #38bdf8 66%,
+    #a78bfa 82%,
+    transparent 100%
+  );
+  background-size: 220% 100%;
+  animation: ai-glow-sweep 5.4s linear infinite;
+  pointer-events: none;
+  opacity: 0.7;
+  filter: blur(0.3px) saturate(1.2);
+}
+
+@keyframes ai-glow-spin {
+  to { --ai-glow-angle: 360deg; }
+}
+
+@keyframes ai-glow-breathe {
+  0%, 100% { --ai-glow-opacity: 0.7; }
+  50%      { --ai-glow-opacity: 1.25; }
+}
+
+@keyframes ai-glow-sweep {
+  0%   { background-position: 220% 50%; }
+  100% { background-position: -120% 50%; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .ai-glow-border::before,
+  .ai-glow-border::after,
+  .ai-glow-edge::after {
+    animation: none;
+  }
+}

@@ -1,0 +1,233 @@
+server:
+  port: 8083
+  shutdown: graceful
+
+spring:
+  application:
+    name: ai-service
+  lifecycle:
+    timeout-per-shutdown-phase: 30s
+  data:
+    redis:
+      host: ${REDIS_HOST:100.66.166.46}
+      port: ${REDIS_PORT:6379}
+      timeout: 3s
+      connect-timeout: 3s
+      lettuce:
+        pool:
+          max-active: 16
+          max-idle: 8
+          min-idle: 2
+          max-wait: 2s
+  neo4j:
+    # 默认指向 workpc Neo4j；本机 dev 时设 NEO4J_HOST=localhost 即可
+    uri: bolt://${NEO4J_HOST:100.66.166.46}:${NEO4J_PORT:7687}
+    authentication:
+      username: ${NEO4J_USER:neo4j}
+      password: ${NEO4J_PASSWORD:password123}
+  rabbitmq:
+    host: ${RABBITMQ_HOST:100.66.166.46}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USER:guest}
+    password: ${RABBITMQ_PASSWORD:guest}
+    # consumer 端 prefetch — Milvus 写一次约 200-500ms；拉太大反而挤压同一队列
+    listener:
+      simple:
+        prefetch: 8
+        # 异常时不 requeue，由 RejectAndDontRequeueRecoverer 推到 DLX
+        acknowledge-mode: auto
+        retry:
+          enabled: true
+          initial-interval: 1s
+          multiplier: 2.0
+          max-interval: 8s
+          max-attempts: 4
+        default-requeue-rejected: false
+  cloud:
+    inetutils:
+      preferred-networks:
+        - 172.
+        - 100.
+    nacos:
+      discovery:
+        server-addr: ${NACOS_HOST:100.66.166.46}:8848
+        ip: ${SPRING_CLOUD_NACOS_DISCOVERY_IP:}
+      config:
+        enabled: false
+  ai:
+    openai:
+      # 凭证 *只* 通过环境变量注入（NVIDIA_API_KEY / NVIDIA_BASE_URL / NVIDIA_MODEL）。
+      # 没有提供 → 使用占位符 nvapi-placeholder-not-configured，让 Spring AI 完成
+      # bean 装配（OpenAiAutoConfiguration 要求 api-key 非空字符串），但
+      # ChatReasoner.ensureRealKeyOrThrow 会用 placeholderKeyPrefix 检测出占位符
+      # 并提前抛 AI_UPSTREAM_UNAVAILABLE 而不会真的发出网络请求 — 不会泄漏占位
+      # 字符到 NVIDIA。任何环境不应把真实密钥写进这份 yml；yml 会进 git。
+      api-key: ${NVIDIA_API_KEY:nvapi-placeholder-not-configured}
+      # ⚠️ base-url **不要带 `/v1`**：Spring AI 的 OpenAI 客户端会自己拼上
+      # `/v1/chat/completions`。带上 `/v1` 会得到 `/v1/v1/chat/completions` → 404。
+      # 参考 Spring AI 官方 NVIDIA 文档：
+      # https://docs.spring.io/spring-ai/reference/api/chat/nvidia-chat.html
+      base-url: ${NVIDIA_BASE_URL:https://integrate.api.nvidia.com}
+      chat:
+        options:
+          model: ${NVIDIA_MODEL:minimaxai/minimax-m2.7}
+          temperature: 0.7
+          # NVIDIA Integrate may not implement parallel tool calls; keep them
+          # sequential so SSE tool_start / tool_end ordering matches reality.
+          parallel-tool-calls: false
+
+# ---------------------------------------------------------------------------
+# Mnemoscape AI 自定义配置 —— 控制工具调用与服务发现
+# ---------------------------------------------------------------------------
+mnemoscape:
+  ai:
+    upstream:
+      # 旧版用占位符前缀来表达"未配置"。现已改为：api-key 为空字符串 = 未配置，
+      # 由 ChatReasoner.ensureRealKeyOrThrow 通过 isBlank() 检测。保留这个 key 以
+      # 向后兼容，可通过 AI_PLACEHOLDER_PREFIX 自定义历史占位符前缀（如有人继续
+      # 在私有部署里使用 "nvapi-placeholder-..." 形式的占位）。
+      placeholder-key-prefix: ${AI_PLACEHOLDER_PREFIX:nvapi-placeholder}
+      # 单次请求的硬上限；超过即视为 AI_UPSTREAM_UNAVAILABLE。
+      timeout-ms: ${AI_TIMEOUT_MS:30000}
+      # 给 RestController 抛 502/503 时一个短的降级文案
+      fallback-message: ${AI_FALLBACK_MESSAGE:AI 暂时不可用。请确认服务端已注入 NVIDIA_API_KEY 环境变量后重试。}
+      # ---------------- 多模态混合检索（hybrid retrieval）----------------
+      # 基座模型 (NVIDIA_MODEL) 仍为 MiniMax M2.7 — 文本/agentic/中文强项；
+      # 检测到附件时先调用 vision-model 跑"图片→密集英文描述"，再 prepend 到
+      # 基座 prompt（M2.7 把英文描述吸收后用中文回复用户）。
+      #
+      # 默认走 Llama 3.2 11B Vision（实测 ~5s 即返回，稳定）；同族 90B 在公网
+      # trial 节点上偶尔出现 application/octet-stream 协议异常或 40+s 长尾，
+      # 反而拖垮 SSE 体验。若需要更高视觉精度可改 90B 或第三方多模态模型。
+      vision-model: ${NVIDIA_VISION_MODEL:meta/llama-3.2-11b-vision-instruct}
+      vision-fallback-model: ${NVIDIA_VISION_FALLBACK_MODEL:meta/llama-3.2-90b-vision-instruct}
+      vision-max-images: ${NVIDIA_VISION_MAX_IMAGES:4}
+      vision-timeout-ms: ${NVIDIA_VISION_TIMEOUT_MS:45000}
+
+      # ---------------- 多模型协作架构分工映射 ----------------
+      chat-model: ${NVIDIA_CHAT_MODEL:google/gemma-3n-e4b-it}
+      reasoning-model: ${NVIDIA_REASONING_MODEL:bytedance/seed-oss-36b-instruct}
+      agentic-model: ${NVIDIA_AGENTIC_MODEL:stepfun-ai/step-3.5-flash}
+      generation-model: ${NVIDIA_GENERATION_MODEL:meta/llama-4-maverick-17b-128e-instruct}
+
+    # ---------------- 场景重建路由 ----------------
+    # auto = 先 LLM，失败/超时无缝降级到规则版（默认）；llm = 强制 LLM；rule = 强制规则版
+    reconstruct:
+      mode: ${RECONSTRUCT_MODE:auto}
+    # ---------------- 实体提取路由 ----------------
+    # 同样三档：auto = LLM 优先 + 失败降规则；llm = 强制 LLM；rule = 强制规则版
+    extract:
+      mode: ${EXTRACT_MODE:auto}
+    # ---------------- 真实向量检索（Embedding + Milvus）----------------
+    # enabled=false 时所有向量逻辑短路，MilvusSearchTool 走关键词加权降级。
+    # Embedding 走 NVIDIA Integrate 的 /v1/embeddings（检索专用 embedding，
+    # 区分 input_type=query/passage）；Milvus 用 REST API v2 (/v2/vectordb/...)
+    # 经 JDK HttpClient 调用，避开 gRPC SDK 与 Spring Cloud 的依赖冲突。
+    # ⚠️ 换 embedding 模型务必同步改 embedding-dimension，否则 collection 维度对不上。
+    vector:
+      enabled: ${VECTOR_SEARCH_ENABLED:true}
+      embedding-model: ${EMBEDDING_MODEL:nvidia/nv-embed-v1}
+      embedding-dimension: ${EMBEDDING_DIMENSION:4096}
+      embedding-timeout-ms: ${EMBEDDING_TIMEOUT_MS:15000}
+      milvus-host: ${MILVUS_HOST:100.66.166.46}
+      milvus-port: ${MILVUS_PORT:19530}
+      milvus-token: ${MILVUS_TOKEN:}
+      milvus-database: ${MILVUS_DATABASE:default}
+      collection-name: ${MILVUS_COLLECTION:mnemoscape_memories}
+      milvus-timeout-ms: ${MILVUS_TIMEOUT_MS:8000}
+      default-top-k: ${VECTOR_DEFAULT_TOPK:5}
+    # ---------------- Redis 性能加速层 (AiCacheService 统一管控) ----------------
+    # 三类用途, 默认全开; 任一开关关掉走"无缓存直连 + 无限流"的旧行为, 业务不变.
+    # 失败行为统一: Redis 抖动 → 静默降级到无缓存, 绝不阻塞 NVIDIA 真实调用.
+    cache:
+      # Embedding 缓存: 同一段文本 7 天内只调一次 NVIDIA /v1/embeddings.
+      # 命中率高且能省 NVIDIA Token 配额 (1 query embed ~$0.0001, 高频会议聊天场景命中率可到 40-60%).
+      embedding:
+        enabled: ${AI_CACHE_EMBEDDING_ENABLED:true}
+        ttl-seconds: ${AI_CACHE_EMBEDDING_TTL:604800}
+      # Milvus 搜索结果缓存: 60s 内同一 (userId, topK, query) 直接复用上次召回结果.
+      # 写入 (新增/更新/删除记忆) 由 memory-service 发 MQ 触发主动失效 (见 A 系列改造).
+      search:
+        enabled: ${AI_CACHE_SEARCH_ENABLED:true}
+        ttl-seconds: ${AI_CACHE_SEARCH_TTL:60}
+    # ---------------- NVIDIA 上游限流 (令牌桶, Redis 实现, 跨实例一致) ----------------
+    # 免费档 NVIDIA Integrate 有 RPM 限制 (chat ~60 RPM, embed ~120 RPM);
+    # 超额会返回 429 把整次请求打挂. 我们在客户端先做软限流, 超额抛 RATE_LIMITED.
+    rate-limit:
+      enabled: ${AI_RATELIMIT_ENABLED:true}
+      # 按模型分桶, 默认值是保守估计, 真实配额查 NVIDIA 控制台后改 env.
+      default-rpm: ${AI_RATELIMIT_DEFAULT_RPM:40}
+      embed-rpm: ${AI_RATELIMIT_EMBED_RPM:100}
+      vision-rpm: ${AI_RATELIMIT_VISION_RPM:20}
+  asset-service:
+    base-url: ${ASSET_SERVICE_BASE_URL:http://asset-service}
+  memory-service:
+    base-url: ${MEMORY_SERVICE_BASE_URL:http://memory-service}
+  # admin-dashboard (Requirements 3.2) — JWT secret is needed by the
+  # /api/v1/admin/** SecurityFilterChain to validate bearer tokens for
+  # direct service calls that bypass the gateway. Token-expiration values
+  # are unused on this side (ai-service never issues tokens) but the
+  # JwtTokenProvider constructor still requires them.
+  jwt:
+    secret: ${JWT_SECRET:bW5lbW9zY2FwZS1zZWNyZXQta2V5LWZvci1obWFjLXNoYTI1Ni1hbGdvcml0aG0tMjAyNQ==}
+    access-token-expiration: 3600000
+    refresh-token-expiration: 604800000
+
+# Resilience4j circuit breaker template for downstream AI providers.
+# The MockReconstructService doesn't trip these today, but real DeepSeek
+# integration should annotate calls with @CircuitBreaker(name = "deepseek").
+resilience4j:
+  circuitbreaker:
+    instances:
+      deepseek:
+        registerHealthIndicator: true
+        slidingWindowSize: 20
+        failureRateThreshold: 50
+        waitDurationInOpenState: 30s
+        permittedNumberOfCallsInHalfOpenState: 3
+        minimumNumberOfCalls: 10
+        slowCallDurationThreshold: 10s
+        slowCallRateThreshold: 60
+  retry:
+    instances:
+      deepseek:
+        maxAttempts: 3
+        waitDuration: 500ms
+        exponentialBackoffMultiplier: 2
+  timelimiter:
+    instances:
+      deepseek:
+        timeoutDuration: 15s
+        cancelRunningFuture: true
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+  packages-to-scan: com.mnemoscape.ai
+
+management:
+  endpoints:
+    web:
+      exposure:
+        include: health,info,metrics,prometheus,circuitbreakers,retries
+  endpoint:
+    health:
+      show-details: when_authorized
+      probes:
+        enabled: true
+  health:
+    circuitbreakers:
+      enabled: true
+  metrics:
+    tags:
+      application: ${spring.application.name}
+
+logging:
+  level:
+    root: INFO
+    com.mnemoscape: INFO
+    com.alibaba.nacos.client.naming: WARN
+    com.alibaba.nacos.common.remote.client: WARN
+    com.alibaba.nacos.client.config: WARN

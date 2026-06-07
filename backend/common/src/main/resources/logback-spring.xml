@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Mnemoscape — shared logging configuration.
+  Lives in common/ and is loaded transitively by every service that does
+  NOT supply its own logback-spring.xml on the classpath (e.g. ai-service,
+  asset-service).  The actual configuration lives in logback-base-config.xml
+  so each service that owns a logback-spring.xml (auth/memory/resonance/
+  gateway) can pull it in alongside logback-admin.xml without copy/paste.
+  -->
+<configuration scan="true" scanPeriod="30 seconds">
+
+  <include resource="logback-base-config.xml"/>
+
+</configuration>

@@ -1,0 +1,26 @@
+# =============================================================================
+# memory-service bootstrap config
+# 与 ai-service 的 bootstrap.yml 保持模板一致；profile=nacos 时开启 Nacos 拉取
+# =============================================================================
+spring:
+  application:
+    name: memory-service
+  profiles:
+    active: dev
+  cloud:
+    nacos:
+      config:
+        enabled: false
+        server-addr: ${NACOS_HOST:100.66.166.46}:${NACOS_PORT:8848}
+        file-extension: yaml
+        refresh-enabled: true
+        failure-tolerance-enabled: true
+        timeout: 3000
+      inetutils:
+        preferred-networks:
+          - 172.
+          - 100.
+      discovery:
+        server-addr: ${NACOS_HOST:100.66.166.46}:8848
+        ip: ${SPRING_CLOUD_NACOS_DISCOVERY_IP:}
+        enabled: true

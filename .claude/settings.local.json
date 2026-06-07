@@ -1,0 +1,34 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(java --version)",
+      "Bash(mvn --version)",
+      "Bash(npm --version)",
+      "Bash(docker --version)",
+      "Bash(docker compose *)",
+      "Bash(npm create *)",
+      "Bash(java -Xmx512m -classpath \".mvn/wrapper/maven-wrapper.jar\" org.apache.maven.wrapper.MavenWrapperMain clean compile -DskipTests --batch-mode -Dmaven.multiModuleProjectDirectory=\"M:/Study/ProjectTest/Mnemoscape/backend\")",
+      "Bash(java -Xmx512m --add-opens java.base/java.lang=ALL-UNNAMED --add-opens java.base/java.util=ALL-UNNAMED -classpath \".mvn/wrapper/maven-wrapper.jar\" org.apache.maven.wrapper.MavenWrapperMain compile -DskipTests --batch-mode)",
+      "Bash(npx vue-tsc *)",
+      "Bash(ls -la \"C:/Users/WangHaoYi/.m2/wrapper/dists/apache-maven-3.9.9-bin/33b4b2b4/\" 2>/dev/null || echo \"Maven dist not downloaded yet\")",
+      "Read(//c/Users/WangHaoYi/.m2/wrapper/dists/apache-maven-3.9.9-bin/33b4b2b4/**)",
+      "Bash(JAVA_HOME=\"\" bash \"C:/Users/WangHaoYi/.m2/wrapper/dists/apache-maven-3.9.9-bin/33b4b2b4/apache-maven-3.9.9/bin/mvn\" compile -DskipTests --batch-mode)",
+      "Bash(bash \"C:/Users/WangHaoYi/.m2/wrapper/dists/apache-maven-3.9.9-bin/33b4b2b4/apache-maven-3.9.9/bin/mvn\" compile -DskipTests --batch-mode)",
+      "Bash(grep -r \"lombok\" \"C:/Users/WangHaoYi/.m2/repository/org/springframework/boot/spring-boot-dependencies/3.2.5/\" 2>/dev/null | head -5)",
+      "Read(//c/Users/WangHaoYi/.m2/repository/org/springframework/boot/spring-boot-dependencies/3.2.5/**)",
+      "Bash(ls \"C:/Users/WangHaoYi/.m2/repository/org/projectlombok/lombok/\" 2>/dev/null)",
+      "Read(//c/Users/WangHaoYi/.m2/repository/org/projectlombok/lombok/**)",
+      "Bash(bash \"C:/Users/WangHaoYi/.m2/wrapper/dists/apache-maven-3.9.9-bin/33b4b2b4/apache-maven-3.9.9/bin/mvn\" compile -DskipTests --batch-mode -o)",
+      "Bash(HTTP_PROXY=\"http://127.0.0.1:7890\" HTTPS_PROXY=\"http://127.0.0.1:7890\" docker pull eclipse-temurin:17-jre-alpine)",
+      "Bash(export HTTP_PROXY=\"http://127.0.0.1:7890\" HTTPS_PROXY=\"http://127.0.0.1:7890\")",
+      "Bash(Get-ChildItem *)",
+      "Bash(xargs grep -l \"validation\\\\|actuator\\\\|micrometer\\\\|openapi\\\\|springdoc\")",
+      "Bash(python *)",
+      "Bash(ssh workpc *)",
+      "Bash(\\\\\"{{.Server.Version}})",
+      "Bash(\\\\\"table {{.Names}}\\\\t{{.Status}})",
+      "WebSearch",
+      "WebFetch(domain:github.com)"
+    ]
+  }
+}

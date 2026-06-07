@@ -1,0 +1,11 @@
+# =============================================================================
+# ai-service / prod profile — 远端生产
+# dataId: ai-service-prod.yaml  group: DEFAULT_GROUP
+# =============================================================================
+mnemoscape:
+  ai:
+    upstream:
+      timeout-ms: 30000
+    rate-limit:
+      embed-rpm: 200
+      vision-rpm: 60

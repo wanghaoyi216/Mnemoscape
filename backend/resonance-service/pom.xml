@@ -1,0 +1,125 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 https://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+    <parent>
+        <groupId>com.mnemoscape</groupId>
+        <artifactId>mnemoscape-platform</artifactId>
+        <version>1.0.0-SNAPSHOT</version>
+    </parent>
+    <artifactId>resonance-service</artifactId>
+    <packaging>jar</packaging>
+    <name>Mnemoscape Resonance Service</name>
+
+    <dependencies>
+        <dependency>
+            <groupId>com.mnemoscape</groupId>
+            <artifactId>common</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-web</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-jpa</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-websocket</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-actuator</artifactId>
+        </dependency>
+        <!-- Spring Security auto-configuration so the SecurityFilterChain bean
+             defined in SecurityConfig is picked up.  Used for the admin-dashboard
+             dual-layer enforcement: any direct call to /api/v1/admin/** that
+             bypasses the gateway is rejected here with hasRole('ADMIN').
+             (admin-dashboard Requirements 3.2) -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-security</artifactId>
+        </dependency>
+        <!-- Redis client + cache abstraction for the upcoming admin aggregation
+             endpoints (resonance-overview / resonance-top in tasks 8.1–8.2).
+             spring-boot-starter-data-redis brings the Lettuce driver and the
+             RedisConnectionFailureException type that BypassOnFailureCacheManager
+             (in common) catches to gracefully degrade when Redis is unavailable
+             (admin-dashboard Requirements 14.3). spring-boot-starter-cache
+             enables the @Cacheable annotation surface used to memoize per-endpoint
+             responses (admin-dashboard Requirements 14.1, 14.2). -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-data-redis</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-cache</artifactId>
+        </dependency>
+        <!-- AMQP / RabbitMQ consumer for memory-service 扇出的领域事件
+             (driftbottle / achievement / memory.deleted → 系统通知 + 缓存失效).
+             Producer 端在 memory-service 的 RabbitProducerConfig。 -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-amqp</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.mysql</groupId>
+            <artifactId>mysql-connector-j</artifactId>
+            <scope>runtime</scope>
+        </dependency>
+        <dependency>
+            <groupId>com.alibaba.cloud</groupId>
+            <artifactId>spring-cloud-starter-alibaba-nacos-discovery</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>com.alibaba.cloud</groupId>
+            <artifactId>spring-cloud-starter-alibaba-nacos-config</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.cloud</groupId>
+            <artifactId>spring-cloud-starter-bootstrap</artifactId>
+        </dependency>
+        <!-- OpenFeign：让 resonance-service 调 memory-service 拉跨用户公共记忆池，
+             给真实化版的 searchResonances 提供数据源（取代写死的 mock-memory-1/2/3）。 -->
+        <dependency>
+            <groupId>org.springframework.cloud</groupId>
+            <artifactId>spring-cloud-starter-openfeign</artifactId>
+        </dependency>
+        <!-- Spring Cloud LoadBalancer：Feign 通过 Nacos 解析逻辑服务名（如 memory-service）
+             必须装它，否则启动期 FeignClientFactoryBean 会抛 NPE。 -->
+        <dependency>
+            <groupId>org.springframework.cloud</groupId>
+            <artifactId>spring-cloud-starter-loadbalancer</artifactId>
+        </dependency>
+
+        <!-- Test scope: Spring Boot test starter (Mockito + JUnit5) for the
+             admin-resonance unit tests (admin-dashboard task 8.3). -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+            </plugin>
+            <!-- Surefire — pass the byte-buddy experimental flag so Mockito's
+                 inline mock maker tolerates JVMs newer than Byte Buddy's
+                 officially supported set (we run on Java 25 in dev). -->
+            <plugin>
+                <groupId>org.apache.maven.plugins</groupId>
+                <artifactId>maven-surefire-plugin</artifactId>
+                <configuration>
+                    <argLine>-Xmx1024m -Dnet.bytebuddy.experimental=true</argLine>
+                </configuration>
+            </plugin>
+        </plugins>
+    </build>
+</project>

@@ -1,0 +1,170 @@
+{
+  "rabbit_version": "3.12.14",
+  "users": [
+    {
+      "name": "guest",
+      "password": "guest",
+      "tags": ["administrator"]
+    }
+  ],
+  "vhosts": [
+    { "name": "/" }
+  ],
+  "permissions": [
+    {
+      "user": "guest",
+      "vhost": "/",
+      "configure": ".*",
+      "write": ".*",
+      "read": ".*"
+    }
+  ],
+  "exchanges": [
+    {
+      "name": "mnemoscape.events",
+      "vhost": "/",
+      "type": "topic",
+      "durable": true,
+      "auto_delete": false,
+      "internal": false,
+      "arguments": {}
+    },
+    {
+      "name": "mnemoscape.events.dlx",
+      "vhost": "/",
+      "type": "topic",
+      "durable": true,
+      "auto_delete": false,
+      "internal": false,
+      "arguments": {}
+    }
+  ],
+  "queues": [
+    {
+      "name": "ai.memory.index",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-dead-letter-exchange": "mnemoscape.events.dlx",
+        "x-dead-letter-routing-key": "dead.ai.memory.index",
+        "x-message-ttl": 600000
+      }
+    },
+    {
+      "name": "ai.memory.evict",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-dead-letter-exchange": "mnemoscape.events.dlx",
+        "x-dead-letter-routing-key": "dead.ai.memory.evict",
+        "x-message-ttl": 600000
+      }
+    },
+    {
+      "name": "resonance.driftbottle",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-dead-letter-exchange": "mnemoscape.events.dlx",
+        "x-dead-letter-routing-key": "dead.resonance.driftbottle",
+        "x-message-ttl": 600000
+      }
+    },
+    {
+      "name": "resonance.achievement",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-dead-letter-exchange": "mnemoscape.events.dlx",
+        "x-dead-letter-routing-key": "dead.resonance.achievement",
+        "x-message-ttl": 600000
+      }
+    },
+    {
+      "name": "resonance.memory.evict",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {
+        "x-dead-letter-exchange": "mnemoscape.events.dlx",
+        "x-dead-letter-routing-key": "dead.resonance.memory.evict",
+        "x-message-ttl": 600000
+      }
+    },
+    {
+      "name": "mnemoscape.events.dlq",
+      "vhost": "/",
+      "durable": true,
+      "auto_delete": false,
+      "arguments": {}
+    }
+  ],
+  "bindings": [
+    {
+      "source": "mnemoscape.events",
+      "vhost": "/",
+      "destination": "ai.memory.index",
+      "destination_type": "queue",
+      "routing_key": "memory.indexed",
+      "arguments": {}
+    },
+    {
+      "source": "mnemoscape.events",
+      "vhost": "/",
+      "destination": "ai.memory.evict",
+      "destination_type": "queue",
+      "routing_key": "memory.deleted",
+      "arguments": {}
+    },
+    {
+      "source": "mnemoscape.events",
+      "vhost": "/",
+      "destination": "resonance.memory.evict",
+      "destination_type": "queue",
+      "routing_key": "memory.deleted",
+      "arguments": {}
+    },
+    {
+      "source": "mnemoscape.events",
+      "vhost": "/",
+      "destination": "resonance.driftbottle",
+      "destination_type": "queue",
+      "routing_key": "driftbottle.*",
+      "arguments": {}
+    },
+    {
+      "source": "mnemoscape.events",
+      "vhost": "/",
+      "destination": "resonance.achievement",
+      "destination_type": "queue",
+      "routing_key": "achievement.unlocked",
+      "arguments": {}
+    },
+    {
+      "source": "mnemoscape.events.dlx",
+      "vhost": "/",
+      "destination": "mnemoscape.events.dlq",
+      "destination_type": "queue",
+      "routing_key": "dead.#",
+      "arguments": {}
+    }
+  ],
+  "policies": [
+    {
+      "name": "ha-all",
+      "vhost": "/",
+      "pattern": "^(ai\\.|resonance\\.|mnemoscape\\.)",
+      "apply-to": "queues",
+      "definition": {
+        "ha-mode": "all",
+        "ha-sync-mode": "automatic"
+      },
+      "priority": 0
+    }
+  ],
+  "parameters": []
+}

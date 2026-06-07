@@ -1,0 +1,38 @@
+#!/bin/sh
+# Maven Wrapper startup script
+# ----------------------------------------------------------------------------
+
+# Determine project base directory
+PRG="$0"
+while [ -h "$PRG" ]; do
+  ls=`ls -ld "$PRG"`
+  link=`expr "$ls" : '.*-> \(.*\)$'`
+  if expr "$link" : '/.*' > /dev/null; then
+    PRG="$link"
+  else
+    PRG="`dirname "$PRG"`/$link"
+  fi
+done
+SAVED="`pwd`"
+cd "`dirname \"$PRG\"`/" >/dev/null
+APP_HOME="`pwd -P`"
+cd "$SAVED" >/dev/null
+
+MAVEN_OPTS="${MAVEN_OPTS:--Xmx512m -Xms256m}"
+
+MAVEN_WRAPPER_JAR="$APP_HOME/.mvn/wrapper/maven-wrapper.jar"
+
+if [ -n "$JAVA_HOME" ]; then
+  JAVA_EXEC="$JAVA_HOME/bin/java"
+else
+  JAVA_EXEC="java"
+fi
+
+# -Dmaven.multiModuleProjectDirectory 是 Maven 3.3+ 的硬性要求，
+# JDK 17/25 下若不设置会直接拒绝启动 ("system property is not set")。
+exec "$JAVA_EXEC" \
+  $MAVEN_OPTS \
+  -Dmaven.multiModuleProjectDirectory="$APP_HOME" \
+  -classpath "$MAVEN_WRAPPER_JAR" \
+  org.apache.maven.wrapper.MavenWrapperMain \
+  "$@"

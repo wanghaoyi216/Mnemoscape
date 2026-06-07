@@ -1,0 +1,29 @@
+# =============================================================================
+# auth-service 业务配置 (Nacos 推送)
+# dataId: auth-service.yaml  group: DEFAULT_GROUP
+# =============================================================================
+mnemoscape:
+  jwt:
+    # 调整 token 寿命 / 注册策略等
+    access-token-expiration: 3600000
+    refresh-token-expiration: 604800000
+    # 密码强度
+    password:
+      min-length: 8
+      require-digit: true
+      require-letter: true
+      require-special: false
+  auth:
+    # 同一 IP 注册频率限制
+    register-rate-per-hour: 10
+    # 登录失败锁定阈值
+    login-fail-threshold: 5
+    lockout-minutes: 15
+spring:
+  data:
+    redis:
+      lettuce:
+        pool:
+          max-active: 16
+          max-idle: 8
+          min-idle: 2
