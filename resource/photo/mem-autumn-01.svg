@@ -1,0 +1,52 @@
+﻿<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" width="1600" height="900" preserveAspectRatio="xMidYMid slice">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#2a1a05"/><stop offset="0.5" stop-color="#1a0f05"/><stop offset="1" stop-color="#0a0503"/>
+    </linearGradient>
+    <radialGradient id="vig" cx="0.5" cy="0.5" r="0.8">
+      <stop offset="0.5" stop-color="black" stop-opacity="0"/>
+      <stop offset="1" stop-color="black" stop-opacity="0.7"/>
+    </radialGradient>
+    <filter id="grain">
+      <feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="2" seed="3"/>
+      <feColorMatrix values="0 0 0 0 1   0 0 0 0 1   0 0 0 0 1   0 0 0 0.08 0"/>
+    </filter>
+  </defs>
+  <rect width="1600" height="900" fill="url(#bg)"/>
+  <ellipse cx="800" cy="300" rx="800" ry="200" fill="#f2b95c" opacity="0.15"/>
+  <path d="M0,500 L300,450 L600,480 L900,420 L1200,460 L1600,430 L1600,900 L0,900 Z" fill="#1a0a05" opacity="0.8"/>
+  <circle cx="300" cy="200" r="8" fill="#f2b95c" opacity="0.4"/>
+  <circle cx="700" cy="150" r="6" fill="#f2b95c" opacity="0.5"/>
+  <circle cx="1100" cy="250" r="7" fill="#f2b95c" opacity="0.4"/>
+  <circle cx="1400" cy="180" r="5" fill="#f2b95c" opacity="0.6"/>
+  <path d="M250,250 Q280,220 270,180 Q250,200 250,250" fill="#f2b95c" opacity="0.3"/>
+  <path d="M650,200 Q680,170 670,130 Q650,150 650,200" fill="#f2b95c" opacity="0.3"/>
+  <circle cx='642' cy='251' r='122' fill='white' opacity='-0.01'/>
+  <circle cx='0' cy='294' r='86' fill='white' opacity='-0.04'/>
+  <circle cx='1564' cy='38' r='155' fill='white' opacity='-0.03'/>
+  <circle cx='504' cy='840' r='178' fill='white' opacity='0.06'/>
+  <circle cx='1019' cy='121' r='74' fill='white' opacity='0.11'/>
+  <circle cx='1128' cy='581' r='89' fill='white' opacity='0.12'/>
+  <circle cx='330' cy='823' r='79' fill='white' opacity='0.09'/>
+  <circle cx='543' cy='180' r='199' fill='white' opacity='-0.06'/>
+  <circle cx='485' cy='378' r='112' fill='white' opacity='0.13'/>
+  <circle cx='608' cy='437' r='191' fill='white' opacity='-0.06'/>
+  <circle cx='1554' cy='598' r='131' fill='white' opacity='-0.01'/>
+  <circle cx='78' cy='195' r='80' fill='white' opacity='0.13'/>
+  <circle cx='996' cy='37' r='142' fill='white' opacity='0.02'/>
+  <circle cx='184' cy='224' r='131' fill='white' opacity='0.09'/>
+  <circle cx='1429' cy='585' r='30' fill='white' opacity='-0.05'/>
+  <circle cx='1593' cy='520' r='157' fill='white' opacity='0.09'/>
+  <circle cx='72' cy='675' r='180' fill='white' opacity='0.11'/>
+  <circle cx='673' cy='821' r='61' fill='white' opacity='-0.03'/>
+  <circle cx='289' cy='241' r='182' fill='white' opacity='-0.06'/>
+  <circle cx='45' cy='121' r='176' fill='white' opacity='0.13'/>
+  <circle cx='922' cy='318' r='49' fill='white' opacity='-0.01'/>
+  <circle cx='834' cy='504' r='179' fill='white' opacity='-0.05'/>
+  <circle cx='1285' cy='681' r='33' fill='white' opacity='0.08'/>
+  <circle cx='689' cy='782' r='26' fill='white' opacity='0.01'/>
+  <circle cx='1438' cy='756' r='56' fill='white' opacity='-0.01'/>
+
+  <rect width="1600" height="900" fill="url(#vig)"/>
+  <rect width="1600" height="900" filter="url(#grain)" opacity="0.5"/>
+</svg>

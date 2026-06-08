@@ -61,12 +61,21 @@ public class ChatController {
     });
 
     /** P3-13 动态 plan：把 LLM 规划调用放在独立线程池，不阻塞主回答的首字延迟。
-     *  生成完成后通过 SSE 的 plan_update 帧异步推到前端，前端 reducer 替换硬编码 plan。 */
-    private final java.util.concurrent.ExecutorService planExec = Executors.newCachedThreadPool(r -> {
-        Thread t = new Thread(r, "ai-dynamic-plan");
-        t.setDaemon(true);
-        return t;
-    });
+     *  生成完成后通过 SSE 的 plan_update 帧异步推到前端，前端 reducer 替换硬编码 plan。
+     *
+     *  <p>线程池收口：原先用 {@code newCachedThreadPool()}（无上限），上千并发对话峰值
+     *  会瞬间拉起上千线程拖垮 JVM。改成有界 {@link java.util.concurrent.ThreadPoolExecutor}：
+     *  core=4 / max=16 / 队列 100，拒绝策略 {@code CallerRunsPolicy} —— 队列满了由请求
+     *  线程自己跑规划（plan 本就是可选增强，慢一点也不影响主回答流），形成天然背压。 */
+    private final java.util.concurrent.ThreadPoolExecutor planExec = new java.util.concurrent.ThreadPoolExecutor(
+            4, 16, 60L, TimeUnit.SECONDS,
+            new java.util.concurrent.LinkedBlockingQueue<>(100),
+            r -> {
+                Thread t = new Thread(r, "ai-dynamic-plan");
+                t.setDaemon(true);
+                return t;
+            },
+            new java.util.concurrent.ThreadPoolExecutor.CallerRunsPolicy());
 
     public ChatController(ChatReasoner reasoner, ReActController reactController) {
         this.reasoner = reasoner;

@@ -1,0 +1,33 @@
+﻿<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" width="1600" height="900" preserveAspectRatio="xMidYMid slice">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1a0525"/><stop offset="0.5" stop-color="#0a0515"/><stop offset="1" stop-color="#02050a"/>
+    </linearGradient>
+    <radialGradient id="vig" cx="0.5" cy="0.5" r="0.8">
+      <stop offset="0.5" stop-color="black" stop-opacity="0"/>
+      <stop offset="1" stop-color="black" stop-opacity="0.7"/>
+    </radialGradient>
+    <filter id="grain">
+      <feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="2" seed="3"/>
+      <feColorMatrix values="0 0 0 0 1   0 0 0 0 1   0 0 0 0 1   0 0 0 0.08 0"/>
+    </filter>
+  </defs>
+  <rect width="1600" height="900" fill="url(#bg)"/>
+  <rect x="0" y="0" width="1600" height="200" fill="#0a0515" opacity="0.5"/>
+  <rect x="100" y="100" width="60" height="80" fill="#ff3380" opacity="0.6"/>
+  <rect x="200" y="120" width="40" height="60" fill="#36d8b4" opacity="0.5"/>
+  <rect x="300" y="80" width="50" height="100" fill="#6cc6ff" opacity="0.6"/>
+  <rect x="1300" y="100" width="80" height="80" fill="#ff3380" opacity="0.5"/>
+  <rect x="1420" y="130" width="50" height="60" fill="#36d8b4" opacity="0.6"/>
+  <rect x="1500" y="100" width="60" height="80" fill="#6cc6ff" opacity="0.5"/>
+  <path d="M0,300 L1600,300 L1600,900 L0,900 Z" fill="#02050a" opacity="0.7"/>
+  <ellipse cx="800" cy="800" rx="300" ry="20" fill="#ff3380" opacity="0.2"/>
+  <ellipse cx="200" cy="820" rx="150" ry="15" fill="#36d8b4" opacity="0.2"/>
+  <ellipse cx="1400" cy="820" rx="150" ry="15" fill="#6cc6ff" opacity="0.2"/>
+  <line x1="100" y1="0" x2="200" y2="900" stroke="#6cc6ff" stroke-width="1" opacity="0.3"/>
+  <line x1="500" y1="0" x2="600" y2="900" stroke="#6cc6ff" stroke-width="1" opacity="0.3"/>
+  <line x1="900" y1="0" x2="1000" y2="900" stroke="#6cc6ff" stroke-width="1" opacity="0.3"/>
+  <line x1="1300" y1="0" x2="1400" y2="900" stroke="#6cc6ff" stroke-width="1" opacity="0.3"/>
+  <rect width="1600" height="900" fill="url(#vig)"/>
+  <rect width="1600" height="900" filter="url(#grain)" opacity="0.5"/>
+</svg>

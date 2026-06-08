@@ -113,6 +113,16 @@ logging:
 feign:
   client:
     config:
+      # 全局默认收紧到 15s：共鸣检索是交互式操作，原先 120s 会让下游变慢时
+      # 用户干等 2 分钟才超时，体验灾难。按下游特性分别覆写：
       default:
-        connectTimeout: 5000
-        readTimeout: 120000
+        connectTimeout: 3000
+        readTimeout: 15000
+      # memory-service 纯 DB 查询，正常 < 1s；给 8s 上限快速失败 fail-closed。
+      memory-service:
+        connectTimeout: 3000
+        readTimeout: 8000
+      # ai-service 含 embedding + Milvus 向量召回，允许稍宽，但远低于原 120s。
+      ai-service:
+        connectTimeout: 3000
+        readTimeout: 20000

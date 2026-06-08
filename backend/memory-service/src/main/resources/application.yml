@@ -153,9 +153,15 @@ logging:
 feign:
   client:
     config:
+      # 默认保留较宽（ai-service 的重建 / 向量索引走 @Async 包裹，慢不阻塞主线程）。
       default:
         connectTimeout: 5000
         readTimeout: 120000
+      # auth-service 的 FRIENDS 权限探针在「读记忆」的同步校验路径上 —— auth 变慢
+      # 时绝不能让用户读记忆干等 2 分钟。收紧到 6s，超时即 fail-closed 拒绝（安全侧）。
+      auth-service:
+        connectTimeout: 3000
+        readTimeout: 6000
 
 # Resilience4j —— 给 ai-service 调用的熔断 + 重试。
 # 出 trigger 条件：连续 10 个调用中 ≥ 50% 失败 → 熔断 OPEN，30s 内所有

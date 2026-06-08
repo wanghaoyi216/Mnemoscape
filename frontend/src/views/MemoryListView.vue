@@ -179,10 +179,24 @@ function formatDate(value?: string) {
         </label>
       </div>
 
-      <div v-if="store.loadingList" class="section-card loading-state">
-        <span class="loading-state__bar"></span>
-        <span class="loading-state__bar"></span>
-        <span class="loading-state__bar"></span>
+      <div v-if="store.loadingList" class="card-grid" aria-busy="true" aria-label="加载中">
+        <article v-for="n in 6" :key="`sk-${n}`" class="memory-card memory-card--skeleton">
+          <div class="skeleton memory-card__cover"></div>
+          <div class="memory-card__top">
+            <div class="skeleton" style="width: 26px; height: 26px; border-radius: 999px;"></div>
+            <div class="skeleton skeleton-line" style="width: 96px; margin: 0;"></div>
+          </div>
+          <div class="stack" style="gap: 10px;">
+            <div class="skeleton skeleton-line skeleton-line--lg" style="height: 1.3em;"></div>
+            <div class="skeleton skeleton-line skeleton-line--md"></div>
+            <div class="skeleton skeleton-line skeleton-line--sm"></div>
+          </div>
+          <div class="skeleton" style="height: 8px; border-radius: 999px; margin-top: 8px;"></div>
+          <div class="memory-card__footer">
+            <div class="skeleton skeleton-line" style="width: 54px; margin: 0;"></div>
+            <div class="skeleton skeleton-line" style="width: 72px; margin: 0;"></div>
+          </div>
+        </article>
       </div>
 
       <div v-else-if="store.error" class="section-card empty-state" role="alert">
@@ -441,6 +455,22 @@ function formatDate(value?: string) {
 
 .memory-card:hover::after {
   opacity: 1;
+}
+
+/* 骨架卡：复用真实卡片布局，禁用 hover/交互，纯展示加载形态 */
+.memory-card--skeleton {
+  pointer-events: none;
+  cursor: default;
+}
+.memory-card--skeleton:hover {
+  transform: none;
+  border-color: var(--border);
+  box-shadow: var(--shadow-md);
+}
+.memory-card--skeleton .memory-card__cover {
+  height: 140px;
+  margin: -26px -26px 0;
+  border-radius: var(--radius-md) var(--radius-md) 0 0;
 }
 
 .memory-card__top {

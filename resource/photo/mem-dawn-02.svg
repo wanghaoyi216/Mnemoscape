@@ -1,0 +1,24 @@
+﻿<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" width="1600" height="900" preserveAspectRatio="xMidYMid slice">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#1a1005"/><stop offset="0.5" stop-color="#2a1a08"/><stop offset="1" stop-color="#0a0805"/>
+    </linearGradient>
+    <radialGradient id="vig" cx="0.5" cy="0.5" r="0.8">
+      <stop offset="0.5" stop-color="black" stop-opacity="0"/>
+      <stop offset="1" stop-color="black" stop-opacity="0.7"/>
+    </radialGradient>
+    <filter id="grain">
+      <feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="2" seed="3"/>
+      <feColorMatrix values="0 0 0 0 1   0 0 0 0 1   0 0 0 0 1   0 0 0 0.08 0"/>
+    </filter>
+  </defs>
+  <rect width="1600" height="900" fill="url(#bg)"/>
+  <ellipse cx="800" cy="800" rx="1000" ry="100" fill="#f2b95c" opacity="0.3"/>
+  <ellipse cx="800" cy="750" rx="500" ry="40" fill="#f2b95c" opacity="0.5"/>
+  <path d="M0,700 L1600,700 L1600,900 L0,900 Z" fill="#0a0503" opacity="0.6"/>
+  <circle cx="800" cy="200" r="2" fill="#f2b95c" opacity="0.4"/>
+  <circle cx="400" cy="150" r="2" fill="#f2b95c" opacity="0.3"/>
+  <circle cx="1200" cy="180" r="2" fill="#f2b95c" opacity="0.3"/>
+  <rect width="1600" height="900" fill="url(#vig)"/>
+  <rect width="1600" height="900" filter="url(#grain)" opacity="0.5"/>
+</svg>
