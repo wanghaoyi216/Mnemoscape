@@ -13,8 +13,10 @@ spring:
     password: ${MYSQL_PASSWORD:root123}
     driver-class-name: com.mysql.cj.jdbc.Driver
     hikari:
-      maximum-pool-size: 20
-      minimum-idle: 5
+      # 高并发优化：连接池从 20→30
+      # 原因：Memory 服务是数据密集型，记忆 CRUD + 图谱查询 + 版本记录
+      maximum-pool-size: 30
+      minimum-idle: 10
       connection-timeout: ${HIKARI_CONNECTION_TIMEOUT_MS:20000}
       validation-timeout: ${HIKARI_VALIDATION_TIMEOUT_MS:5000}
       idle-timeout: ${HIKARI_IDLE_TIMEOUT_MS:300000}
@@ -57,10 +59,11 @@ spring:
       connect-timeout: 3s
       lettuce:
         pool:
-          max-active: 16
-          max-idle: 8
-          min-idle: 2
-          max-wait: 2s
+          # 高并发优化：Redis 连接池从 16→50，Admin 缓存/记忆查找/漂移计算
+          max-active: 50
+          max-idle: 20
+          min-idle: 5
+          max-wait: 3s
   cache:
     type: caffeine
     caffeine:
@@ -114,6 +117,15 @@ mnemoscape:
       # 开启 Nominatim 远程查询，让 ANCHORS 表未覆盖的地名也能解析坐标
       remote-enabled: true
       nominatim-base: https://nominatim.openstreetmap.org
+  # 历史数据清洗定时器（凌晨错峰）。MemoryCleanupScheduler 仅当
+  # mnemoscape.cleanup.enabled != false 时生效；调度源走 Spring Scheduling
+  # （@EnableScheduling 已在 MemoryApplication 启用）。
+  # 配成 "-" 可禁用单个 job；批量派发上限 500 跟 admin 面板默认值保持一致。
+  cleanup:
+    enabled: ${MNEMOSCAPE_CLEANUP_ENABLED:true}
+    zone: ${MNEMOSCAPE_CLEANUP_ZONE:Asia/Shanghai}
+    visual-data-cron: ${MNEMOSCAPE_CLEANUP_VISUAL_CRON:0 0 3 * * *}
+    fragments-cron:    ${MNEMOSCAPE_CLEANUP_FRAGMENTS_CRON:0 30 3 * * *}
 
 springdoc:
   api-docs:

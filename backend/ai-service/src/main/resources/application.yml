@@ -7,6 +7,19 @@ spring:
     name: ai-service
   lifecycle:
     timeout-per-shutdown-phase: 30s
+  # @Async 线程池显式收口。AI 服务有大量异步任务（场景重建/实体提取/向量索引），
+  # 默认队列无界会无限堆积导致 OOM。这里改成有界队列 + CALLER_RUNS 背压。
+  task:
+    execution:
+      pool:
+        core-size: 8
+        max-size: 32
+        queue-capacity: 200
+        keep-alive: 60s
+      thread-name-prefix: ai-async-
+      shutdown:
+        await-termination: true
+        await-termination-period: 30s
   data:
     redis:
       host: ${REDIS_HOST:100.66.166.46}
@@ -15,10 +28,11 @@ spring:
       connect-timeout: 3s
       lettuce:
         pool:
-          max-active: 16
-          max-idle: 8
-          min-idle: 2
-          max-wait: 2s
+          # 高并发优化：Redis 连接池从 16→50（AI 缓存 + 限流 + 向量检索结果缓存）
+          max-active: 50
+          max-idle: 20
+          min-idle: 5
+          max-wait: 3s
   neo4j:
     # 默认指向 workpc Neo4j；本机 dev 时设 NEO4J_HOST=localhost 即可
     uri: bolt://${NEO4J_HOST:100.66.166.46}:${NEO4J_PORT:7687}
@@ -127,6 +141,7 @@ mnemoscape:
     vector:
       enabled: ${VECTOR_SEARCH_ENABLED:true}
       embedding-model: ${EMBEDDING_MODEL:nvidia/nv-embed-v1}
+      embedding-base-url: ${EMBEDDING_BASE_URL:https://ai.api.nvidia.com/v1}
       embedding-dimension: ${EMBEDDING_DIMENSION:4096}
       embedding-timeout-ms: ${EMBEDDING_TIMEOUT_MS:15000}
       milvus-host: ${MILVUS_HOST:100.66.166.46}

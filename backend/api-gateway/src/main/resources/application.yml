@@ -24,10 +24,13 @@ spring:
       connect-timeout: 3s
       lettuce:
         pool:
-          max-active: 16
-          max-idle: 8
-          min-idle: 2
-          max-wait: 2s
+          # 高并发优化：连接池从 16 扩大到 50
+          # 原因：Gateway 是所有流量的入口，限流/鉴权/路由都需要 Redis
+          # 计算：max-connections=500 / 10(instance) ≈ 50 每实例
+          max-active: 50
+          max-idle: 20
+          min-idle: 5
+          max-wait: 3s
   cloud:
     inetutils:
       preferred-networks:
@@ -49,10 +52,12 @@ spring:
         verbose:
           enabled: false
       httpclient:
+        # 高并发优化：连接池从 200→500
+        # 原因：Gateway 是流量入口，每个下游服务调用都占用连接
         connect-timeout: ${GATEWAY_CONNECT_TIMEOUT:5000}
         response-timeout: ${GATEWAY_RESPONSE_TIMEOUT:60s}
         pool:
-          max-connections: ${GATEWAY_MAX_CONNECTIONS:200}
+          max-connections: ${GATEWAY_MAX_CONNECTIONS:500}
           max-idle-time: 30s
       globalcors:
         cors-configurations:
