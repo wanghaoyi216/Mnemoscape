@@ -4,7 +4,9 @@ import com.mnemoscape.ai.exception.AiUpstreamException;
 import com.mnemoscape.ai.model.dto.AiChatRequest;
 import com.mnemoscape.ai.service.ChatReasoner;
 import com.mnemoscape.ai.service.ReActController;
+import com.mnemoscape.ai.agent.DynamicWorkflowEngine;
 import com.mnemoscape.common.dto.ApiResponse;
+import reactor.core.scheduler.Schedulers;
 import jakarta.annotation.PreDestroy;
 import jakarta.validation.Valid;
 import org.slf4j.Logger;
@@ -50,6 +52,7 @@ public class ChatController {
 
     private final ChatReasoner reasoner;
     private final ReActController reactController;
+    private final DynamicWorkflowEngine workflowEngine;
 
     /** 共享调度器：在视觉前置阻塞 / 上游首字延迟期间发 SSE 注释帧 :keepalive，
      *  防止前端浏览器 / 反向代理 / 开发服务器把"无任何字节流出"的 SSE 当死连接 reset。
@@ -77,9 +80,10 @@ public class ChatController {
             },
             new java.util.concurrent.ThreadPoolExecutor.CallerRunsPolicy());
 
-    public ChatController(ChatReasoner reasoner, ReActController reactController) {
+    public ChatController(ChatReasoner reasoner, ReActController reactController, DynamicWorkflowEngine workflowEngine) {
         this.reasoner = reasoner;
         this.reactController = reactController;
+        this.workflowEngine = workflowEngine;
     }
 
     @PreDestroy
@@ -178,6 +182,12 @@ public class ChatController {
         } catch (Exception e) {
             log.warn("[ChatController] failed to send meta: {}", e.getMessage());
             try { emitter.completeWithError(e); } catch (Exception ignored) {}
+            return;
+        }
+
+        // ============ 动态工作流路径 ============
+        if (request.isDynamicWorkflow()) {
+            streamWorkflow(emitter, request, userId, requestId);
             return;
         }
 
@@ -419,6 +429,101 @@ public class ChatController {
         });
         emitter.onError(t -> {
             keepAlive.cancel(false);
+        });
+    }
+
+    private void streamWorkflow(SseEmitter emitter, AiChatRequest request, String userId, String requestId) {
+        AtomicBoolean firstTokenSeen = new AtomicBoolean(false);
+        ScheduledFuture<?> keepAlive = keepAliveExec.scheduleAtFixedRate(() -> {
+            if (firstTokenSeen.get()) return;
+            try {
+                emitter.send(SseEmitter.event().comment("keepalive"));
+            } catch (Exception e) {
+                // Ignore
+            }
+        }, 5, 5, TimeUnit.SECONDS);
+
+        Disposable disposable = workflowEngine.executeWorkflow(request, userId, requestId)
+                .subscribeOn(Schedulers.boundedElastic())
+                .subscribe(
+                        evt -> {
+                            if (evt == null) return;
+                            try {
+                                switch (evt.type == null ? "" : evt.type) {
+                                    case "thought": {
+                                        emitter.send(SseEmitter.event().name("thought").data(Map.of("text", evt.text)));
+                                        break;
+                                    }
+                                    case "workflow_start": {
+                                        emitter.send(SseEmitter.event().name("workflow_start").data(Map.of("steps", evt.text)));
+                                        break;
+                                    }
+                                    case "workflow_step_start": {
+                                        emitter.send(SseEmitter.event().name("workflow_step_start").data(Map.of("stepId", evt.text)));
+                                        break;
+                                    }
+                                    case "workflow_step_end": {
+                                        emitter.send(SseEmitter.event().name("workflow_step_end").data(Map.of("result", evt.text)));
+                                        break;
+                                    }
+                                    case "subagent_start": {
+                                        emitter.send(SseEmitter.event().name("subagent_start").data(Map.of("payload", evt.text)));
+                                        break;
+                                    }
+                                    case "subagent_end": {
+                                        emitter.send(SseEmitter.event().name("subagent_end").data(Map.of("payload", evt.text)));
+                                        break;
+                                    }
+                                    case "acceptance_start": {
+                                        emitter.send(SseEmitter.event().name("acceptance_start").data(Map.of("requestId", requestId)));
+                                        break;
+                                    }
+                                    case "acceptance_end": {
+                                        emitter.send(SseEmitter.event().name("acceptance_end").data(Map.of("result", evt.text)));
+                                        break;
+                                    }
+                                    case "token": {
+                                        if (evt.text == null || evt.text.isEmpty()) break;
+                                        firstTokenSeen.set(true);
+                                        emitter.send(SseEmitter.event().name("token").data(evt.text));
+                                        break;
+                                    }
+                                    case "done": {
+                                        emitter.send(SseEmitter.event().name("done").data(Map.of("ok", true, "requestId", requestId)));
+                                        try { emitter.complete(); } catch (Exception ignored) {}
+                                        break;
+                                    }
+                                    case "error": {
+                                        emitter.send(SseEmitter.event().name("error").data(Map.of("code", "WORKFLOW_ERROR", "detail", evt.text, "requestId", requestId)));
+                                        try { emitter.complete(); } catch (Exception ignored) {}
+                                        break;
+                                    }
+                                }
+                            } catch (Exception e) {
+                                log.debug("[ChatController] workflow SSE emit failed: {}", e.getMessage());
+                            }
+                        },
+                        err -> {
+                            keepAlive.cancel(false);
+                            log.error("[ChatController] workflow execution failed: {}", err.getMessage());
+                            try {
+                                emitter.send(SseEmitter.event().name("error").data(Map.of("code", "WORKFLOW_UNCAUGHT", "detail", err.getMessage(), "requestId", requestId)));
+                                emitter.complete();
+                            } catch (Exception ignored) {}
+                        },
+                        () -> {
+                            keepAlive.cancel(false);
+                        }
+                );
+
+        emitter.onTimeout(() -> {
+            keepAlive.cancel(false);
+            disposable.dispose();
+            try { emitter.complete(); } catch (Exception ignored) {}
+        });
+        emitter.onError(t -> {
+            keepAlive.cancel(false);
+            disposable.dispose();
         });
     }
 }
