@@ -91,6 +91,12 @@
             <groupId>org.springframework.data</groupId>
             <artifactId>spring-data-redis</artifactId>
         </dependency>
+        <!-- Redisson 分布式锁客户端。各服务注入 RedissonClient 即可用;
+             配置在 RedissonAutoConfig(连现有 Redis)。 -->
+        <dependency>
+            <groupId>org.redisson</groupId>
+            <artifactId>redisson-spring-boot-starter</artifactId>
+        </dependency>
         <!-- Micrometer core — supplies MeterRegistry / Counter / Timer used by
              the admin-dashboard observability decorator (AdminMetrics).  Every
              service that consumes these metrics already pulls in
