@@ -2,6 +2,10 @@ package com.mnemoscape.ai.model.dto;
 
 import java.util.ArrayList;
 import java.util.List;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Data;
+import lombok.NoArgsConstructor;
 
 /**
  * 实体提取结果。
@@ -14,22 +18,18 @@ import java.util.List;
  *   <li>{@link #emotionTags} — 情绪关键词（"思念"、"宁静"、"忐忑"…）</li>
  * </ul>
  */
+@Data
+@NoArgsConstructor
+@AllArgsConstructor
+@Builder
 public class EntityExtractResponse {
 
+    @Builder.Default
     private List<String> people = new ArrayList<>();
+    @Builder.Default
     private List<String> locations = new ArrayList<>();
+    @Builder.Default
     private List<String> objects = new ArrayList<>();
+    @Builder.Default
     private List<String> emotionTags = new ArrayList<>();
-
-    public List<String> getPeople() { return people; }
-    public void setPeople(List<String> people) { this.people = people; }
-
-    public List<String> getLocations() { return locations; }
-    public void setLocations(List<String> locations) { this.locations = locations; }
-
-    public List<String> getObjects() { return objects; }
-    public void setObjects(List<String> objects) { this.objects = objects; }
-
-    public List<String> getEmotionTags() { return emotionTags; }
-    public void setEmotionTags(List<String> emotionTags) { this.emotionTags = emotionTags; }
 }

@@ -75,8 +75,9 @@ public class DomainEventConsumer {
             lease.get().markProcessed();
         } catch (Exception e) {
             lease.get().clear();
-            log.warn("[mq-in] driftbottle handler failed for {}: {}",
+            log.error("[mq-in] driftbottle handler failed for {}: {}",
                     event.bottleId(), e.toString());
+            throw new RuntimeException(e);
         }
     }
 
@@ -103,8 +104,9 @@ public class DomainEventConsumer {
             lease.get().markProcessed();
         } catch (Exception e) {
             lease.get().clear();
-            log.warn("[mq-in] achievement handler failed for {}: {}",
+            log.error("[mq-in] achievement handler failed for {}: {}",
                     event.userId(), e.toString());
+            throw new RuntimeException(e);
         }
     }
 
@@ -124,7 +126,8 @@ public class DomainEventConsumer {
             lease.get().markProcessed();
         } catch (Exception e) {
             lease.get().clear();
-            log.warn("[mq-in] memory.deleted handler failed for {}: {}", event.memoryId(), e.toString());
+            log.error("[mq-in] memory.deleted handler failed for {}: {}", event.memoryId(), e.toString());
+            throw new RuntimeException(e);
         }
     }
 
@@ -144,8 +147,9 @@ public class DomainEventConsumer {
                     LocalDateTime.now());
             chatMessageRepository.save(msg);
         } catch (Exception e) {
-            // DB 抖动也不抛 — listener retry 也救不了写库，让消息走完 ack
-            log.warn("[mq-in] failed to persist system message for {}: {}", receiverId, e.toString());
+            // 抛出让 listener retry+DLX 接管,不再吞掉丢消息(DB 持续故障进 DLX 人工排查)
+            log.error("[mq-in] failed to persist system message for {}: {}", receiverId, e.toString());
+            throw new RuntimeException("system message persist failed for " + receiverId, e);
         }
     }
 

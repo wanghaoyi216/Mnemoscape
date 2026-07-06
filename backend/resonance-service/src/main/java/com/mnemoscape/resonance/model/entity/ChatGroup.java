@@ -3,9 +3,15 @@ package com.mnemoscape.resonance.model.entity;
 import jakarta.persistence.*;
 import java.time.LocalDateTime;
 import java.util.UUID;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
 
 @Entity
 @Table(name = "chat_groups")
+@Getter
+@Setter
+@NoArgsConstructor
 public class ChatGroup {
     @Id
     @Column(length = 36)
@@ -23,8 +29,6 @@ public class ChatGroup {
     @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;
 
-    public ChatGroup() {}
-
     public ChatGroup(String id, String name, String avatarUrl, String ownerId, LocalDateTime createdAt) {
         this.id = id;
         this.name = name;
@@ -32,17 +36,6 @@ public class ChatGroup {
         this.ownerId = ownerId;
         this.createdAt = createdAt;
     }
-
-    public String getId() { return id; }
-    public void setId(String id) { this.id = id; }
-    public String getName() { return name; }
-    public void setName(String name) { this.name = name; }
-    public String getAvatarUrl() { return avatarUrl; }
-    public void setAvatarUrl(String avatarUrl) { this.avatarUrl = avatarUrl; }
-    public String getOwnerId() { return ownerId; }
-    public void setOwnerId(String ownerId) { this.ownerId = ownerId; }
-    public LocalDateTime getCreatedAt() { return createdAt; }
-    public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
 
     @PrePersist
     protected void onCreate() {

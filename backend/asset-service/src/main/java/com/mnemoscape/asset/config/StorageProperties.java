@@ -2,6 +2,7 @@ package com.mnemoscape.asset.config;
 
 import org.springframework.boot.context.properties.ConfigurationProperties;
 import org.springframework.cloud.context.config.annotation.RefreshScope;
+import org.springframework.context.annotation.Configuration;
 
 import java.util.Set;
 
@@ -11,6 +12,7 @@ import java.util.Set;
  * <p>{@link RefreshScope} 让 Nacos config 推送时此 bean 被销毁重建，切换 endpoint /
  * accessKey / bucket 不需要重启 asset-service。
  */
+@Configuration
 @RefreshScope
 @ConfigurationProperties(prefix = "minio")
 public class StorageProperties {

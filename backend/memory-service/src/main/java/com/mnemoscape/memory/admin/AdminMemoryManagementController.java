@@ -4,23 +4,18 @@ import com.fasterxml.jackson.annotation.JsonInclude;
 import com.mnemoscape.common.dto.ApiResponse;
 import com.mnemoscape.common.dto.PageResult;
 import com.mnemoscape.common.exception.BizException;
+import com.mnemoscape.memory.admin.AdminMemoryManagementService.BatchDeleteResult;
+import com.mnemoscape.memory.admin.AdminMemoryManagementService.BatchUpdateResult;
 import com.mnemoscape.memory.model.entity.Memory;
-import com.mnemoscape.memory.repository.MemoryRepository;
-import com.mnemoscape.memory.repository.MemoryFragmentRepository;
-import com.mnemoscape.memory.repository.MemoryVersionRepository;
+import com.mnemoscape.memory.service.MemoryService;
 import jakarta.servlet.http.HttpServletRequest;
+import lombok.extern.slf4j.Slf4j;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageRequest;
-import org.springframework.data.domain.Sort;
-import org.springframework.data.jpa.domain.Specification;
 import org.springframework.http.ResponseEntity;
-import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
-import java.time.LocalDateTime;
-import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.LinkedHashMap;
 import java.util.List;
@@ -35,29 +30,26 @@ import java.util.Map;
  *
  * <p>与公开的 /admin/stats/* 聚合端点不同，这里返回完整 Memory 字段（包含 title /
  * description / userId）—— 这是管理面板按设计就需要看到的运营信息。
+ *
+ * <p>Controller 只做 HTTP 协议层:参数解析 + HTTP 格式校验 + 调 Service + audit 日志 + 包装响应。
+ * 业务逻辑与事务边界在 {@link AdminMemoryManagementService}。
  */
+@Slf4j
 @RestController
 @RequestMapping("/api/v1/admin/memories")
 public class AdminMemoryManagementController {
 
-    private static final Logger log = LoggerFactory.getLogger(AdminMemoryManagementController.class);
     private static final Logger audit = LoggerFactory.getLogger("admin-audit");
 
     private static final int MAX_PAGE_SIZE = 100;
     private static final int MAX_BATCH_SIZE = 500;
 
-    private final MemoryRepository memoryRepository;
-    private final MemoryFragmentRepository fragmentRepository;
-    private final MemoryVersionRepository versionRepository;
-    private final com.mnemoscape.memory.service.MemoryService memoryService;
+    private final AdminMemoryManagementService adminMemoryManagementService;
+    private final MemoryService memoryService;
 
-    public AdminMemoryManagementController(MemoryRepository memoryRepository,
-                                           MemoryFragmentRepository fragmentRepository,
-                                           MemoryVersionRepository versionRepository,
-                                           com.mnemoscape.memory.service.MemoryService memoryService) {
-        this.memoryRepository = memoryRepository;
-        this.fragmentRepository = fragmentRepository;
-        this.versionRepository = versionRepository;
+    public AdminMemoryManagementController(AdminMemoryManagementService adminMemoryManagementService,
+                                           MemoryService memoryService) {
+        this.adminMemoryManagementService = adminMemoryManagementService;
         this.memoryService = memoryService;
     }
 
@@ -127,34 +119,21 @@ public class AdminMemoryManagementController {
             @RequestParam(defaultValue = "createdAt") String sortBy,
             @RequestParam(defaultValue = "desc") String sortDir,
             HttpServletRequest req) {
+        // HTTP 格式校验
         int safeSize = Math.max(1, Math.min(size, MAX_PAGE_SIZE));
         int safePage = Math.max(0, page);
 
-        Sort sort = "asc".equalsIgnoreCase(sortDir) ? Sort.by(sortBy).ascending() : Sort.by(sortBy).descending();
-        PageRequest pageReq = PageRequest.of(safePage, safeSize, sort);
-
-        Specification<Memory> spec = (root, query, cb) -> cb.conjunction();
-        if (search != null && !search.isBlank()) {
-            String pattern = "%" + search.trim().toLowerCase() + "%";
-            spec = spec.and((root, q, cb) -> cb.like(cb.lower(root.get("title")), pattern));
-        }
-        if (userId != null && !userId.isBlank()) {
-            String uid = userId.trim();
-            spec = spec.and((root, q, cb) -> cb.equal(root.get("userId"), uid));
-        }
+        // 业务校验:privacyLevel 枚举合法性(快速失败,不进 Service 查询)
         if (privacyLevel != null && !privacyLevel.isBlank()) {
             try {
-                Memory.PrivacyLevel pl = Memory.PrivacyLevel.valueOf(privacyLevel.trim().toUpperCase());
-                spec = spec.and((root, q, cb) -> cb.equal(root.get("privacyLevel"), pl));
+                Memory.PrivacyLevel.valueOf(privacyLevel.trim().toUpperCase());
             } catch (IllegalArgumentException ex) {
                 throw new BizException(400, "INVALID_PRIVACY_LEVEL");
             }
         }
-        if (locked != null) {
-            spec = spec.and((root, q, cb) -> cb.equal(root.get("isLocked"), locked));
-        }
 
-        Page<Memory> result = memoryRepository.findAll(spec, pageReq);
+        Page<Memory> result = adminMemoryManagementService.list(
+                safePage, safeSize, sortBy, sortDir, search, userId, privacyLevel, locked);
         List<AdminMemoryRow> rows = result.getContent().stream()
                 .map(AdminMemoryManagementController::toRow)
                 .toList();
@@ -165,48 +144,35 @@ public class AdminMemoryManagementController {
 
     /** 批量删除：传入 ids 数组（最多 500），删除记忆同时清空 fragments / versions。 */
     @PostMapping("/batch-delete")
-    @Transactional
     public ResponseEntity<ApiResponse<Map<String, Object>>> batchDelete(
             @RequestBody Map<String, Object> body,
             HttpServletRequest req) {
         @SuppressWarnings("unchecked")
         List<String> ids = (List<String>) body.get("ids");
+        // HTTP 格式校验
         if (ids == null || ids.isEmpty()) {
             throw new BizException(400, "IDS_REQUIRED");
         }
         if (ids.size() > MAX_BATCH_SIZE) {
             throw new BizException(400, "BATCH_TOO_LARGE");
         }
-        int deleted = 0;
-        List<String> failed = new ArrayList<>();
-        for (String id : ids) {
-            if (id == null || id.isBlank()) continue;
-            try {
-                fragmentRepository.deleteByMemoryId(id);
-                versionRepository.deleteByMemoryId(id);
-                memoryRepository.deleteById(id);
-                deleted++;
-            } catch (Exception e) {
-                log.warn("[admin] batch-delete failed for memory {}: {}", id, e.toString());
-                failed.add(id);
-            }
-        }
+        BatchDeleteResult r = adminMemoryManagementService.batchDelete(ids);
         Map<String, Object> result = new LinkedHashMap<>();
-        result.put("deleted", deleted);
-        result.put("failed", failed);
-        logAccess(req, "/api/v1/admin/memories/batch-delete", "deleted=" + deleted, 200);
+        result.put("deleted", r.deleted());
+        result.put("failed", r.failed());
+        logAccess(req, "/api/v1/admin/memories/batch-delete", "deleted=" + r.deleted(), 200);
         return ResponseEntity.ok(ApiResponse.success(result));
     }
 
     /** 批量更改隐私级别。body: {ids: [], privacyLevel: "PUBLIC"|"FRIENDS"|"PRIVATE"} */
     @PostMapping("/batch-privacy")
-    @Transactional
     public ResponseEntity<ApiResponse<Map<String, Object>>> batchUpdatePrivacy(
             @RequestBody Map<String, Object> body,
             HttpServletRequest req) {
         @SuppressWarnings("unchecked")
         List<String> ids = (List<String>) body.get("ids");
         String privacy = (String) body.get("privacyLevel");
+        // HTTP 格式校验
         if (ids == null || ids.isEmpty()) {
             throw new BizException(400, "IDS_REQUIRED");
         }
@@ -216,39 +182,28 @@ public class AdminMemoryManagementController {
         if (ids.size() > MAX_BATCH_SIZE) {
             throw new BizException(400, "BATCH_TOO_LARGE");
         }
-        Memory.PrivacyLevel target;
+        // 业务校验:枚举合法性(快速失败)
         try {
-            target = Memory.PrivacyLevel.valueOf(privacy.trim().toUpperCase());
+            Memory.PrivacyLevel.valueOf(privacy.trim().toUpperCase());
         } catch (IllegalArgumentException ex) {
             throw new BizException(400, "INVALID_PRIVACY_LEVEL");
         }
-        int updated = 0;
-        for (String id : ids) {
-            if (id == null || id.isBlank()) continue;
-            var opt = memoryRepository.findById(id);
-            if (opt.isPresent()) {
-                Memory m = opt.get();
-                m.setPrivacyLevel(target);
-                m.setUpdatedAt(LocalDateTime.now());
-                memoryRepository.save(m);
-                updated++;
-            }
-        }
-        Map<String, Object> result = Map.of("updated", updated, "privacyLevel", target.name());
+        BatchUpdateResult r = adminMemoryManagementService.batchUpdatePrivacy(ids, privacy);
+        Map<String, Object> result = Map.of("updated", r.updated(), "privacyLevel", r.privacyLevel());
         logAccess(req, "/api/v1/admin/memories/batch-privacy",
-                "updated=" + updated + " level=" + target.name(), 200);
+                "updated=" + r.updated() + " level=" + r.privacyLevel(), 200);
         return ResponseEntity.ok(ApiResponse.success(result));
     }
 
     /** 批量锁定 / 解锁。body: {ids: [], locked: true|false} */
     @PostMapping("/batch-lock")
-    @Transactional
     public ResponseEntity<ApiResponse<Map<String, Object>>> batchLock(
             @RequestBody Map<String, Object> body,
             HttpServletRequest req) {
         @SuppressWarnings("unchecked")
         List<String> ids = (List<String>) body.get("ids");
         Boolean locked = (Boolean) body.get("locked");
+        // HTTP 格式校验
         if (ids == null || ids.isEmpty()) {
             throw new BizException(400, "IDS_REQUIRED");
         }
@@ -258,72 +213,41 @@ public class AdminMemoryManagementController {
         if (ids.size() > MAX_BATCH_SIZE) {
             throw new BizException(400, "BATCH_TOO_LARGE");
         }
-        int updated = 0;
-        for (String id : ids) {
-            if (id == null || id.isBlank()) continue;
-            var opt = memoryRepository.findById(id);
-            if (opt.isPresent()) {
-                Memory m = opt.get();
-                m.setIsLocked(locked);
-                m.setUpdatedAt(LocalDateTime.now());
-                memoryRepository.save(m);
-                updated++;
-            }
-        }
-        Map<String, Object> result = Map.of("updated", updated, "locked", locked);
+        BatchUpdateResult r = adminMemoryManagementService.batchLock(ids, locked);
+        Map<String, Object> result = Map.of("updated", r.updated(), "locked", r.locked());
         logAccess(req, "/api/v1/admin/memories/batch-lock",
-                "updated=" + updated + " locked=" + locked, 200);
+                "updated=" + r.updated() + " locked=" + r.locked(), 200);
         return ResponseEntity.ok(ApiResponse.success(result));
     }
 
     /** 删除单条：等价于 batchDelete 单元素，便于按行删除时简化前端调用。 */
     @DeleteMapping("/{id}")
-    @Transactional
     public ResponseEntity<ApiResponse<Void>> deleteOne(@PathVariable String id, HttpServletRequest req) {
+        // HTTP 格式校验
         if (id == null || id.isBlank()) throw new BizException(400, "ID_REQUIRED");
-        if (!memoryRepository.existsById(id)) throw new BizException(404, "MEMORY_NOT_FOUND");
-        try {
-            fragmentRepository.deleteByMemoryId(id);
-            versionRepository.deleteByMemoryId(id);
-            memoryRepository.deleteById(id);
-        } catch (Exception e) {
-            log.error("[admin] delete failed for memory {}", id, e);
-            throw new BizException(500, "DELETE_FAILED");
-        }
+        adminMemoryManagementService.deleteOne(id);
         logAccess(req, "/api/v1/admin/memories/" + id, "deleted", 200);
         return ResponseEntity.ok(ApiResponse.success("Deleted", null));
     }
 
     /** 行内编辑：单条更新隐私级别 / 锁定。body 字段全部 optional。 */
     @PatchMapping("/{id}")
-    @Transactional
     public ResponseEntity<ApiResponse<AdminMemoryRow>> patchOne(
             @PathVariable String id,
             @RequestBody Map<String, Object> body,
             HttpServletRequest req) {
-        var opt = memoryRepository.findById(id);
-        if (opt.isEmpty()) throw new BizException(404, "MEMORY_NOT_FOUND");
-        Memory m = opt.get();
+        // 业务校验:privacyLevel 枚举合法性(若提供)
         if (body.containsKey("privacyLevel")) {
             String p = (String) body.get("privacyLevel");
             if (p != null && !p.isBlank()) {
                 try {
-                    m.setPrivacyLevel(Memory.PrivacyLevel.valueOf(p.trim().toUpperCase()));
+                    Memory.PrivacyLevel.valueOf(p.trim().toUpperCase());
                 } catch (IllegalArgumentException ex) {
                     throw new BizException(400, "INVALID_PRIVACY_LEVEL");
                 }
             }
         }
-        if (body.containsKey("locked")) {
-            Object v = body.get("locked");
-            if (v instanceof Boolean b) m.setIsLocked(b);
-        }
-        if (body.containsKey("fadeLevel")) {
-            Object v = body.get("fadeLevel");
-            if (v instanceof Number n) m.setFadeLevel(n.doubleValue());
-        }
-        m.setUpdatedAt(LocalDateTime.now());
-        memoryRepository.save(m);
+        Memory m = adminMemoryManagementService.patchOne(id, body);
         logAccess(req, "/api/v1/admin/memories/" + id, "patched", 200);
         return ResponseEntity.ok(ApiResponse.success(toRow(m)));
     }
@@ -338,16 +262,17 @@ public class AdminMemoryManagementController {
             HttpServletRequest req) {
         @SuppressWarnings("unchecked")
         List<String> ids = (List<String>) body.get("ids");
+        // HTTP 格式校验
         if (ids == null || ids.isEmpty()) {
             throw new BizException(400, "IDS_REQUIRED");
         }
         if (ids.size() > MAX_BATCH_SIZE) {
             throw new BizException(400, "BATCH_TOO_LARGE");
         }
-        List<Memory> memories = memoryRepository.findAllById(ids);
+        Map<String, Memory> memories = adminMemoryManagementService.getBatchDetails(ids);
         Map<String, AdminMemoryRow> result = new HashMap<>();
-        for (Memory m : memories) {
-            result.put(m.getId(), toRow(m));
+        for (Map.Entry<String, Memory> e : memories.entrySet()) {
+            result.put(e.getKey(), toRow(e.getValue()));
         }
         logAccess(req, "/api/v1/admin/memories/batch-details", "fetched=" + result.size(), 200);
         return ResponseEntity.ok(ApiResponse.success(result));

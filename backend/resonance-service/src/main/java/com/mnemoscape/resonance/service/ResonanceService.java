@@ -192,7 +192,9 @@ public class ResonanceService {
                 Object v = seed.getData().get("sceneDataUrl");
                 if (v != null && !String.valueOf(v).isBlank()) chosenSceneUrl = String.valueOf(v);
             }
-        } catch (Exception ignore) { /* fall through */ }
+        } catch (Exception e) {
+            log.warn("[resonance] failed to fetch seed sceneDataUrl for space, using placeholder: {}", e.toString());
+        }
 
         ResonanceSpace space = ResonanceSpace.builder()
                 .memoryId1(memoryId1)

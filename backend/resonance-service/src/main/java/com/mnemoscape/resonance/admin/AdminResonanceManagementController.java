@@ -7,13 +7,13 @@ import com.mnemoscape.common.exception.BizException;
 import com.mnemoscape.resonance.model.entity.ResonanceSpace;
 import com.mnemoscape.resonance.repository.ResonanceSpaceRepository;
 import jakarta.servlet.http.HttpServletRequest;
+import lombok.extern.slf4j.Slf4j;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.http.ResponseEntity;
-import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.ArrayList;
@@ -26,20 +26,23 @@ import java.util.Map;
  *
  * <p>提供分页查询，可按状态过滤；支持单条 / 批量更改状态、删除。
  */
+@Slf4j
 @RestController
 @RequestMapping("/api/v1/admin/resonance-management")
 public class AdminResonanceManagementController {
 
-    private static final Logger log = LoggerFactory.getLogger(AdminResonanceManagementController.class);
     private static final Logger audit = LoggerFactory.getLogger("admin-audit");
 
     private static final int MAX_PAGE_SIZE = 100;
     private static final int MAX_BATCH_SIZE = 500;
 
     private final ResonanceSpaceRepository resonanceRepository;
+    private final AdminResonanceService adminService;
 
-    public AdminResonanceManagementController(ResonanceSpaceRepository resonanceRepository) {
+    public AdminResonanceManagementController(ResonanceSpaceRepository resonanceRepository,
+                                              AdminResonanceService adminService) {
         this.resonanceRepository = resonanceRepository;
+        this.adminService = adminService;
     }
 
     @JsonInclude(JsonInclude.Include.NON_NULL)
@@ -113,43 +116,24 @@ public class AdminResonanceManagementController {
     }
 
     @PatchMapping("/{id}")
-    @Transactional
     public ResponseEntity<ApiResponse<AdminResonanceRow>> patch(
             @PathVariable String id,
             @RequestBody Map<String, Object> body,
             HttpServletRequest req) {
-        var opt = resonanceRepository.findById(id);
-        if (opt.isEmpty()) throw new BizException(404, "RESONANCE_NOT_FOUND");
-        ResonanceSpace r = opt.get();
-        if (body.containsKey("status")) {
-            String s = (String) body.get("status");
-            if (s != null && !s.isBlank()) {
-                String allowed = s.trim().toLowerCase();
-                if (!allowed.equals("pending") && !allowed.equals("accepted")
-                        && !allowed.equals("rejected") && !allowed.equals("archived")) {
-                    throw new BizException(400, "INVALID_STATUS");
-                }
-                r.setStatus(allowed);
-            }
-        }
-        resonanceRepository.save(r);
+        String statusRaw = (String) body.get("status");
+        ResonanceSpace r = adminService.patchStatus(id, statusRaw);
         logAccess(req, "/api/v1/admin/resonance-management/" + id, "patched", 200);
         return ResponseEntity.ok(ApiResponse.success(toRow(r)));
     }
 
     @DeleteMapping("/{id}")
-    @Transactional
     public ResponseEntity<ApiResponse<Void>> deleteOne(@PathVariable String id, HttpServletRequest req) {
-        if (!resonanceRepository.existsById(id)) {
-            throw new BizException(404, "RESONANCE_NOT_FOUND");
-        }
-        resonanceRepository.deleteById(id);
+        adminService.deleteOne(id);
         logAccess(req, "/api/v1/admin/resonance-management/" + id, "deleted", 200);
         return ResponseEntity.ok(ApiResponse.success("Deleted", null));
     }
 
     @PostMapping("/batch-delete")
-    @Transactional
     public ResponseEntity<ApiResponse<Map<String, Object>>> batchDelete(
             @RequestBody Map<String, Object> body,
             HttpServletRequest req) {
@@ -157,28 +141,16 @@ public class AdminResonanceManagementController {
         List<String> ids = (List<String>) body.get("ids");
         if (ids == null || ids.isEmpty()) throw new BizException(400, "IDS_REQUIRED");
         if (ids.size() > MAX_BATCH_SIZE) throw new BizException(400, "BATCH_TOO_LARGE");
-        int deleted = 0;
-        List<String> failed = new ArrayList<>();
-        for (String id : ids) {
-            if (id == null || id.isBlank()) continue;
-            try {
-                resonanceRepository.deleteById(id);
-                deleted++;
-            } catch (Exception e) {
-                log.warn("[admin] batch-delete resonance failed for {}: {}", id, e.toString());
-                failed.add(id);
-            }
-        }
-        Map<String, Object> result = new LinkedHashMap<>();
-        result.put("deleted", deleted);
-        result.put("failed", failed);
+        AdminResonanceService.BatchDeleteResult result = adminService.batchDelete(ids);
+        Map<String, Object> out = new LinkedHashMap<>();
+        out.put("deleted", result.deleted());
+        out.put("failed", result.failed());
         logAccess(req, "/api/v1/admin/resonance-management/batch-delete",
-                "deleted=" + deleted, 200);
-        return ResponseEntity.ok(ApiResponse.success(result));
+                "deleted=" + result.deleted(), 200);
+        return ResponseEntity.ok(ApiResponse.success(out));
     }
 
     @PostMapping("/batch-status")
-    @Transactional
     public ResponseEntity<ApiResponse<Map<String, Object>>> batchStatus(
             @RequestBody Map<String, Object> body,
             HttpServletRequest req) {
@@ -188,24 +160,11 @@ public class AdminResonanceManagementController {
         if (ids == null || ids.isEmpty()) throw new BizException(400, "IDS_REQUIRED");
         if (status == null || status.isBlank()) throw new BizException(400, "STATUS_REQUIRED");
         if (ids.size() > MAX_BATCH_SIZE) throw new BizException(400, "BATCH_TOO_LARGE");
-        String s = status.trim().toLowerCase();
-        if (!s.equals("pending") && !s.equals("accepted") && !s.equals("rejected") && !s.equals("archived")) {
-            throw new BizException(400, "INVALID_STATUS");
-        }
-        int updated = 0;
-        for (String id : ids) {
-            if (id == null || id.isBlank()) continue;
-            var opt = resonanceRepository.findById(id);
-            if (opt.isPresent()) {
-                ResonanceSpace r = opt.get();
-                r.setStatus(s);
-                resonanceRepository.save(r);
-                updated++;
-            }
-        }
+        AdminResonanceService.BatchStatusResult result = adminService.batchStatus(ids, status);
         logAccess(req, "/api/v1/admin/resonance-management/batch-status",
-                "updated=" + updated + " status=" + s, 200);
-        return ResponseEntity.ok(ApiResponse.success(Map.of("updated", updated, "status", s)));
+                "updated=" + result.updated() + " status=" + result.status(), 200);
+        return ResponseEntity.ok(ApiResponse.success(
+                Map.of("updated", result.updated(), "status", result.status())));
     }
 
     private void logAccess(HttpServletRequest req, String path, String detail, int status) {

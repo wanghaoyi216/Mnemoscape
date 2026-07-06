@@ -7,9 +7,11 @@ import com.mnemoscape.resonance.admin.dto.ResonanceTopEdge;
 import com.mnemoscape.resonance.model.entity.ResonanceSpace;
 import com.mnemoscape.resonance.repository.ResonanceSpaceRepository;
 import com.mnemoscape.resonance.repository.ResonanceStatusAggregate;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.cache.annotation.Cacheable;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.time.LocalDateTime;
 import java.time.OffsetDateTime;
@@ -43,6 +45,7 @@ import java.util.Map;
  * scene_data_url, or any column outside the strict whitelist documented in
  * each DTO record (R15.1 / R12.3).
  */
+@Slf4j
 @Service
 public class AdminResonanceService {
 
@@ -189,4 +192,74 @@ public class AdminResonanceService {
         }
         return ldt.atOffset(ZoneOffset.UTC);
     }
+
+    // ============================================================ 管理后台 CRUD（事务由 Service 承担）
+
+    /** 单条改状态:校验状态合法性 + 持久化。statusRaw 为 null/blank 时不改。 */
+    @Transactional
+    public ResonanceSpace patchStatus(String id, String statusRaw) {
+        ResonanceSpace r = repository.findById(id)
+                .orElseThrow(() -> new BizException(404, "RESONANCE_NOT_FOUND"));
+        if (statusRaw != null && !statusRaw.isBlank()) {
+            String allowed = statusRaw.trim().toLowerCase();
+            if (!allowed.equals("pending") && !allowed.equals("accepted")
+                    && !allowed.equals("rejected") && !allowed.equals("archived")) {
+                throw new BizException(400, "INVALID_STATUS");
+            }
+            r.setStatus(allowed);
+            repository.save(r);
+        }
+        return r;
+    }
+
+    /** 单条删除。 */
+    @Transactional
+    public void deleteOne(String id) {
+        if (!repository.existsById(id)) {
+            throw new BizException(404, "RESONANCE_NOT_FOUND");
+        }
+        repository.deleteById(id);
+    }
+
+    /** 批量删除:单条失败计入 failed 列表,不中断整批。 */
+    @Transactional
+    public BatchDeleteResult batchDelete(List<String> ids) {
+        int deleted = 0;
+        List<String> failed = new ArrayList<>();
+        for (String id : ids) {
+            if (id == null || id.isBlank()) continue;
+            try {
+                repository.deleteById(id);
+                deleted++;
+            } catch (Exception e) {
+                log.warn("[admin] batch-delete resonance failed for {}: {}", id, e.toString());
+                failed.add(id);
+            }
+        }
+        return new BatchDeleteResult(deleted, failed);
+    }
+
+    /** 批量改状态:校验状态合法性,逐条 findById+setStatus+save,返回更新数。 */
+    @Transactional
+    public BatchStatusResult batchStatus(List<String> ids, String status) {
+        String s = status.trim().toLowerCase();
+        if (!s.equals("pending") && !s.equals("accepted") && !s.equals("rejected") && !s.equals("archived")) {
+            throw new BizException(400, "INVALID_STATUS");
+        }
+        int updated = 0;
+        for (String id : ids) {
+            if (id == null || id.isBlank()) continue;
+            var opt = repository.findById(id);
+            if (opt.isPresent()) {
+                ResonanceSpace r = opt.get();
+                r.setStatus(s);
+                repository.save(r);
+                updated++;
+            }
+        }
+        return new BatchStatusResult(updated, s);
+    }
+
+    public record BatchDeleteResult(int deleted, List<String> failed) {}
+    public record BatchStatusResult(int updated, String status) {}
 }

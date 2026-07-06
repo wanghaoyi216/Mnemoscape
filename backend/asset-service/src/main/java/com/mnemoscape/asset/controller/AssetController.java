@@ -7,6 +7,7 @@ import com.mnemoscape.common.dto.ApiResponse;
 import com.mnemoscape.common.web.RequestContext;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
@@ -18,6 +19,7 @@ import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
 
+@Slf4j
 @RestController
 @RequestMapping("/api/v1/assets")
 public class AssetController {
@@ -82,7 +84,7 @@ public class AssetController {
         try {
             merged.addAll(assetService.listMinioStaticForUser(userId));
         } catch (Exception e) {
-            // MinIO 不可达不影响本地资源返回
+            log.warn("[static] MinIO list failed, returning local-only: {}", e.toString());
         }
         return ApiResponse.success(merged);
     }
@@ -130,6 +132,7 @@ public class AssetController {
                 response.flushBuffer();
             }
         } catch (Exception e) {
+            log.warn("[static] serve failed for {}/{}: {}", type, filename, e.toString());
             response.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
         }
     }

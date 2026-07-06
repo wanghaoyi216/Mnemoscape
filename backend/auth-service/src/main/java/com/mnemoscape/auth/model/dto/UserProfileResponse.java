@@ -1,7 +1,13 @@
 package com.mnemoscape.auth.model.dto;
 
 import java.time.LocalDateTime;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
 
+@Getter
+@Setter
+@NoArgsConstructor
 public class UserProfileResponse {
     private String id;
     private String username;
@@ -13,9 +19,6 @@ public class UserProfileResponse {
     private Boolean verified;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
-
-    public UserProfileResponse() {
-    }
 
     public UserProfileResponse(String id, String username, String email, String avatarUrl, Boolean verified, LocalDateTime createdAt, LocalDateTime updatedAt) {
         this(id, username, email, avatarUrl, null, "USER", verified, createdAt, updatedAt);
@@ -37,75 +40,11 @@ public class UserProfileResponse {
         this.updatedAt = updatedAt;
     }
 
-    public String getId() {
-        return id;
-    }
-
-    public void setId(String id) {
-        this.id = id;
-    }
-
-    public String getUsername() {
-        return username;
-    }
-
-    public void setUsername(String username) {
-        this.username = username;
-    }
-
-    public String getEmail() {
-        return email;
-    }
-
-    public void setEmail(String email) {
-        this.email = email;
-    }
-
-    public String getAvatarUrl() {
-        return avatarUrl;
-    }
-
-    public void setAvatarUrl(String avatarUrl) {
-        this.avatarUrl = avatarUrl;
-    }
-
-    public String getBackgroundImageUrl() {
-        return backgroundImageUrl;
-    }
-
-    public void setBackgroundImageUrl(String backgroundImageUrl) {
-        this.backgroundImageUrl = backgroundImageUrl;
-    }
-
     public String getRole() {
         return role == null ? "USER" : role;
     }
 
     public void setRole(String role) {
         this.role = (role == null || role.isBlank()) ? "USER" : role;
-    }
-
-    public Boolean getVerified() {
-        return verified;
-    }
-
-    public void setVerified(Boolean verified) {
-        this.verified = verified;
-    }
-
-    public LocalDateTime getCreatedAt() {
-        return createdAt;
-    }
-
-    public void setCreatedAt(LocalDateTime createdAt) {
-        this.createdAt = createdAt;
-    }
-
-    public LocalDateTime getUpdatedAt() {
-        return updatedAt;
-    }
-
-    public void setUpdatedAt(LocalDateTime updatedAt) {
-        this.updatedAt = updatedAt;
     }
 }

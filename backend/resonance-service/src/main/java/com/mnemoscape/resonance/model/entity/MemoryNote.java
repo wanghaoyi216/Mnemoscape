@@ -3,9 +3,15 @@ package com.mnemoscape.resonance.model.entity;
 import jakarta.persistence.*;
 import java.time.LocalDateTime;
 import java.util.UUID;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
 
 @Entity
 @Table(name = "memory_notes")
+@Getter
+@Setter
+@NoArgsConstructor
 public class MemoryNote {
     @Id
     @Column(length = 36)
@@ -28,8 +34,6 @@ public class MemoryNote {
 
     @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;
-
-    public MemoryNote() {}
 
     public MemoryNote(String id, String authorId, String resonanceId, String position3d, String content, String mood, LocalDateTime createdAt) {
         this.id = id;
@@ -68,21 +72,6 @@ public class MemoryNote {
             return new MemoryNote(id, authorId, resonanceId, position3d, content, mood, createdAt);
         }
     }
-
-    public String getId() { return id; }
-    public void setId(String id) { this.id = id; }
-    public String getAuthorId() { return authorId; }
-    public void setAuthorId(String authorId) { this.authorId = authorId; }
-    public String getResonanceId() { return resonanceId; }
-    public void setResonanceId(String resonanceId) { this.resonanceId = resonanceId; }
-    public String getPosition3d() { return position3d; }
-    public void setPosition3d(String position3d) { this.position3d = position3d; }
-    public String getContent() { return content; }
-    public void setContent(String content) { this.content = content; }
-    public String getMood() { return mood; }
-    public void setMood(String mood) { this.mood = mood; }
-    public LocalDateTime getCreatedAt() { return createdAt; }
-    public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
 
     @PrePersist
     protected void onCreate() {

@@ -1,12 +1,20 @@
 package com.mnemoscape.auth.model.dto;
 
 import java.time.LocalDateTime;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Data;
+import lombok.NoArgsConstructor;
 
 /**
  * 用户 3D 刻画响应 DTO。
  *
  * <p>包含 AI 生成的角色特征数据，供前端 Three.js 渲染器直接消费。
  */
+@Data
+@NoArgsConstructor
+@AllArgsConstructor
+@Builder
 public class AvatarProfileResponse {
 
     private String id;
@@ -44,41 +52,4 @@ public class AvatarProfileResponse {
 
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
-
-    public AvatarProfileResponse() {}
-
-    // ── Getters & Setters ──────────────────────────────────────────────────
-
-    public String getId() { return id; }
-    public void setId(String id) { this.id = id; }
-
-    public String getUserId() { return userId; }
-    public void setUserId(String userId) { this.userId = userId; }
-
-    public String getSelfDescription() { return selfDescription; }
-    public void setSelfDescription(String selfDescription) { this.selfDescription = selfDescription; }
-
-    public String getAvatarTraits() { return avatarTraits; }
-    public void setAvatarTraits(String avatarTraits) { this.avatarTraits = avatarTraits; }
-
-    public String getEmotionTone() { return emotionTone; }
-    public void setEmotionTone(String emotionTone) { this.emotionTone = emotionTone; }
-
-    public String getPersonalityTags() { return personalityTags; }
-    public void setPersonalityTags(String personalityTags) { this.personalityTags = personalityTags; }
-
-    public String getAvatarTitle() { return avatarTitle; }
-    public void setAvatarTitle(String avatarTitle) { this.avatarTitle = avatarTitle; }
-
-    public String getAvatarStory() { return avatarStory; }
-    public void setAvatarStory(String avatarStory) { this.avatarStory = avatarStory; }
-
-    public Boolean getIsPublic() { return isPublic; }
-    public void setIsPublic(Boolean isPublic) { this.isPublic = isPublic; }
-
-    public LocalDateTime getCreatedAt() { return createdAt; }
-    public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
-
-    public LocalDateTime getUpdatedAt() { return updatedAt; }
-    public void setUpdatedAt(LocalDateTime updatedAt) { this.updatedAt = updatedAt; }
 }

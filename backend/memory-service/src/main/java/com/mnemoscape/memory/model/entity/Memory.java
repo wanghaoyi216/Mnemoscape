@@ -5,6 +5,9 @@ import java.time.LocalDate;
 import java.time.LocalDateTime;
 import java.util.UUID;
 import com.mnemoscape.memory.model.converter.MemoryPrivacyLevelConverter;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
 
 @Entity
 @Table(name = "memories", indexes = {
@@ -14,6 +17,9 @@ import com.mnemoscape.memory.model.converter.MemoryPrivacyLevelConverter;
         @Index(name = "idx_memories_fade_level", columnList = "fade_level"),
         @Index(name = "idx_memories_is_locked", columnList = "is_locked")
 })
+@Getter
+@Setter
+@NoArgsConstructor
 public class Memory {
     @Id
     @Column(length = 36)
@@ -86,8 +92,6 @@ public class Memory {
     private LocalDateTime updatedAt;
 
     public enum PrivacyLevel { PRIVATE, FRIENDS, PUBLIC }
-
-    public Memory() {}
 
     public Memory(String id, String userId, String title, String description, Integer memoryYear, LocalDate memoryDate, String memorySeason, String memoryTimeOfDay, String memoryLocation, Double memoryLng, Double memoryLat, PrivacyLevel privacyLevel, Boolean isLocked, Double fadeLevel, LocalDateTime lastDriftCalculatedAt, String sceneDataUrl, String emotionVectorId, String visualData, String audioData, String emotionProfile, LocalDateTime createdAt, LocalDateTime updatedAt) {
         this.id = id;
@@ -171,51 +175,6 @@ public class Memory {
             return new Memory(id, userId, title, description, memoryYear, memoryDate, memorySeason, memoryTimeOfDay, memoryLocation, memoryLng, memoryLat, privacyLevel, isLocked, fadeLevel, lastDriftCalculatedAt, sceneDataUrl, emotionVectorId, visualData, audioData, emotionProfile, createdAt, updatedAt);
         }
     }
-
-    public String getId() { return id; }
-    public void setId(String id) { this.id = id; }
-    public String getUserId() { return userId; }
-    public void setUserId(String userId) { this.userId = userId; }
-    public String getTitle() { return title; }
-    public void setTitle(String title) { this.title = title; }
-    public String getDescription() { return description; }
-    public void setDescription(String description) { this.description = description; }
-    public Integer getMemoryYear() { return memoryYear; }
-    public void setMemoryYear(Integer memoryYear) { this.memoryYear = memoryYear; }
-    public LocalDate getMemoryDate() { return memoryDate; }
-    public void setMemoryDate(LocalDate memoryDate) { this.memoryDate = memoryDate; }
-    public String getMemorySeason() { return memorySeason; }
-    public void setMemorySeason(String memorySeason) { this.memorySeason = memorySeason; }
-    public String getMemoryTimeOfDay() { return memoryTimeOfDay; }
-    public void setMemoryTimeOfDay(String memoryTimeOfDay) { this.memoryTimeOfDay = memoryTimeOfDay; }
-    public String getMemoryLocation() { return memoryLocation; }
-    public void setMemoryLocation(String memoryLocation) { this.memoryLocation = memoryLocation; }
-    public Double getMemoryLng() { return memoryLng; }
-    public void setMemoryLng(Double memoryLng) { this.memoryLng = memoryLng; }
-    public Double getMemoryLat() { return memoryLat; }
-    public void setMemoryLat(Double memoryLat) { this.memoryLat = memoryLat; }
-    public PrivacyLevel getPrivacyLevel() { return privacyLevel; }
-    public void setPrivacyLevel(PrivacyLevel privacyLevel) { this.privacyLevel = privacyLevel; }
-    public Boolean getIsLocked() { return isLocked; }
-    public void setIsLocked(Boolean isLocked) { this.isLocked = isLocked; }
-    public Double getFadeLevel() { return fadeLevel; }
-    public void setFadeLevel(Double fadeLevel) { this.fadeLevel = fadeLevel; }
-    public LocalDateTime getLastDriftCalculatedAt() { return lastDriftCalculatedAt; }
-    public void setLastDriftCalculatedAt(LocalDateTime lastDriftCalculatedAt) { this.lastDriftCalculatedAt = lastDriftCalculatedAt; }
-    public String getSceneDataUrl() { return sceneDataUrl; }
-    public void setSceneDataUrl(String sceneDataUrl) { this.sceneDataUrl = sceneDataUrl; }
-    public String getEmotionVectorId() { return emotionVectorId; }
-    public void setEmotionVectorId(String emotionVectorId) { this.emotionVectorId = emotionVectorId; }
-    public String getVisualData() { return visualData; }
-    public void setVisualData(String visualData) { this.visualData = visualData; }
-    public String getAudioData() { return audioData; }
-    public void setAudioData(String audioData) { this.audioData = audioData; }
-    public String getEmotionProfile() { return emotionProfile; }
-    public void setEmotionProfile(String emotionProfile) { this.emotionProfile = emotionProfile; }
-    public LocalDateTime getCreatedAt() { return createdAt; }
-    public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
-    public LocalDateTime getUpdatedAt() { return updatedAt; }
-    public void setUpdatedAt(LocalDateTime updatedAt) { this.updatedAt = updatedAt; }
 
     @PrePersist
     protected void onCreate() {

@@ -17,6 +17,8 @@ import java.util.List;
 import java.util.Locale;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
+import com.mnemoscape.ai.agent.IntentRecognitionAgent;
+import com.mnemoscape.ai.agent.RoutingAgent;
 
 /**
  * 真实 LLM 对话内核（v2）。
@@ -211,6 +213,8 @@ public class ChatReasoner {
     private final com.fasterxml.jackson.databind.ObjectMapper json = new com.fasterxml.jackson.databind.ObjectMapper();
     /** 限流层 (C-3)；缺 bean / Redis 不可用时静默放行。 */
     private final org.springframework.beans.factory.ObjectProvider<AiCacheService> aiCacheProvider;
+    private final IntentRecognitionAgent intentAgent;
+    private final RoutingAgent routingAgent;
 
     public ChatReasoner(@Qualifier("mnemoscapeChatClientBuilder") ChatClient.Builder builder,
                         @Qualifier("mnemoscapeStreamingChatClientBuilder") ChatClient.Builder streamingBuilder,
@@ -219,6 +223,8 @@ public class ChatReasoner {
                         VisionDescriber visionDescriber,
                         com.mnemoscape.ai.tools.MilvusSearchTool milvusTool,
                         org.springframework.beans.factory.ObjectProvider<AiCacheService> aiCacheProvider,
+                        IntentRecognitionAgent intentAgent,
+                        RoutingAgent routingAgent,
                         @org.springframework.beans.factory.annotation.Value("${spring.ai.openai.base-url:https://integrate.api.nvidia.com}")
                         String baseUrl) {
         this.chatClient = builder.build();
@@ -228,6 +234,8 @@ public class ChatReasoner {
         this.visionDescriber = visionDescriber;
         this.milvusTool = milvusTool;
         this.aiCacheProvider = aiCacheProvider;
+        this.intentAgent = intentAgent;
+        this.routingAgent = routingAgent;
         this.baseUrl = baseUrl;
         this.httpClient = java.net.http.HttpClient.newBuilder()
                 .connectTimeout(java.time.Duration.ofSeconds(6))
@@ -251,21 +259,36 @@ public class ChatReasoner {
         String q = question.trim();
         if (q.isEmpty()) return Intent.CHAT;
 
-        // 寒暄白名单
-        String low = q.toLowerCase(Locale.ROOT);
-        String[] greetings = {
-                "你好", "您好", "早上好", "晚上好", "你是谁", "自我介绍", "介绍一下你自己",
-                "hi", "hello", "hey", "who are you", "introduce yourself",
-                "thanks", "thank you", "谢谢", "感谢"
-        };
-        for (String g : greetings) {
-            if (low.startsWith(g) || low.equals(g)) return Intent.CHAT;
-        }
+        try {
+            // 先用白名单拦截常规打招呼或短语，避免浪费 API 调用
+            String low = q.toLowerCase(Locale.ROOT);
+            String[] greetings = {
+                    "你好", "您好", "早上好", "晚上好", "你是谁", "自我介绍", "介绍一下你自己",
+                    "hi", "hello", "hey", "who are you", "introduce yourself",
+                    "thanks", "thank you", "谢谢", "感谢"
+            };
+            for (String g : greetings) {
+                if (low.startsWith(g) || low.equals(g)) return Intent.CHAT;
+            }
+            if (q.replaceAll("\\s+", "").length() < 8) return Intent.CHAT;
 
-        // 短句一律 CHAT（中文按字符数；保守起见用 trim 后的长度）
+            // 调用意图识别智能体
+            String result = intentAgent.execute(q).trim().toUpperCase();
+            if (result.contains("PLAN")) {
+                return Intent.PLAN;
+            } else {
+                return Intent.CHAT;
+            }
+        } catch (Exception e) {
+            log.warn("[ChatReasoner] Intent Recognition Agent failed, falling back to rule-based classification: {}", e.getMessage());
+            return classifyRuleBased(q);
+        }
+    }
+
+    private Intent classifyRuleBased(String q) {
+        String low = q.toLowerCase(Locale.ROOT);
         if (q.replaceAll("\\s+", "").length() < 8) return Intent.CHAT;
 
-        // 真正的检索/规划信号
         String[] planSignals = {
                 "帮我找", "帮我检索", "帮我搜索", "帮我整理", "帮我推荐",
                 "检索", "搜索", "匹配", "共鸣", "路径", "路线",
@@ -927,13 +950,13 @@ public class ChatReasoner {
             } catch (Exception ignore) { }
             return sb.toString();
         } catch (Exception e) {
-            log.warn("[ChatReasoner] RAG retrieval failed silently: {}", e.getMessage());
+            log.error("[ChatReasoner] RAG retrieval failed: {}", e.getMessage());
             try {
                 tools.onEnd("milvusSearchTool", java.util.Map.of(
                         "hits", 0,
                         "error", e.getClass().getSimpleName()));
             } catch (Exception ignore) { }
-            return "";
+            return "\n[注意:记忆检索服务当前不可用,请如实告知用户你无法访问其记忆库,不要编造记忆内容]\n";
         }
     }
 

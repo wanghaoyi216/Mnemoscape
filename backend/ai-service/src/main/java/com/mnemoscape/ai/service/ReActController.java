@@ -184,7 +184,8 @@ public class ReActController {
                 }
             }
         } catch (Exception e) {
-            log.warn("[ReActController] streamReActAnswer failed: {}", e.toString());
+            log.error("[ReActController] streamReActAnswer failed: {}", e.toString());
+            throw new RuntimeException("ReAct stream failed: " + e.getMessage(), e);
         }
         // 软截断
         if (sb.length() > MAX_TAG_CONTENT) {

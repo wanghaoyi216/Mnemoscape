@@ -1,6 +1,7 @@
 package com.mnemoscape.memory.service;
 
 import com.mnemoscape.common.event.AchievementUnlockedEvent;
+import com.mnemoscape.common.lock.DistributedLockStore;
 import com.mnemoscape.memory.messaging.EventPublisher;
 import com.mnemoscape.memory.model.entity.Achievement;
 import com.mnemoscape.memory.model.entity.Memory;
@@ -22,22 +23,35 @@ public class AchievementService {
     private final MemoryRepository memoryRepo;
     private final MemoryFragmentRepository fragmentRepo;
     private final EventPublisher eventPublisher;
+    private final DistributedLockStore lock;
 
     public AchievementService(AchievementRepository achievementRepo,
                               MemoryRepository memoryRepo,
                               MemoryFragmentRepository fragmentRepo,
-                              EventPublisher eventPublisher) {
+                              EventPublisher eventPublisher,
+                              DistributedLockStore lock) {
         this.achievementRepo = achievementRepo;
         this.memoryRepo = memoryRepo;
         this.fragmentRepo = fragmentRepo;
         this.eventPublisher = eventPublisher;
+        this.lock = lock;
     }
 
     public List<Achievement> getUserAchievements(String userId) {
         return achievementRepo.findByUserIdOrderByUnlockedAtDesc(userId);
     }
 
+    /**
+     * 检查并解锁成就。加分布式锁防止同一用户并发触发重复解锁
+     * (如两条记忆同时创建都触发 checkAndUnlock)。
+     * 拿不到锁时返回空列表,下次记忆创建会再次触发,最终一致。
+     */
     public List<Achievement> checkAndUnlock(String userId) {
+        List<Achievement> result = lock.execute("achievement:" + userId, 0, 30, () -> doCheckAndUnlock(userId));
+        return result != null ? result : List.of();
+    }
+
+    private List<Achievement> doCheckAndUnlock(String userId) {
         List<Achievement> newlyUnlocked = new ArrayList<>();
 
         List<Memory> memories = memoryRepo.findByUserIdOrderByCreatedAtDesc(userId);

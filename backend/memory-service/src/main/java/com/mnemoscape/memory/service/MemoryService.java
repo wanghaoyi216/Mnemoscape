@@ -124,17 +124,20 @@ public class MemoryService {
         try {
             asyncEnrichmentSelf.runEnrichmentAsync(memoryId);
         } catch (Exception e) {
-            log.warn("Failed to dispatch async reconstruction enrichment for {}: {}", memoryId, e.toString());
+            log.error("[async-enrich] Failed to dispatch reconstruction enrichment for memory {} (visualData will be missing, needs manual check): {}",
+                    memoryId, e.toString());
         }
         try {
             asyncEnrichmentSelf.runGraphProjectionAsync(memoryId);
         } catch (Exception e) {
-            log.warn("Failed to dispatch async graph projection for {}: {}", memoryId, e.toString());
+            log.error("[async-enrich] Failed to dispatch graph projection for memory {} (graph node will be missing, needs manual check): {}",
+                    memoryId, e.toString());
         }
         try {
             asyncEnrichmentSelf.runVectorIndexingAsync(memoryId);
         } catch (Exception e) {
-            log.warn("Failed to dispatch async vector indexing for {}: {}", memoryId, e.toString());
+            log.error("[async-enrich] Failed to dispatch vector indexing for memory {} (vector will be missing, needs manual check): {}",
+                    memoryId, e.toString());
         }
     }
 
@@ -233,7 +236,8 @@ public class MemoryService {
      * <p>用于：1) 历史记忆在 geocoder 开启前创建，坐标为 null；
      *          2) 切换 geocoder 策略后给旧数据补坐标。
      * 逐条同步处理（geocoder 本地 anchor 表 O(1)，远程 Nominatim 有速率限制），
-     * 返回 {scanned, resolved, skipped, limit}。
+     * 返回 {scanned, resolved, skipped, failed, limit}。skipped=已有坐标/无地名的正常跳过;
+     * failed=geocoding 返回空或抛异常的失败数,管理员可据此看到真实失败率。
      *
      * @param limit 单次最多处理多少条（防止一次性全表扫描）
      */
@@ -244,6 +248,7 @@ public class MemoryService {
         int scanned = 0;
         int resolved = 0;
         int skipped = 0;
+        int failed = 0;
         for (Memory m : page.getContent()) {
             scanned++;
             // 已有坐标的跳过
@@ -266,21 +271,22 @@ public class MemoryService {
                     log.info("[geocoords-backfill] resolved memory {} location='{}' → [{},{}]",
                             m.getId(), m.getMemoryLocation(), coords.get()[0], coords.get()[1]);
                 } else {
-                    skipped++;
+                    failed++;
                 }
             } catch (Exception e) {
                 log.warn("[geocoords-backfill] failed for memory {}: {}", m.getId(), e.toString());
-                skipped++;
+                failed++;
             }
         }
         Map<String, Object> result = new java.util.LinkedHashMap<>();
         result.put("scanned", scanned);
         result.put("resolved", resolved);
         result.put("skipped", skipped);
+        result.put("failed", failed);
         result.put("limit", capped);
         result.put("total", page.getTotalElements());
-        log.info("[geocoords-backfill] scanned={} resolved={} skipped={} (total={})",
-                scanned, resolved, skipped, page.getTotalElements());
+        log.info("[geocoords-backfill] scanned={} resolved={} skipped={} failed={} (total={})",
+                scanned, resolved, skipped, failed, page.getTotalElements());
         return result;
     }
 
@@ -852,7 +858,8 @@ public class MemoryService {
         try {
             fragmentRepository.deleteByMemoryId(memoryId);
         } catch (Exception e) {
-            log.warn("Failed to clear old fragments for memory {}: {}", memoryId, e.toString());
+            log.error("Failed to clear old fragments for memory {}: {}", memoryId, e.toString());
+            throw new BizException(500, "清除旧场景碎片失败,请重试场景重建");
         }
         // 2. 重新跑 reconstruct（写入 visualData / emotionProfile / 新 fragments）
         enrichWithReconstruction(memory);
@@ -885,6 +892,7 @@ public class MemoryService {
                     .snapshotData(objectMapper.writeValueAsString(memory))
                     .build();
             versionRepository.save(version);
+            // 版本快照是回滚兜底,失败不阻断主流程,但会丢失历史版本(监控会抓 ERROR 日志)
         } catch (Exception e) {
             log.error("Failed to create version for memory {}", memory.getId(), e);
         }

@@ -162,7 +162,7 @@ public class EmbeddingClient {
             long t0 = System.currentTimeMillis();
 
             HttpRequest req = HttpRequest.newBuilder()
-                    .uri(URI.create(baseUrl.replaceAll("/+$", "") + EMBEDDINGS_PATH))
+                    .uri(URI.create(resolveEmbeddingUrl()))
                     .timeout(Duration.ofMillis(Math.max(vecProps.getEmbeddingTimeoutMs(), 5_000)))
                     .header("Authorization", "Bearer " + configuredApiKey)
                     .header("Accept", "application/json")
@@ -222,6 +222,24 @@ public class EmbeddingClient {
             throw new RuntimeException("Embedding response missing data[].embedding");
         } catch (Exception e) {
             throw new RuntimeException("Failed to parse embedding response: " + e.getMessage(), e);
+        }
+    }
+
+    private String resolveEmbeddingUrl() {
+        String base = vecProps.getEmbeddingBaseUrl();
+        if (base == null || base.isBlank()) {
+            base = this.baseUrl;
+        }
+        base = base.replaceAll("/+$", "");
+        if (base.contains("ai.api.nvidia.com")) {
+            return base + "/embed";
+        } else if (base.contains("integrate.api.nvidia.com")) {
+            return base + "/v1/embeddings";
+        } else {
+            if (base.endsWith("/embeddings") || base.endsWith("/embed")) {
+                return base;
+            }
+            return base + "/v1/embeddings";
         }
     }
 
