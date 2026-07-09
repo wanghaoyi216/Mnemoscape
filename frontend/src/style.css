@@ -4,7 +4,9 @@
    refined typography, choreographed motion.
    ================================================================ */
 
-@import url("https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Playfair+Display:ital,wght@0,500;0,600;0,700;1,500&family=JetBrains+Mono:wght@400;500&display=swap");
+/* Google Fonts @import 移除：用户字体方案为本地 ComicShannsMono + 华文行楷（见 @font-face），
+   远程 @import 阻塞关键渲染且 200KB+ 下载量不必要。Inter/Playfair 仅作 fallback 名字保留，
+   系统未安装时自动回退到系统字体。如需远程字体请改在 index.html 用 preconnect + async link。 */
 
 /* ────────────────────────────────────────────────────────────────────
    v3：用户要求全站文字采用「ComicShannsMono + 华文行楷」组合。
@@ -131,10 +133,16 @@
      - --font-mono：保留 ComicShannsMono 等宽形态，给代码块用。
      - --font-art：纯艺术显示用（落款 / brand），强制行楷优先。
   */
-  --font-sans: "Inter", "Outfit", "Noto Sans SC", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
+  --font-sans: "Mnemoscape Mono", "Mnemoscape Hand", "Inter", "Outfit", "Noto Sans SC", "PingFang SC", "Hiragino Sans GB", "Microsoft YaHei", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", sans-serif;
   --font-display: "Mnemoscape Mono", "Mnemoscape Hand", "Outfit", "Playfair Display", "Noto Serif SC", "Songti SC", "STSong", Georgia, serif;
   --font-mono: "Mnemoscape Mono", "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
   --font-art: "Mnemoscape Hand", "Playfair Display", "STSong", serif;
+
+  /* z-index 层级管理：避免各组件硬编码 999/1000 导致冲突 */
+  --z-header: 40;
+  --z-theme-switch: 50;
+  --z-drawer-backdrop: 999;
+  --z-drawer: 1000;
 }
 
 /* ================================================================
@@ -227,11 +235,12 @@ html {
   min-height: 100%;
   background-color: var(--bg-0);
   background-image:
-    radial-gradient(1200px 600px at 18% -10%, rgba(54, 216, 180, 0.10), transparent 60%),
-    radial-gradient(900px 540px at 92% 6%, rgba(242, 185, 92, 0.08), transparent 60%),
-    radial-gradient(1100px 700px at 50% 110%, rgba(108, 198, 255, 0.06), transparent 60%),
+    radial-gradient(1200px 600px at 18% -10%, color-mix(in srgb, var(--primary) 10%, transparent), transparent 60%),
+    radial-gradient(900px 540px at 92% 6%, color-mix(in srgb, var(--gold) 8%, transparent), transparent 60%),
+    radial-gradient(1100px 700px at 50% 110%, color-mix(in srgb, var(--accent) 6%, transparent), transparent 60%),
     linear-gradient(180deg, var(--bg-0) 0%, var(--bg-1) 45%, var(--bg-2) 100%);
-  background-attachment: fixed;
+  /* background-attachment: fixed 已移除：它让背景每滚动帧强制 GPU 重绘整个视口，
+     低端 GPU / 集显上滚动卡顿。去掉后背景随滚动，性能优先。 */
 }
 
 body {
@@ -448,18 +457,18 @@ select:disabled {
 
 .app-shell__ambient::before {
   background:
-    radial-gradient(circle at 14% 18%, rgba(54, 216, 180, 0.34) 0%, rgba(54, 216, 180, 0) 38%),
-    radial-gradient(circle at 82% 16%, rgba(242, 185, 92, 0.24) 0%, rgba(242, 185, 92, 0) 36%),
-    radial-gradient(circle at 26% 82%, rgba(108, 198, 255, 0.18) 0%, rgba(108, 198, 255, 0) 42%);
+    radial-gradient(circle at 14% 18%, color-mix(in srgb, var(--primary) 34%, transparent) 0%, transparent 38%),
+    radial-gradient(circle at 82% 16%, color-mix(in srgb, var(--gold) 24%, transparent) 0%, transparent 36%),
+    radial-gradient(circle at 26% 82%, color-mix(in srgb, var(--accent) 18%, transparent) 0%, transparent 42%);
 }
 
 .app-shell__ambient::after {
   animation-delay: -14s;
   opacity: 0.45;
   background:
-    radial-gradient(circle at 74% 22%, rgba(167, 139, 250, 0.18) 0%, rgba(167, 139, 250, 0) 38%),
-    radial-gradient(circle at 78% 74%, rgba(54, 216, 180, 0.16) 0%, rgba(54, 216, 180, 0) 40%),
-    radial-gradient(circle at 18% 72%, rgba(242, 185, 92, 0.14) 0%, rgba(242, 185, 92, 0) 42%);
+    radial-gradient(circle at 74% 22%, color-mix(in srgb, #a78bfa 18%, transparent) 0%, transparent 38%),
+    radial-gradient(circle at 78% 74%, color-mix(in srgb, var(--primary) 16%, transparent) 0%, transparent 40%),
+    radial-gradient(circle at 18% 72%, color-mix(in srgb, var(--gold) 14%, transparent) 0%, transparent 42%);
 }
 
 @keyframes ambient-drift {
@@ -474,10 +483,10 @@ select:disabled {
   z-index: -1;
   opacity: 0.72;
   background:
-    radial-gradient(circle at 16% 24%, rgba(54, 216, 180, 0.20) 0%, rgba(54, 216, 180, 0) 42%),
-    radial-gradient(circle at 84% 18%, rgba(242, 185, 92, 0.18) 0%, rgba(242, 185, 92, 0) 40%),
-    radial-gradient(circle at 30% 84%, rgba(108, 198, 255, 0.16) 0%, rgba(108, 198, 255, 0) 44%),
-    radial-gradient(circle at 74% 72%, rgba(167, 139, 250, 0.15) 0%, rgba(167, 139, 250, 0) 42%);
+    radial-gradient(circle at 16% 24%, color-mix(in srgb, var(--primary) 20%, transparent) 0%, transparent 42%),
+    radial-gradient(circle at 84% 18%, color-mix(in srgb, var(--gold) 18%, transparent) 0%, transparent 40%),
+    radial-gradient(circle at 30% 84%, color-mix(in srgb, var(--accent) 16%, transparent) 0%, transparent 44%),
+    radial-gradient(circle at 74% 72%, color-mix(in srgb, #a78bfa 15%, transparent) 0%, transparent 42%);
   filter: blur(72px) saturate(145%);
   mix-blend-mode: screen;
   animation: aura-drift 24s var(--ease-in-out-quart) infinite alternate;

@@ -75,17 +75,18 @@ function gotoPage(p: number) {
       <table class="admin-table__table">
         <thead>
           <tr>
-            <th v-if="selectable" class="admin-table__checkbox-cell">
+            <th v-if="selectable" class="admin-table__checkbox-cell" scope="col">
               <input type="checkbox" :checked="allSelected" @change="toggleAll" />
             </th>
             <th
               v-for="col in columns"
               :key="col.key"
               :style="{ width: col.width, minWidth: col.width, textAlign: col.align || 'left' }"
+              scope="col"
             >
               {{ t(col.labelKey) }}
             </th>
-            <th class="admin-table__actions-head">
+            <th class="admin-table__actions-head" scope="col">
               <slot name="header-actions" />
             </th>
           </tr>
@@ -209,6 +210,15 @@ function gotoPage(p: number) {
   text-align: right;
   white-space: nowrap;
   width: 1%;
+  position: sticky;
+  right: 0;
+  background: rgba(14, 17, 22, 0.95);
+  backdrop-filter: blur(4px);
+  z-index: 2;
+  box-shadow: -4px 0 12px rgba(0, 0, 0, 0.1);
+}
+.admin-table__table tbody tr:hover .admin-table__actions-cell {
+  background: rgba(20, 30, 35, 0.95);
 }
 
 .admin-table__empty {

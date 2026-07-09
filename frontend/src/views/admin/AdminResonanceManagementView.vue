@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { onMounted, ref, watch } from 'vue'
+import { onMounted, onUnmounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import AdminPanel from '../../components/admin/AdminPanel.vue'
 import AdminDataTable from '../../components/admin/AdminDataTable.vue'
+import AdminIconBtn from '../../components/admin/AdminIconBtn.vue'
 import {
   listResonancesAdmin,
   patchResonance,
@@ -58,12 +59,15 @@ async function load() {
 }
 
 onMounted(load)
-watch([page, size, statusFilter], () => {
-  if (page.value !== 0 && statusFilter.value) {
-    page.value = 0
-    return
-  }
-  void load()
+let filterTimer: ReturnType<typeof setTimeout> | undefined
+onUnmounted(() => clearTimeout(filterTimer))
+watch([page], () => void load())
+watch([size, statusFilter], () => {
+  clearTimeout(filterTimer)
+  filterTimer = setTimeout(() => {
+    if (page.value !== 0) page.value = 0
+    else void load()
+  }, 300)
 })
 
 function toastFail(e: unknown) {

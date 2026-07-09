@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { onMounted, ref, watch } from 'vue'
+import { onMounted, onUnmounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import AdminPanel from '../../components/admin/AdminPanel.vue'
 import AdminDataTable from '../../components/admin/AdminDataTable.vue'
+import AdminIconBtn from '../../components/admin/AdminIconBtn.vue'
 import {
   listUsers,
   changeUserRole,
@@ -12,9 +13,11 @@ import {
   type AdminUserRow,
 } from '../../api/adminManagement'
 import { useToastStore } from '../../stores/toast'
+import { useAuthStore } from '../../stores/auth'
 
 const { t } = useI18n()
 const toast = useToastStore()
+const auth = useAuthStore()
 
 const rows = ref<AdminUserRow[]>([])
 const total = ref(0)
@@ -65,12 +68,15 @@ async function load() {
 }
 
 onMounted(load)
-watch([page, size, search, roleFilter, verifiedFilter], () => {
-  if (page.value !== 0 && (search.value || roleFilter.value || verifiedFilter.value)) {
-    page.value = 0
-    return
-  }
-  void load()
+let filterTimer: ReturnType<typeof setTimeout> | undefined
+onUnmounted(() => clearTimeout(filterTimer))
+watch([page], () => void load())
+watch([size, search, roleFilter, verifiedFilter], () => {
+  clearTimeout(filterTimer)
+  filterTimer = setTimeout(() => {
+    if (page.value !== 0) page.value = 0
+    else void load()
+  }, 300)
 })
 
 async function onChangeRole(row: AdminUserRow) {
@@ -115,9 +121,18 @@ async function onDelete(row: AdminUserRow) {
 
 async function onBatchDelete() {
   if (!selectedIds.value.length) return
-  if (!window.confirm(t('admin.usersMgmt.batch.deleteConfirm', { n: selectedIds.value.length }))) return
+  const myId = auth.user?.id
+  let ids = selectedIds.value
+  if (myId && ids.includes(myId)) {
+    ids = ids.filter((id) => id !== myId)
+    if (!ids.length) {
+      window.alert('不能删除当前登录的管理员账号')
+      return
+    }
+  }
+  if (!window.confirm(t('admin.usersMgmt.batch.deleteConfirm', { n: ids.length }))) return
   try {
-    const { data } = await batchDeleteUsers(selectedIds.value)
+    const { data } = await batchDeleteUsers(ids)
     if (data.code === 200) {
       toast.push({
         key: 'admin.usersMgmt.toast.deleted',
@@ -211,23 +226,31 @@ function uiState() {
           </span>
         </template>
         <template #cell-verified="{ row }">
-          <span class="status-pill" :class="row.verified ? 'status-pill--ok' : 'status-pill--warn'">
-            {{ row.verified ? '✓' : '·' }}
+          <span class="status-pill" :class="row.verified ? 'status-pill--ok' : 'status-pill--warn'" :title="row.verified ? t('admin.usersMgmt.filters.verified') : t('admin.usersMgmt.filters.unverified')">
+            <svg v-if="row.verified" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="20 6 9 17 4 12"/></svg>
+            <svg v-else viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="5" y1="5" x2="19" y2="19"/><line x1="19" y1="5" x2="5" y2="19"/></svg>
           </span>
         </template>
         <template #cell-createdAt="{ value }">
           <span class="datestamp">{{ (value as string)?.slice(0, 10) || '—' }}</span>
         </template>
         <template #row-actions="{ row }">
-          <button class="button-icon" type="button" :title="row.role === 'ADMIN' ? t('admin.usersMgmt.actions.demote') : t('admin.usersMgmt.actions.promote')" @click="onChangeRole(row as AdminUserRow)">
-            {{ row.role === 'ADMIN' ? '↓' : '↑' }}
-          </button>
-          <button class="button-icon" type="button" :title="row.verified ? t('admin.usersMgmt.actions.unverify') : t('admin.usersMgmt.actions.verify')" @click="onToggleVerified(row as AdminUserRow)">
-            {{ row.verified ? '✗' : '✓' }}
-          </button>
-          <button class="button-icon button-icon--danger" type="button" :title="t('admin.usersMgmt.actions.delete')" @click="onDelete(row as AdminUserRow)">
-            🗑
-          </button>
+          <AdminIconBtn
+            :icon="row.role === 'ADMIN' ? 'arrow-down' : 'arrow-up'"
+            :title="row.role === 'ADMIN' ? t('admin.usersMgmt.actions.demote') : t('admin.usersMgmt.actions.promote')"
+            @click="onChangeRole(row as AdminUserRow)"
+          />
+          <AdminIconBtn
+            :icon="row.verified ? 'unverify' : 'verify'"
+            :title="row.verified ? t('admin.usersMgmt.actions.unverify') : t('admin.usersMgmt.actions.verify')"
+            @click="onToggleVerified(row as AdminUserRow)"
+          />
+          <AdminIconBtn
+            icon="trash"
+            danger
+            :title="t('admin.usersMgmt.actions.delete')"
+            @click="onDelete(row as AdminUserRow)"
+          />
         </template>
       </AdminDataTable>
     </div>
@@ -307,13 +330,15 @@ function uiState() {
 }
 
 .status-pill {
-  display: inline-block;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
   width: 22px;
-  text-align: center;
+  height: 22px;
   border-radius: var(--radius-full);
-  font-size: 0.84rem;
-  font-weight: 700;
+  flex-shrink: 0;
 }
+.status-pill svg { flex-shrink: 0; }
 .status-pill--ok { color: var(--primary); }
 .status-pill--warn { color: var(--text-muted); }
 

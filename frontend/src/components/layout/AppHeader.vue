@@ -12,7 +12,9 @@ const { t, locale } = useI18n()
 const initials = computed(() => auth.user?.username?.charAt(0).toUpperCase() || 'M')
 
 const scrolled = ref(false)
+const isDrawerOpen = ref(false)
 const headerEl = ref<HTMLElement | null>(null)
+const themeSwitchEl = ref<HTMLElement | null>(null)
 let headerObserver: ResizeObserver | null = null
 
 function handleScroll() {
@@ -22,6 +24,7 @@ function handleScroll() {
 /** 把实时 header 高度写到 :root --app-header-h，让需要让位的页面（atlas / scene 等）
  *  通过 var(--app-header-h, 88px) 拿到精确数值，避免在 1100px 以下 nav wrap 后被压住。 */
 function publishHeaderHeight() {
+  if (typeof document === 'undefined') return
   const el = headerEl.value
   if (!el) return
   const h = Math.round(el.getBoundingClientRect().height)
@@ -55,8 +58,7 @@ function changeTheme(themeId: string) {
 }
 
 function handleGlobalClick(e: MouseEvent) {
-  const container = document.querySelector('.theme-switch-container')
-  if (container && !container.contains(e.target as Node)) {
+  if (themeSwitchEl.value && !themeSwitchEl.value.contains(e.target as Node)) {
     themeMenuOpen.value = false
   }
 }
@@ -69,13 +71,11 @@ onMounted(() => {
     headerObserver = new ResizeObserver(() => publishHeaderHeight())
     headerObserver.observe(headerEl.value)
   }
-  window.addEventListener('resize', publishHeaderHeight)
   window.addEventListener('click', handleGlobalClick)
 })
 
 onUnmounted(() => {
   window.removeEventListener('scroll', handleScroll)
-  window.removeEventListener('resize', publishHeaderHeight)
   window.removeEventListener('click', handleGlobalClick)
   if (headerObserver) {
     headerObserver.disconnect()
@@ -160,17 +160,28 @@ function switchLocale(l: Locale) {
           <span>{{ t('nav.chat') }}</span>
         </RouterLink>
         <RouterLink v-if="auth.isAdmin" to="/admin" class="app-nav__link app-nav__link--admin" :title="t('admin.nav.entry')">
-          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" aria-hidden="true">
-            <path d="M12 3 4 6v6c0 4.5 3.4 8.4 8 9 4.6-.6 8-4.5 8-9V6l-8-3z" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
-            <path d="m9 12 2.2 2.2L15 10.5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" />
+          <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+            <rect x="3" y="3" width="7" height="7" rx="1" />
+            <rect x="14" y="3" width="7" height="7" rx="1" />
+            <rect x="14" y="14" width="7" height="7" rx="1" />
+            <rect x="3" y="14" width="7" height="7" rx="1" />
           </svg>
           <span>{{ t('admin.nav.entry') }}</span>
         </RouterLink>
       </nav>
 
+      <!-- Hamburger Button for responsive drawer -->
+      <button class="hamburger-btn" @click="isDrawerOpen = true" :aria-label="t('nav.menu') || 'Open menu'">
+        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+          <line x1="3" y1="12" x2="21" y2="12"></line>
+          <line x1="3" y1="6" x2="21" y2="6"></line>
+          <line x1="3" y1="18" x2="21" y2="18"></line>
+        </svg>
+      </button>
+
       <div class="header-actions">
         <!-- 系统多主题色控制器 -->
-        <div class="theme-switch-container">
+        <div ref="themeSwitchEl" class="theme-switch-container">
           <button
             type="button"
             class="theme-switch-trigger"
@@ -221,25 +232,121 @@ function switchLocale(l: Locale) {
               <small>{{ t('profile.title') }}</small>
             </span>
           </RouterLink>
-          <button class="button button--secondary" type="button" :title="t('nav.logout')" @click="handleLogout">
+          <button class="button button--secondary" type="button" :title="t('nav.logout')" @click="handleLogout" style="display: inline-flex; align-items: center; gap: 6px;">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/>
+            </svg>
             <span>{{ t('nav.logout') }}</span>
           </button>
         </template>
 
         <template v-else>
-          <RouterLink to="/login" class="button button--ghost">{{ t('login.submit') }}</RouterLink>
-          <RouterLink to="/register" class="button button--primary">{{ t('register.submit') }}</RouterLink>
+          <RouterLink to="/login" class="button button--ghost" style="display: inline-flex; align-items: center; gap: 6px;">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4M10 17l5-5-5-5M15 12H3"/>
+            </svg>
+            <span>{{ t('login.submit') }}</span>
+          </RouterLink>
+          <RouterLink to="/register" class="button button--primary" style="display: inline-flex; align-items: center; gap: 6px;">
+            <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+              <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2m7.5-13a4 4 0 1 0 0-8 4 4 0 0 0 0 8m12 1v6m-3-3h6"/>
+            </svg>
+            <span>{{ t('register.submit') }}</span>
+          </RouterLink>
         </template>
       </div>
     </div>
   </header>
+
+  <!-- Mobile/Responsive Drawer Navigation -->
+  <Teleport to="body">
+    <Transition name="drawer-fade">
+      <div v-if="isDrawerOpen" class="drawer-backdrop" @click="isDrawerOpen = false" />
+    </Transition>
+    <Transition name="drawer-slide">
+      <aside v-if="isDrawerOpen" class="drawer-sidebar" role="dialog" aria-modal="true">
+        <div class="drawer-sidebar__header">
+          <span class="drawer-sidebar__logo">{{ t('brand.name') }}</span>
+          <button class="drawer-sidebar__close" @click="isDrawerOpen = false" aria-label="Close menu">
+            <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
+              <line x1="18" y1="6" x2="6" y2="18"></line>
+              <line x1="6" y1="6" x2="18" y2="18"></line>
+            </svg>
+          </button>
+        </div>
+        
+        <nav class="drawer-sidebar__nav">
+          <RouterLink to="/memories" class="drawer-sidebar__link" @click="isDrawerOpen = false">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+              <path d="M4 6h16M4 12h16M4 18h10" />
+            </svg>
+            <span>{{ t('nav.memories') }}</span>
+          </RouterLink>
+          <RouterLink to="/memories/new" class="drawer-sidebar__link" @click="isDrawerOpen = false">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+              <path d="M12 5v14M5 12h14" />
+            </svg>
+            <span>{{ t('nav.create') }}</span>
+          </RouterLink>
+          <RouterLink to="/memories/graph" class="drawer-sidebar__link" @click="isDrawerOpen = false">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+              <circle cx="12" cy="12" r="2" fill="currentColor" />
+              <circle cx="5"  cy="6"  r="1.4" fill="currentColor" />
+              <circle cx="19" cy="7"  r="1.2" fill="currentColor" />
+              <circle cx="6"  cy="18" r="1.2" fill="currentColor" />
+              <circle cx="18" cy="17" r="1.4" fill="currentColor" />
+              <path d="M12 12L5 6M12 12l7-5M12 12l-6 6M12 12l6 5" />
+            </svg>
+            <span>{{ t('nav.graph') }}</span>
+          </RouterLink>
+          <RouterLink to="/memories/timeline" class="drawer-sidebar__link" @click="isDrawerOpen = false">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+              <path d="M12 3v18" />
+              <circle cx="12" cy="7"  r="2" fill="currentColor" />
+              <circle cx="12" cy="13" r="2" fill="currentColor" />
+              <circle cx="12" cy="19" r="2" fill="currentColor" />
+              <path d="M14 7h4M6 13h4M14 19h4" />
+            </svg>
+            <span>{{ t('nav.timeline') }}</span>
+          </RouterLink>
+          <RouterLink to="/memories/atlas" class="drawer-sidebar__link" @click="isDrawerOpen = false">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+              <circle cx="12" cy="12" r="9" />
+              <path d="M3 12h18M12 3c3 3 3 15 0 18M12 3c-3 3-3 15 0 18" />
+            </svg>
+            <span>{{ t('nav.atlas') }}</span>
+          </RouterLink>
+          <RouterLink to="/resonance" class="drawer-sidebar__link" @click="isDrawerOpen = false">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+              <circle cx="9" cy="12" r="5" />
+              <circle cx="15" cy="12" r="5" />
+            </svg>
+            <span>{{ t('nav.resonance') }}</span>
+          </RouterLink>
+          <RouterLink to="/chat" class="drawer-sidebar__link" @click="isDrawerOpen = false">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
+            </svg>
+            <span>{{ t('nav.chat') }}</span>
+          </RouterLink>
+          <RouterLink v-if="auth.isAdmin" to="/admin" class="drawer-sidebar__link drawer-sidebar__link--admin" @click="isDrawerOpen = false">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round">
+              <path d="M12 3 4 6v6c0 4.5 3.4 8.4 8 9 4.6-.6 8-4.5 8-9V6l-8-3z" />
+              <path d="m9 12 2.2 2.2L15 10.5" />
+            </svg>
+            <span>{{ t('admin.nav.entry') }}</span>
+          </RouterLink>
+        </nav>
+      </aside>
+    </Transition>
+  </Teleport>
 </template>
 
 <style scoped>
 .app-header {
   position: sticky;
   top: 0;
-  z-index: 40;
+  z-index: var(--z-header);
   border-bottom: 1px solid transparent;
   background: rgba(8, 10, 14, 0.0);
   backdrop-filter: blur(0);
@@ -261,7 +368,7 @@ function switchLocale(l: Locale) {
   justify-content: space-between;
   /* v11：缩短 gap 让 nav 在中屏上有更多展示空间；不再 flex-wrap，
      避免 nav 被挤到第二行后内容被遮挡。 */
-  gap: 14px;
+  gap: 10px;
   padding: 10px 0;
   /* 让 brand / nav / actions 三块都不能撑爆容器 — flex 容器整体 min-width: 0
      允许子项各自缩 / 内部滚动。 */
@@ -302,14 +409,13 @@ function switchLocale(l: Locale) {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  max-width: 200px;
   min-width: 0;
 }
 
 .brand__copy strong {
   font-family: var(--font-display);
   /* v13：brand 主标题；副标题已删除（template 里不再渲染）。 */
-  font-size: 1.32rem;
+  font-size: 1.2rem;
   font-weight: 800;
   letter-spacing: -0.01em;
   background-image: linear-gradient(
@@ -345,8 +451,15 @@ function switchLocale(l: Locale) {
   flex: 0 1 auto;
   min-width: 0;
   max-width: 100%;
-  overflow: hidden;
+  overflow-x: auto;
+  overflow-y: hidden;
   flex-shrink: 1;
+  /* 隐藏滚动条 */
+  -ms-overflow-style: none;  /* IE and Edge */
+  scrollbar-width: none;  /* Firefox */
+}
+.app-nav::-webkit-scrollbar {
+  display: none; /* Chrome, Safari, Opera */
 }
 
 /* v14：横向滚动兜底 — 当所有 link 加起来 + icon + padding 仍超过容器时
@@ -368,13 +481,13 @@ function switchLocale(l: Locale) {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  gap: 7px;
-  padding: 9px 14px;
+  gap: 6px;
+  padding: 8px 12px;
   border-radius: var(--radius-full);
   /* v12：nav 用纯色，明确高对比；v13 略收一点，0.98rem 配 750 重，
      在中屏 1280-1440 区间能把 8 个完整 link 全展开。 */
   color: rgba(245, 248, 252, 0.92);
-  font-size: 0.98rem;
+  font-size: 0.92rem;
   font-weight: 750;
   letter-spacing: 0.005em;
   transition: background-color 180ms ease, color 180ms ease, padding 180ms ease;
@@ -386,6 +499,10 @@ function switchLocale(l: Locale) {
   background-clip: initial;
   -webkit-text-fill-color: currentColor;
   animation: none;
+
+  /* 覆盖 style.css 里的 overflow: hidden，确保文字即使溢出也能显示，不被 ellipsis 截断 */
+  overflow: visible;
+  text-overflow: clip;
 }
 
 .app-nav__link span {
@@ -516,51 +633,169 @@ function switchLocale(l: Locale) {
    6.  < 720px：最小布局，locale-switch 也藏起来
    ============================================================== */
 
-/* 大屏 1600px 以下：限制 brand + nav 文字长度，避免 "Mnemoscape" / "Chat & Discovery" 溢出 */
-@media (max-width: 1600px) {
-  .app-nav__link {
-    padding: 8px 9px;
-    gap: 5px;
-  }
-  .app-nav__link span {
-    /* 限制英文 / 中文混合时单 link 文字宽度，避免整体超出容器。
-       max-width: 8ch 配合 text-overflow: ellipsis 让 "Chat & Discovery" 变成 "Chat & D…"
-       而非 "Chat & Disc"（半字截断）。 */
-    max-width: 8ch;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    display: inline-block;
-  }
-}
-
-/* v15：1600px 以下把 brand 文字藏掉（保留品牌图标） ——
-   7 个完整 nav link 在中屏占 700+ px，加上 brand 文字 140+ px 就 850+ px，
-   再加 locale/user-chip/按钮会顶爆 1280-1600 窗口。现在 1600 之后即让位给 nav。 */
+/* 1600px 以下：把 brand 文字藏掉，腾出空间 */
 @media (max-width: 1600px) {
   .brand__copy {
     display: none;
   }
 }
 
-/* 中屏 1280px：nav 折叠为 icon-only，brand 仍然仅图标 */
-@media (max-width: 1280px) {
-  .app-nav__link {
-    padding: 9px 11px;
-    gap: 0;
+/* 1480px 以下：主导航栏折叠为 Hamburger Menu 按钮 */
+@media (max-width: 1480px) {
+  .app-nav {
+    display: none !important;
   }
-  .app-nav__link span {
-    display: none;
-    max-width: none;
+  .hamburger-btn {
+    display: flex;
   }
-  .app-nav__link svg {
-    width: 20px;
-    height: 20px;
-    opacity: 0.92;
-  }
-  .app-nav__link.router-link-active svg,
-  .app-nav__link.router-link-exact-active svg {
-    opacity: 1;
-  }
+}
+
+/* Hamburger 按钮 */
+.hamburger-btn {
+  display: none;
+  align-items: center;
+  justify-content: center;
+  width: 38px;
+  height: 38px;
+  border-radius: var(--radius-full);
+  border: 1px solid var(--border);
+  background: rgba(14, 17, 22, 0.45);
+  color: var(--text-soft);
+  cursor: pointer;
+  transition: all 180ms ease;
+  flex-shrink: 0;
+}
+
+.hamburger-btn:hover {
+  background: rgba(255, 255, 255, 0.06);
+  border-color: rgba(255, 255, 255, 0.2);
+  color: var(--primary);
+}
+
+/* 响应式滑出式侧边栏 Drawer */
+.drawer-backdrop {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100vw;
+  height: 100vh;
+  background: rgba(0, 0, 0, 0.65);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  z-index: var(--z-drawer-backdrop);
+}
+
+.drawer-sidebar {
+  position: fixed;
+  top: 0;
+  right: 0;
+  width: 290px;
+  max-width: 85vw;
+  height: 100vh;
+  background: rgba(10, 12, 16, 0.95);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border-left: 1px solid var(--border);
+  box-shadow: -10px 0 30px rgba(0, 0, 0, 0.65);
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+  z-index: var(--z-drawer);
+  box-sizing: border-box;
+}
+
+.drawer-sidebar__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+  padding-bottom: 16px;
+}
+
+.drawer-sidebar__logo {
+  font-family: var(--font-display);
+  font-size: 1.22rem;
+  font-weight: 800;
+  letter-spacing: -0.01em;
+  background: linear-gradient(135deg, var(--primary), #b6f077);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+}
+
+.drawer-sidebar__close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: var(--radius-full);
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.02);
+  color: var(--text-soft);
+  cursor: pointer;
+  transition: all 180ms ease;
+}
+
+.drawer-sidebar__close:hover {
+  background: rgba(255, 255, 255, 0.08);
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.drawer-sidebar__nav {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex-grow: 1;
+  overflow-y: auto;
+}
+
+.drawer-sidebar__link {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  border-radius: var(--radius-md);
+  color: rgba(245, 248, 252, 0.82);
+  font-size: 0.95rem;
+  font-weight: 700;
+  text-decoration: none;
+  transition: all 180ms ease;
+  background-image: none;
+  -webkit-text-fill-color: currentColor;
+}
+
+.drawer-sidebar__link:hover {
+  background: rgba(255, 255, 255, 0.04);
+  color: #fff;
+}
+
+.drawer-sidebar__link.router-link-active {
+  color: #052017;
+  -webkit-text-fill-color: #052017;
+  background: linear-gradient(135deg, var(--primary), #b6f077);
+  box-shadow: 0 4px 12px rgba(54, 216, 180, 0.28);
+}
+
+/* Transitions */
+.drawer-fade-enter-active,
+.drawer-fade-leave-active {
+  transition: opacity 200ms ease;
+}
+.drawer-fade-enter-from,
+.drawer-fade-leave-to {
+  opacity: 0;
+}
+
+.drawer-slide-enter-active,
+.drawer-slide-leave-active {
+  transition: transform 250ms cubic-bezier(0.16, 1, 0.3, 1);
+}
+.drawer-slide-enter-from,
+.drawer-slide-leave-to {
+  transform: translateX(100%);
 }
 
 /* 窄屏 960px：user-chip meta 隐藏，按钮文字隐藏 */
@@ -624,6 +859,7 @@ function switchLocale(l: Locale) {
   place-items: center;
   cursor: pointer;
   transition: all var(--duration-fast) var(--ease-out-quart);
+  flex-shrink: 0;
 }
 .theme-switch-trigger:hover {
   background: rgba(255, 255, 255, 0.06);
@@ -644,7 +880,7 @@ function switchLocale(l: Locale) {
   gap: 4px;
   box-shadow: 0 14px 40px rgba(0, 0, 0, 0.5);
   min-width: 140px;
-  z-index: 50;
+  z-index: var(--z-theme-switch);
 }
 .theme-menu-item {
   background: transparent;
