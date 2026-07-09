@@ -55,6 +55,11 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
         this.aiAssistant = aiAssistant;
     }
 
+    @jakarta.annotation.PreDestroy
+    void shutdown() {
+        aiExec.shutdownNow();
+    }
+
     // Jackson注解，用于控制JSON序列化、反序列化的行为
     @JsonIgnoreProperties(ignoreUnknown = true)
     private static class ChatPayload {

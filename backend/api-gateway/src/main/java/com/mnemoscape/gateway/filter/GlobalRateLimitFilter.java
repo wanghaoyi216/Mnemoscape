@@ -99,10 +99,12 @@ public class GlobalRateLimitFilter implements GlobalFilter, Ordered {
         return redisTemplate.execute(
                 rateLimitScript,
                 List.of(bucketKey),
-                String.valueOf(now),
-                String.valueOf(windowMs),
-                String.valueOf(config.limit()),
-                member
+                List.of(
+                        String.valueOf(now),
+                        String.valueOf(windowMs),
+                        String.valueOf(config.limit()),
+                        member
+                )
         )
         .next() // 取第一条返回
         .timeout(Duration.ofSeconds(2))

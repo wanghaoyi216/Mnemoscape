@@ -1,12 +1,15 @@
 package com.mnemoscape.ai.controller;
 
+import com.mnemoscape.ai.model.dto.VectorDeleteResponse;
+import com.mnemoscape.ai.model.dto.VectorIndexResponse;
+import com.mnemoscape.ai.model.dto.VectorSearchPublicResponse;
 import com.mnemoscape.ai.service.VectorIndexService;
 import com.mnemoscape.common.dto.ApiResponse;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
-import java.util.LinkedHashMap;
-import java.util.Map;
+import java.util.ArrayList;
+import java.util.List;
 
 /**
  * 记忆向量索引端点 — 供 memory-service 在记忆创建 / 重建 / 删除时调用。
@@ -45,17 +48,18 @@ public class VectorIndexController {
      * userId 优先取 body（memory-service 已知真实归属），否则回退 X-User-Id 头。
      */
     @PostMapping("/index")
-    public ResponseEntity<ApiResponse<Map<String, Object>>> index(
+    public ResponseEntity<ApiResponse<VectorIndexResponse>> index(
             @RequestBody IndexRequest req,
             @RequestHeader(value = "X-User-Id", required = false) String headerUserId) {
         String userId = (req.userId != null && !req.userId.isBlank()) ? req.userId : headerUserId;
         boolean ok = indexService.index(req.memoryId, userId, req.title,
                 req.location, req.year, req.description, req.privacy);
-        Map<String, Object> data = new LinkedHashMap<>();
-        data.put("memoryId", req.memoryId);
-        data.put("indexed", ok);
-        data.put("ready", indexService.isReady());
-        return ResponseEntity.ok(ApiResponse.success(data));
+        VectorIndexResponse body = VectorIndexResponse.builder()
+                .memoryId(req.memoryId)
+                .indexed(ok)
+                .ready(indexService.isReady())
+                .build();
+        return ResponseEntity.ok(ApiResponse.success(body));
     }
 
     /** 共鸣大厅公共向量检索请求体。 */
@@ -70,40 +74,45 @@ public class VectorIndexController {
      * 返回 {@code available=false} 时调用方应降级到关键词打分。
      */
     @PostMapping("/search-public")
-    public ResponseEntity<ApiResponse<Map<String, Object>>> searchPublic(
+    public ResponseEntity<ApiResponse<VectorSearchPublicResponse>> searchPublic(
             @RequestBody PublicSearchRequest req) {
         int topK = req.topK == null ? 8 : req.topK;
         var hits = indexService.searchPublic(req.seedText, req.excludeUserId, topK);
-        Map<String, Object> data = new LinkedHashMap<>();
+        VectorSearchPublicResponse body;
         if (hits == null) {
-            data.put("available", false);
-            data.put("hits", java.util.List.of());
+            body = VectorSearchPublicResponse.builder()
+                    .available(false)
+                    .hits(List.of())
+                    .build();
         } else {
-            data.put("available", true);
-            java.util.List<Map<String, Object>> out = new java.util.ArrayList<>();
+            List<VectorSearchPublicResponse.Hit> out = new ArrayList<>();
             for (var h : hits) {
-                Map<String, Object> m = new LinkedHashMap<>();
-                m.put("memoryId", h.memoryId);
-                m.put("userId", h.userId);
-                m.put("title", h.title);
-                m.put("location", h.location);
-                m.put("year", h.year);
-                m.put("snippet", h.snippet);
-                m.put("score", h.score);
-                out.add(m);
+                out.add(VectorSearchPublicResponse.Hit.builder()
+                        .memoryId(h.memoryId)
+                        .userId(h.userId)
+                        .title(h.title)
+                        .location(h.location)
+                        .year(h.year)
+                        .snippet(h.snippet)
+                        .score(h.score)
+                        .build());
             }
-            data.put("hits", out);
+            body = VectorSearchPublicResponse.builder()
+                    .available(true)
+                    .hits(out)
+                    .build();
         }
-        return ResponseEntity.ok(ApiResponse.success(data));
+        return ResponseEntity.ok(ApiResponse.success(body));
     }
 
     /** 删除一条记忆向量。 */
     @DeleteMapping("/index/{memoryId}")
-    public ResponseEntity<ApiResponse<Map<String, Object>>> delete(@PathVariable String memoryId) {
+    public ResponseEntity<ApiResponse<VectorDeleteResponse>> delete(@PathVariable String memoryId) {
         boolean ok = indexService.delete(memoryId);
-        Map<String, Object> data = new LinkedHashMap<>();
-        data.put("memoryId", memoryId);
-        data.put("deleted", ok);
-        return ResponseEntity.ok(ApiResponse.success(data));
+        VectorDeleteResponse body = VectorDeleteResponse.builder()
+                .memoryId(memoryId)
+                .deleted(ok)
+                .build();
+        return ResponseEntity.ok(ApiResponse.success(body));
     }
 }

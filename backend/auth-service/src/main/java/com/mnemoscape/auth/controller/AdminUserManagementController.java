@@ -133,6 +133,9 @@ public class AdminUserManagementController {
             @PathVariable String userId,
             HttpServletRequest req) {
         String callerId = req.getHeader("X-User-Id");
+        if (callerId == null || callerId.isBlank()) {
+            throw BizException.unauthorized();
+        }
         adminService.deleteUser(userId, callerId);
         logAccess(req, "/api/v1/admin/users-management/" + userId, "deleted", 200);
         return ResponseEntity.ok(ApiResponse.success("Deleted", null));
@@ -152,6 +155,9 @@ public class AdminUserManagementController {
             throw new BizException(400, "BATCH_TOO_LARGE");
         }
         String callerId = req.getHeader("X-User-Id");
+        if (callerId == null || callerId.isBlank()) {
+            throw BizException.unauthorized();
+        }
         AdminUserManagementService.BatchDeleteResult result = adminService.batchDelete(ids, callerId);
         Map<String, Object> out = new LinkedHashMap<>();
         out.put("deleted", result.deleted());

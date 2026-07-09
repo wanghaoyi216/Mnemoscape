@@ -70,8 +70,8 @@ class SseSleepCadenceExplorationTest {
                         "nvapi-placeholder-set-real-key-via-env-for-real-ai-calls");
         VisionDescriber visionDescriber = new VisionDescriber(props, env, emptyProvider(), "https://integrate.api.nvidia.com");
         MilvusSearchTool milvusTool = new MilvusSearchTool(null, null, null, null);
-        ChatReasoner reasoner = new ChatReasoner(builder, streamingBuilder, props, env, visionDescriber, milvusTool, emptyProvider(), "https://integrate.api.nvidia.com");
-        ChatController controller = new ChatController(reasoner, null);
+        ChatReasoner reasoner = new ChatReasoner(builder, streamingBuilder, props, env, visionDescriber, milvusTool, emptyProvider(), null, null, "https://integrate.api.nvidia.com");
+        ChatController controller = new ChatController(reasoner, null, null);
 
         AiChatRequest req = new AiChatRequest();
         req.setQuestion("帮我整理本月的情绪轨迹");

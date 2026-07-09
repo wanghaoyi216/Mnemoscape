@@ -87,7 +87,7 @@ public class AssetService {
             invalidateListCache();
             return objectName;
         } catch (Exception e) {
-            throw new RuntimeException("Upload failed", e);
+            throw BizException.internalError("Upload failed", e);
         }
     }
 
@@ -111,7 +111,7 @@ public class AssetService {
             invalidateListCache();
             return objectName;
         } catch (Exception e) {
-            throw new RuntimeException("Upload failed", e);
+            throw BizException.internalError("Upload failed", e);
         }
     }
 
@@ -125,7 +125,7 @@ public class AssetService {
         } catch (ErrorResponseException ex) {
             throw BizException.notFound("Asset", objectName);
         } catch (Exception e) {
-            throw new RuntimeException("Download failed", e);
+            throw BizException.internalError("Download failed", e);
         }
     }
 
@@ -139,7 +139,7 @@ public class AssetService {
                     .expiry(properties.getPresignedTtlSeconds(), TimeUnit.SECONDS)
                     .build());
         } catch (Exception e) {
-            throw new RuntimeException("Failed to generate URL", e);
+            throw BizException.internalError("Failed to generate URL", e);
         }
     }
 
@@ -153,7 +153,7 @@ public class AssetService {
             log.info("Deleted: {}", objectName);
             invalidateListCache();
         } catch (Exception e) {
-            throw new RuntimeException("Delete failed", e);
+            throw BizException.internalError("Delete failed", e);
         }
     }
 
@@ -579,7 +579,7 @@ public class AssetService {
                         .bucket(properties.getBucket()).build());
             }
         } catch (Exception e) {
-            throw new RuntimeException("Bucket check failed", e);
+            throw BizException.internalError("Bucket check failed", e);
         }
     }
 }

@@ -1,7 +1,5 @@
 package com.mnemoscape.common.config;
 
-import io.lettuce.core.ClientOptions;
-import io.lettuce.core.SocketOptions;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnClass;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnMissingBean;

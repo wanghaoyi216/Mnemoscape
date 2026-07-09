@@ -50,11 +50,15 @@ public class ReActController {
 
     private final ChatReasoner reasoner;
     private final ToolRegistry toolRegistry;
+    private final reactor.core.scheduler.Scheduler aiBlockingScheduler;
     private final ObjectMapper json = new ObjectMapper();
 
-    public ReActController(ChatReasoner reasoner, ToolRegistry toolRegistry) {
+    public ReActController(ChatReasoner reasoner, ToolRegistry toolRegistry,
+                           @org.springframework.beans.factory.annotation.Qualifier("aiBlockingScheduler")
+                           reactor.core.scheduler.Scheduler aiBlockingScheduler) {
         this.reasoner = reasoner;
         this.toolRegistry = toolRegistry;
+        this.aiBlockingScheduler = aiBlockingScheduler;
     }
 
     /**
@@ -170,7 +174,7 @@ public class ReActController {
             // 在弹性线程上订阅（ChatReasoner 的 streamReActAnswer 内部已用
             // boundedElastic，但这里再保险一次，避免栈帧卡在调用线程）
             List<ChatReasoner.ReActEvent> events = flux
-                    .subscribeOn(reactor.core.scheduler.Schedulers.boundedElastic())
+                    .subscribeOn(aiBlockingScheduler)
                     .collectList()
                     .block(java.time.Duration.ofSeconds(45));
             if (events != null) {

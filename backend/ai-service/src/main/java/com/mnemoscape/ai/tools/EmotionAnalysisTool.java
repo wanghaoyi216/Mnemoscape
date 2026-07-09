@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.mnemoscape.ai.config.AiUpstreamProperties;
+import com.mnemoscape.ai.exception.AiUpstreamException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.ai.model.function.FunctionCallback;
@@ -131,7 +132,8 @@ public class EmotionAnalysisTool {
 
         HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
         if (response.statusCode() != 200) {
-            throw new RuntimeException("HTTP " + response.statusCode() + ": " + response.body());
+            throw new AiUpstreamException(AiUpstreamException.Reason.UPSTREAM_ERROR,
+                    "HTTP " + response.statusCode() + ": " + response.body());
         }
 
         JsonNode root = json.readTree(response.body());

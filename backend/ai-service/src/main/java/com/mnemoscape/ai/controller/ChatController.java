@@ -2,10 +2,12 @@ package com.mnemoscape.ai.controller;
 
 import com.mnemoscape.ai.exception.AiUpstreamException;
 import com.mnemoscape.ai.model.dto.AiChatRequest;
+import com.mnemoscape.ai.model.dto.AiChatResponse;
 import com.mnemoscape.ai.service.ChatReasoner;
 import com.mnemoscape.ai.service.ReActController;
 import com.mnemoscape.ai.agent.DynamicWorkflowEngine;
 import com.mnemoscape.common.dto.ApiResponse;
+import reactor.core.scheduler.Scheduler;
 import reactor.core.scheduler.Schedulers;
 import jakarta.annotation.PreDestroy;
 import jakarta.validation.Valid;
@@ -53,6 +55,7 @@ public class ChatController {
     private final ChatReasoner reasoner;
     private final ReActController reactController;
     private final DynamicWorkflowEngine workflowEngine;
+    private final Scheduler aiBlockingScheduler;
 
     /** 共享调度器：在视觉前置阻塞 / 上游首字延迟期间发 SSE 注释帧 :keepalive，
      *  防止前端浏览器 / 反向代理 / 开发服务器把"无任何字节流出"的 SSE 当死连接 reset。
@@ -78,12 +81,14 @@ public class ChatController {
                 t.setDaemon(true);
                 return t;
             },
-            new java.util.concurrent.ThreadPoolExecutor.CallerRunsPolicy());
+            new java.util.concurrent.ThreadPoolExecutor.DiscardPolicy()); // 降级策略：队列满丢任务，plan 是可选增强，不能阻塞 servlet 线程
 
-    public ChatController(ChatReasoner reasoner, ReActController reactController, DynamicWorkflowEngine workflowEngine) {
+    public ChatController(ChatReasoner reasoner, ReActController reactController, DynamicWorkflowEngine workflowEngine,
+                          @org.springframework.beans.factory.annotation.Qualifier("aiBlockingScheduler") Scheduler aiBlockingScheduler) {
         this.reasoner = reasoner;
         this.reactController = reactController;
         this.workflowEngine = workflowEngine;
+        this.aiBlockingScheduler = aiBlockingScheduler;
     }
 
     @PreDestroy
@@ -93,19 +98,18 @@ public class ChatController {
     }
 
     @PostMapping(consumes = MediaType.APPLICATION_JSON_VALUE)
-    public ResponseEntity<ApiResponse<Map<String, Object>>> chatOnce(
+    public ResponseEntity<ApiResponse<AiChatResponse>> chatOnce(
             @Valid @RequestBody AiChatRequest request,
             jakarta.servlet.http.HttpServletRequest http) {
         // 通过网关 X-User-Id 头取 caller，让 reasoner 能跑强制 RAG（关键词召回当前用户记忆）
         String userId = http.getHeader("X-User-Id");
-        Map<String, Object> body = buildPayload(request);
         String answer;
         if (request.isReAct()) {
             answer = generateReActAnswer(request, userId);
         } else {
             answer = reasoner.generateAnswer(request, userId);
         }
-        body.put("answer", answer);
+        AiChatResponse body = buildChatResponse(request, answer);
         return ResponseEntity.ok(ApiResponse.success(body));
     }
 
@@ -151,6 +155,29 @@ public class ChatController {
             body.put("attachment_count", request.getImages().size());
         }
         return body;
+    }
+
+    /**
+     * 为 chatOnce 同步路径构建 AiChatResponse（与 stream 路径的 Map payload 平行）。
+     * 字段逐字对应当前 Map 的 key，可选字段仅当条件满足时设值，
+     * 依赖 {@link com.fasterxml.jackson.annotation.JsonInclude} NON_NULL 序列化等价原 Map。
+     */
+    private AiChatResponse buildChatResponse(AiChatRequest request, String answer) {
+        boolean zh = request.getLocale() == null || request.getLocale().startsWith("zh");
+        ChatReasoner.Intent intent = reasoner.classify(request.getQuestion()); // 意图识别
+        AiChatResponse.AiChatResponseBuilder builder = AiChatResponse.builder()
+                .intent(intent.name().toLowerCase())
+                .traceId(UUID.randomUUID().toString())
+                .answer(answer); // 拼接VO
+        if (intent == ChatReasoner.Intent.PLAN) {
+            builder.plan(reasoner.buildPlan(request.getQuestion(), zh));
+        }
+        if (reasoner.hasImages(request)) {
+            builder.vision_used(true)
+                   .vision_model(reasoner.getVisionModel())
+                   .attachment_count(request.getImages().size());
+        }
+        return builder.build();
     }
 
     /**
@@ -210,10 +237,12 @@ public class ChatController {
                     java.util.List<String> dyn = reasoner.generateDynamicPlan(
                             request.getQuestion(), zh, userId);
                     if (dyn != null && !dyn.isEmpty()) {
-                        emitter.send(SseEmitter.event().name("plan_update").data(Map.of(
-                                "plan", dyn,
-                                "source", "llm",
-                                "requestId", requestId)));
+                        synchronized (emitter) {
+                            emitter.send(SseEmitter.event().name("plan_update").data(Map.of(
+                                    "plan", dyn,
+                                    "source", "llm",
+                                    "requestId", requestId)));
+                        }
                     }
                 } catch (Exception e) {
                     log.debug("[ChatController] plan_update emit failed (client gone?): {}", e.getMessage());
@@ -444,7 +473,7 @@ public class ChatController {
         }, 5, 5, TimeUnit.SECONDS);
 
         Disposable disposable = workflowEngine.executeWorkflow(request, userId, requestId)
-                .subscribeOn(Schedulers.boundedElastic())
+                .subscribeOn(aiBlockingScheduler)
                 .subscribe(
                         evt -> {
                             if (evt == null) return;

@@ -215,6 +215,7 @@ resilience4j:
           - java.io.IOException
           - java.util.concurrent.TimeoutException
           - org.springframework.web.client.ResourceAccessException
+          - feign.RetryableException
           - feign.FeignException.ServiceUnavailable
     instances:
       ai-service:

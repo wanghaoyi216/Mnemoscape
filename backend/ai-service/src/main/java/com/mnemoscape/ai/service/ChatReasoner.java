@@ -10,6 +10,7 @@ import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 import reactor.core.publisher.Flux;
 import reactor.core.publisher.Mono;
+import reactor.core.scheduler.Scheduler;
 import reactor.core.scheduler.Schedulers;
 
 import java.util.ArrayList;
@@ -215,6 +216,7 @@ public class ChatReasoner {
     private final org.springframework.beans.factory.ObjectProvider<AiCacheService> aiCacheProvider;
     private final IntentRecognitionAgent intentAgent;
     private final RoutingAgent routingAgent;
+    private final Scheduler aiBlockingScheduler;
 
     public ChatReasoner(@Qualifier("mnemoscapeChatClientBuilder") ChatClient.Builder builder,
                         @Qualifier("mnemoscapeStreamingChatClientBuilder") ChatClient.Builder streamingBuilder,
@@ -225,6 +227,7 @@ public class ChatReasoner {
                         org.springframework.beans.factory.ObjectProvider<AiCacheService> aiCacheProvider,
                         IntentRecognitionAgent intentAgent,
                         RoutingAgent routingAgent,
+                        @Qualifier("aiBlockingScheduler") Scheduler aiBlockingScheduler,
                         @org.springframework.beans.factory.annotation.Value("${spring.ai.openai.base-url:https://integrate.api.nvidia.com}")
                         String baseUrl) {
         this.chatClient = builder.build();
@@ -236,6 +239,7 @@ public class ChatReasoner {
         this.aiCacheProvider = aiCacheProvider;
         this.intentAgent = intentAgent;
         this.routingAgent = routingAgent;
+        this.aiBlockingScheduler = aiBlockingScheduler;
         this.baseUrl = baseUrl;
         this.httpClient = java.net.http.HttpClient.newBuilder()
                 .connectTimeout(java.time.Duration.ofSeconds(6))
@@ -511,7 +515,8 @@ public class ChatReasoner {
             int status = resp.statusCode();
             if (status >= 400) {
                 log.warn("[ChatReasoner] generateAnswer API error: HTTP {} {}", status, resp.body());
-                throw new RuntimeException("NVIDIA API returned HTTP " + status + ": " + resp.body());
+                throw new AiUpstreamException(AiUpstreamException.Reason.UPSTREAM_ERROR,
+                        "NVIDIA API returned HTTP " + status + ": " + resp.body());
             }
             
             com.fasterxml.jackson.databind.JsonNode rootNode = json.readTree(resp.body());
@@ -522,7 +527,8 @@ public class ChatReasoner {
                     return content.trim();
                 }
             }
-            throw new RuntimeException("Empty response body from NVIDIA API");
+            throw new AiUpstreamException(AiUpstreamException.Reason.UPSTREAM_ERROR,
+                    "Empty response body from NVIDIA API");
         } catch (AiUpstreamException e) {
             throw e;
         } catch (Exception e) {
@@ -569,10 +575,10 @@ public class ChatReasoner {
 
         // 1) 异步并行执行：将 RAG 检索与多模态视觉前置包装为 Mono，利用 Scheduler 并在后台并发执行
         Mono<String> ragMono = Mono.fromCallable(() -> buildRagPrefix(req, userId, safeTools))
-                .subscribeOn(Schedulers.boundedElastic());
+                .subscribeOn(aiBlockingScheduler);
 
         Mono<String> visionMono = Mono.fromCallable(() -> buildVisionPrefix(req, safeTools))
-                .subscribeOn(Schedulers.boundedElastic());
+                .subscribeOn(aiBlockingScheduler);
 
         // 2) 利用 Mono.zip 将两个异步前置操作并发拉取，全部就绪后再触发 streamingChatClient 推流
         return Mono.zip(ragMono, visionMono)
@@ -598,7 +604,7 @@ public class ChatReasoner {
                         return Flux.error(classify(e));
                     }
                 })
-                .subscribeOn(Schedulers.boundedElastic());
+                .subscribeOn(aiBlockingScheduler);
     }
 
     /**

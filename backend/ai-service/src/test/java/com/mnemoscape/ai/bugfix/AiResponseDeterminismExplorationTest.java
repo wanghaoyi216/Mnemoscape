@@ -79,7 +79,7 @@ class AiResponseDeterminismExplorationTest {
         }
         VisionDescriber visionDescriber = new VisionDescriber(props, env, emptyProvider(), "https://integrate.api.nvidia.com");
         MilvusSearchTool milvusTool = new MilvusSearchTool(null, null, null, null);
-        return new ChatReasoner(builder, streamingBuilder, props, env, visionDescriber, milvusTool, emptyProvider(), "https://integrate.api.nvidia.com");
+        return new ChatReasoner(builder, streamingBuilder, props, env, visionDescriber, milvusTool, emptyProvider(), null, null, "https://integrate.api.nvidia.com");
     }
 
     @SuppressWarnings("unchecked")

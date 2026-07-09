@@ -63,6 +63,7 @@ public class AuthService {
         return buildAuthResponse(user);
     }
 
+    @Transactional(readOnly = true)
     public AuthResponse login(LoginRequest request) {
         String username = normalizeUsername(request.getUsername());
         // Constant-message error to avoid email/username enumeration.

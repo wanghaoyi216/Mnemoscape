@@ -5,6 +5,7 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.mnemoscape.ai.exception.AiUpstreamException;
+import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -21,8 +22,8 @@ import java.time.Duration;
  */
 public abstract class BaseAgent {
     protected final Logger log = LoggerFactory.getLogger(getClass());
-    protected final HttpClient httpClient;
-    protected final ObjectMapper json = new ObjectMapper();
+    protected final HttpClient httpClient; // 主要是为了兼容英伟达的视觉模型
+    protected final ObjectMapper json = new ObjectMapper(); // 序列化工具
 
     protected final String baseUrl;
     protected final String apiKey;
@@ -42,9 +43,15 @@ public abstract class BaseAgent {
     /** 获取智能体独特的系统提示词 */
     public abstract String getSystemPrompt();
 
-    /** 执行智能体推理 */
+    /** 执行智能体推理（熔断保护：上游持续故障时走 fallback 返回空串，避免拖垮调用方） */
+    @CircuitBreaker(name = "deepseek", fallbackMethod = "executeFallback")
     public String execute(String userPrompt) {
         return execute(userPrompt, 0.7, 4096);
+    }
+
+    private String executeFallback(String userPrompt, Throwable t) {
+        log.warn("[circuit-breaker] Agent {} execute fallback: {}", getClass().getSimpleName(), t.toString());
+        return "";
     }
 
     public String execute(String userPrompt, double temperature, int maxTokens) {
@@ -53,7 +60,7 @@ public abstract class BaseAgent {
                     "NVIDIA_API_KEY is not configured for Agent: " + getClass().getSimpleName());
         }
         try {
-            ObjectNode payload = json.createObjectNode();
+            ObjectNode payload = json.createObjectNode(); // Jackson对JSON的内存表示，用于手动拼接JSON
             payload.put("model", getModelName());
             
             ArrayNode messages = payload.putArray("messages");
@@ -73,8 +80,9 @@ public abstract class BaseAgent {
                 extraBody.put("thinking_budget", -1);
             }
             
-            String requestBody = json.writeValueAsString(payload);
-            
+            String requestBody = json.writeValueAsString(payload); // 序列化为字符串
+
+            // 发送给英伟达模型的请求信息
             HttpRequest httpReq = HttpRequest.newBuilder()
                     .uri(URI.create(baseUrl.replaceAll("/+$", "") + "/v1/chat/completions"))
                     .timeout(Duration.ofSeconds(30))
@@ -83,26 +91,33 @@ public abstract class BaseAgent {
                     .header("Content-Type", "application/json")
                     .POST(HttpRequest.BodyPublishers.ofString(requestBody, StandardCharsets.UTF_8))
                     .build();
-            
+
+            // 获取模型响应
             HttpResponse<String> resp = httpClient.send(httpReq, 
                     HttpResponse.BodyHandlers.ofString(StandardCharsets.UTF_8));
             
             int status = resp.statusCode();
             if (status >= 400) {
                 log.warn("[{}] generate API error: HTTP {} {}", getClass().getSimpleName(), status, resp.body());
-                throw new RuntimeException("NVIDIA API returned HTTP " + status + ": " + resp.body());
+                throw new AiUpstreamException(AiUpstreamException.Reason.UPSTREAM_ERROR,
+                        "NVIDIA API returned HTTP " + status + ": " + resp.body());
             }
-            
+
+            // 反序列化解析模型返回内容
             JsonNode rootNode = json.readTree(resp.body());
             JsonNode choices = rootNode.path("choices");
             if (choices.isArray() && choices.size() > 0) {
                 String content = choices.get(0).path("message").path("content").asText("");
                 return content.trim();
             }
-            throw new RuntimeException("Empty response body from NVIDIA API");
+            throw new AiUpstreamException(AiUpstreamException.Reason.UPSTREAM_ERROR,
+                    "Empty response body from NVIDIA API");
+        } catch (AiUpstreamException e) {
+            throw e;
         } catch (Exception e) {
             log.error("[{}] execution failed: {}", getClass().getSimpleName(), e.getMessage());
-            throw new RuntimeException("Agent execution error: " + e.getMessage(), e);
+            throw new AiUpstreamException(AiUpstreamException.Reason.UNKNOWN,
+                    "Agent execution error: " + e.getMessage(), e);
         }
     }
 }

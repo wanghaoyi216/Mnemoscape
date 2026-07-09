@@ -13,6 +13,7 @@ import com.github.benmanes.caffeine.cache.CaffeineSpec;
 import com.mnemoscape.common.admin.cache.BypassOnFailureCacheManager;
 
 import org.springframework.cache.CacheManager;
+import org.springframework.cache.annotation.EnableCaching;
 import org.springframework.cache.caffeine.CaffeineCacheManager;
 import org.springframework.cache.support.CompositeCacheManager;
 import org.springframework.context.annotation.Bean;
@@ -65,6 +66,7 @@ import java.util.Map;
  * Redis-specific exception types, wrapping the Caffeine cache is harmless.
  */
 @Configuration
+@EnableCaching
 public class AdminCacheConfig {
 
     /** Cache name for the active-users aggregation endpoint (R6, R14.2). */

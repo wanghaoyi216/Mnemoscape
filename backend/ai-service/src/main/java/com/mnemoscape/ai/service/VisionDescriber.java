@@ -6,6 +6,7 @@ import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.mnemoscape.ai.config.AiUpstreamProperties;
 import com.mnemoscape.ai.exception.AiUpstreamException;
+import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -90,6 +91,7 @@ public class VisionDescriber {
      * @return 视觉模型给出的纯文本描述（不含 markdown / 列表）
      * @throws AiUpstreamException 主备模型均失败 / 缺 key / 超时
      */
+    @CircuitBreaker(name = "deepseek", fallbackMethod = "describeFallback")
     public String describe(List<String> imageUrls, boolean zh) {
         if (imageUrls == null || imageUrls.isEmpty()) {
             return "";
@@ -134,6 +136,11 @@ public class VisionDescriber {
                 throw classify(fallbackErr);
             }
         }
+    }
+
+    private String describeFallback(List<String> imageUrls, boolean zh, Throwable t) {
+        log.warn("[circuit-breaker] describe fallback: {}", t.toString());
+        return "";
     }
 
     /**
@@ -240,7 +247,8 @@ public class VisionDescriber {
             String snippet = responseJson.length() > 320
                     ? responseJson.substring(0, 320) + "..."
                     : responseJson;
-            throw new RuntimeException("Vision upstream error: HTTP " + status + " " + snippet);
+            throw new AiUpstreamException(AiUpstreamException.Reason.UPSTREAM_ERROR,
+                    "Vision upstream error: HTTP " + status + " " + snippet);
         }
 
         String content = extractContent(responseJson);

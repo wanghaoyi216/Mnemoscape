@@ -18,7 +18,7 @@ import org.springframework.context.annotation.Configuration;
  * 都不用重启服务。
  */
 @Configuration
-@RefreshScope
+@RefreshScope // 支持配置热更新
 @ConfigurationProperties(prefix = "mnemoscape.ai.upstream")
 public class AiUpstreamProperties {
 

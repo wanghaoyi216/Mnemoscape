@@ -687,7 +687,7 @@ public class MemoryService {
      * 命中率低且写后立即要看到，缓存收益不划算。
      */
     @org.springframework.cache.annotation.Cacheable(
-            value = "publicPool", key = "#excludeUserId + ':' + #limit")
+            value = "publicPool", key = "#excludeUserId + ':' + #limit", sync = true)
     public List<Memory> getPublicPool(String excludeUserId, int limit) {
         int safeLimit = Math.max(10, Math.min(limit, 500));
         return memoryRepository.findPublicPoolExcludingUser(

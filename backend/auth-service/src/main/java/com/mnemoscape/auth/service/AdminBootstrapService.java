@@ -182,7 +182,7 @@ public class AdminBootstrapService {
      *         {@code "promoted"} or {@code "already-admin"}.
      * @throws BizException 400/403/404 per the branch table above.
      */
-    @Transactional
+    @Transactional(rollbackFor = Exception.class)
     public RolePromotionResult promote(
             String targetUserId,
             String providedSecret,

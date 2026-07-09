@@ -101,7 +101,7 @@ public class AdminResonanceController {
             throw rex;
         } catch (Exception e) {
             responseStatus = 500;
-            throw new RuntimeException(e);
+            throw BizException.internalError("Admin resonance aggregation failed", e);
         } finally {
             writeAudit(req, ENDPOINT_PATH_OVERVIEW, queryHash, responseStatus, startNs);
         }
@@ -137,7 +137,7 @@ public class AdminResonanceController {
             throw rex;
         } catch (Exception e) {
             responseStatus = 500;
-            throw new RuntimeException(e);
+            throw BizException.internalError("Admin resonance aggregation failed", e);
         } finally {
             writeAudit(req, ENDPOINT_PATH_TOP, queryHash, responseStatus, startNs);
         }

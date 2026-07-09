@@ -11,6 +11,17 @@ spring:
     multipart:
       max-file-size: 100MB
       max-request-size: 100MB
+  data:
+    redis:
+      host: ${REDIS_HOST:100.66.166.46}
+      port: ${REDIS_PORT:6379}
+      timeout: 3s
+      lettuce:
+        pool:
+          max-active: 50
+          max-idle: 20
+          min-idle: 5
+          max-wait: 3s
   # @Async 线程池配置。Asset 服务异步处理图片压缩/缩略图生成等任务，
   # 有界队列 + CALLER_RUNS 背压，避免高并发上传时任务堆积 OOM。
   task:

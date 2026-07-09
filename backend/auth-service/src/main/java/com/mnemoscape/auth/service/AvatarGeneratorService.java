@@ -1,6 +1,7 @@
 package com.mnemoscape.auth.service;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
+import com.mnemoscape.common.exception.BizException;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -132,27 +133,27 @@ public class AvatarGeneratorService {
                 request, java.net.http.HttpResponse.BodyHandlers.ofString());
 
         if (response.statusCode() != 200) {
-            throw new RuntimeException("LLM API returned status " + response.statusCode());
+            throw new BizException(502, "LLM API returned status " + response.statusCode());
         }
 
         // 解析响应
         Map<?, ?> responseMap = objectMapper.readValue(response.body(), Map.class);
         List<?> choices = (List<?>) responseMap.get("choices");
         if (choices == null || choices.isEmpty()) {
-            throw new RuntimeException("LLM returned empty choices");
+            throw new BizException(502, "LLM returned empty choices");
         }
         Map<?, ?> firstChoice = (Map<?, ?>) choices.get(0);
         Map<?, ?> message = (Map<?, ?>) firstChoice.get("message");
         String content = (String) message.get("content");
 
         if (content == null || content.isBlank()) {
-            throw new RuntimeException("LLM returned empty content");
+            throw new BizException(502, "LLM returned empty content");
         }
 
         // 提取 JSON
         String jsonStr = extractFirstJsonObject(content);
         if (jsonStr == null) {
-            throw new RuntimeException("LLM did not return parseable JSON");
+            throw new BizException(502, "LLM did not return parseable JSON");
         }
 
         return parseLlmResult(jsonStr, selfDescription);

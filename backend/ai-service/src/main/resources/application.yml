@@ -33,6 +33,15 @@ spring:
           max-idle: 20
           min-idle: 5
           max-wait: 3s
+  cloud:
+    openfeign:
+      client:
+        config:
+          default:
+            connectTimeout: 3000
+            readTimeout: 15000
+          memory-service:
+            readTimeout: 20000
   neo4j:
     # 默认指向 workpc Neo4j；本机 dev 时设 NEO4J_HOST=localhost 即可
     uri: bolt://${NEO4J_HOST:100.66.166.46}:${NEO4J_PORT:7687}

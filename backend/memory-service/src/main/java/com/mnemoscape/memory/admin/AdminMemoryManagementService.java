@@ -11,6 +11,8 @@ import org.springframework.data.domain.Page;
 import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Sort;
 import org.springframework.data.jpa.domain.Specification;
+import org.springframework.cache.annotation.CacheEvict;
+import org.springframework.cache.annotation.Caching;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -74,6 +76,10 @@ public class AdminMemoryManagementService {
 
     /** 批量删除:清空 fragments / versions 后删除记忆。整个循环在同一事务。 */
     @Transactional
+    @Caching(evict = {
+            @CacheEvict(value = "publicPool", allEntries = true),
+            @CacheEvict(value = "memories", allEntries = true)
+    })
     public BatchDeleteResult batchDelete(List<String> ids) {
         int deleted = 0;
         List<String> failed = new ArrayList<>();
@@ -94,6 +100,10 @@ public class AdminMemoryManagementService {
 
     /** 批量更新隐私级别。业务校验(枚举合法)挪到此层。 */
     @Transactional
+    @Caching(evict = {
+            @CacheEvict(value = "publicPool", allEntries = true),
+            @CacheEvict(value = "memories", allEntries = true)
+    })
     public BatchUpdateResult batchUpdatePrivacy(List<String> ids, String privacy) {
         // 业务校验:privacyLevel 枚举合法性
         Memory.PrivacyLevel target = Memory.PrivacyLevel.valueOf(privacy.trim().toUpperCase());
@@ -114,6 +124,10 @@ public class AdminMemoryManagementService {
 
     /** 批量锁定 / 解锁。 */
     @Transactional
+    @Caching(evict = {
+            @CacheEvict(value = "publicPool", allEntries = true),
+            @CacheEvict(value = "memories", allEntries = true)
+    })
     public BatchUpdateResult batchLock(List<String> ids, Boolean locked) {
         int updated = 0;
         for (String id : ids) {
@@ -132,6 +146,10 @@ public class AdminMemoryManagementService {
 
     /** 删除单条:业务校验(存在性 404)挪到此层。 */
     @Transactional
+    @Caching(evict = {
+            @CacheEvict(value = "memories", key = "#id"),
+            @CacheEvict(value = "publicPool", allEntries = true)
+    })
     public void deleteOne(String id) {
         if (!memoryRepository.existsById(id)) {
             throw new BizException(404, "MEMORY_NOT_FOUND");
@@ -148,6 +166,10 @@ public class AdminMemoryManagementService {
 
     /** 行内编辑:单条更新隐私级别 / 锁定 / fadeLevel。body 字段全 optional。 */
     @Transactional
+    @Caching(evict = {
+            @CacheEvict(value = "memories", key = "#id"),
+            @CacheEvict(value = "publicPool", allEntries = true)
+    })
     public Memory patchOne(String id, Map<String, Object> body) {
         var opt = memoryRepository.findById(id);
         if (opt.isEmpty()) {

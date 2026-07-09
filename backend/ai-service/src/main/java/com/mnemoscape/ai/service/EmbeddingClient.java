@@ -7,6 +7,7 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.mnemoscape.ai.config.AiUpstreamProperties;
 import com.mnemoscape.ai.config.VectorStoreProperties;
 import com.mnemoscape.ai.exception.AiUpstreamException;
+import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
@@ -125,6 +126,7 @@ public class EmbeddingClient {
      * @return 稠密向量；维度应等于 {@link VectorStoreProperties#getEmbeddingDimension()}
      * @throws AiUpstreamException 缺 key / 上游 4xx-5xx / 超时 / 解析失败
      */
+    @CircuitBreaker(name = "deepseek", fallbackMethod = "embedFallback")
     public float[] embed(String text, String inputType) {
         ensureRealKeyOrThrow();
         if (text == null || text.isBlank()) {
@@ -176,7 +178,8 @@ public class EmbeddingClient {
 
             if (status >= 400) {
                 String snippet = responseJson.length() > 320 ? responseJson.substring(0, 320) + "..." : responseJson;
-                throw new RuntimeException("Embedding upstream error: HTTP " + status + " " + snippet);
+                throw new AiUpstreamException(AiUpstreamException.Reason.UPSTREAM_ERROR,
+                        "Embedding upstream error: HTTP " + status + " " + snippet);
             }
 
             float[] vec = extractVector(responseJson);
@@ -204,6 +207,11 @@ public class EmbeddingClient {
         }
     }
 
+    private float[] embedFallback(String text, String inputType, Throwable t) {
+        log.warn("[circuit-breaker] embed fallback: {}", t.toString());
+        return null;
+    }
+
     /** 解析 OpenAI 兼容 embeddings 响应：{@code data[0].embedding}。 */
     private float[] extractVector(String responseJson) {
         try {
@@ -219,9 +227,13 @@ public class EmbeddingClient {
                     return out;
                 }
             }
-            throw new RuntimeException("Embedding response missing data[].embedding");
+            throw new AiUpstreamException(AiUpstreamException.Reason.UPSTREAM_ERROR,
+                    "Embedding response missing data[].embedding");
+        } catch (AiUpstreamException e) {
+            throw e;
         } catch (Exception e) {
-            throw new RuntimeException("Failed to parse embedding response: " + e.getMessage(), e);
+            throw new AiUpstreamException(AiUpstreamException.Reason.UPSTREAM_ERROR,
+                    "Failed to parse embedding response: " + e.getMessage(), e);
         }
     }
 

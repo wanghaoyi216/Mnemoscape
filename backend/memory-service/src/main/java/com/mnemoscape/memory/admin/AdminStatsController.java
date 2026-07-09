@@ -128,7 +128,7 @@ public class AdminStatsController {
             throw rex;
         } catch (Exception e) {
             responseStatus = 500;
-            throw new RuntimeException(e);
+            throw BizException.internalError("Admin stats aggregation failed", e);
         } finally {
             writeAudit(req, ENDPOINT_PATH_ACTIVE_USERS, queryHash, responseStatus, startNs);
         }
@@ -167,7 +167,7 @@ public class AdminStatsController {
             throw rex;
         } catch (Exception e) {
             responseStatus = 500;
-            throw new RuntimeException(e);
+            throw BizException.internalError("Admin stats aggregation failed", e);
         } finally {
             writeAudit(req, ENDPOINT_PATH_MEMORY_TRENDS, queryHash, responseStatus, startNs);
         }
@@ -234,7 +234,7 @@ public class AdminStatsController {
             throw rex;
         } catch (Exception e) {
             responseStatus = 500;
-            throw new RuntimeException(e);
+            throw BizException.internalError("Admin stats aggregation failed", e);
         } finally {
             writeAudit(req, ENDPOINT_PATH_EMOTION, queryHash, responseStatus, startNs);
         }
@@ -274,7 +274,7 @@ public class AdminStatsController {
             throw rex;
         } catch (Exception e) {
             responseStatus = 500;
-            throw new RuntimeException(e);
+            throw BizException.internalError("Admin stats aggregation failed", e);
         } finally {
             writeAudit(req, ENDPOINT_PATH_HEATMAP, queryHash, responseStatus, startNs);
         }
@@ -319,7 +319,7 @@ public class AdminStatsController {
             throw rex;
         } catch (Exception e) {
             responseStatus = 500;
-            throw new RuntimeException(e);
+            throw BizException.internalError("Admin stats aggregation failed", e);
         } finally {
             writeAudit(req, ENDPOINT_PATH_TOP_CONTRIBUTORS, queryHash, responseStatus, startNs);
         }
@@ -367,7 +367,7 @@ public class AdminStatsController {
             throw rex;
         } catch (Exception e) {
             responseStatus = 500;
-            throw new RuntimeException(e);
+            throw BizException.internalError("Admin stats aggregation failed", e);
         } finally {
             writeAudit(req, ENDPOINT_PATH_FRAGMENTS, queryHash, responseStatus, startNs);
         }

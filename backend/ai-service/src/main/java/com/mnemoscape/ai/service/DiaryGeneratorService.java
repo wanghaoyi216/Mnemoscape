@@ -203,7 +203,8 @@ public class DiaryGeneratorService {
 
         HttpResponse<String> response = httpClient.send(request, HttpResponse.BodyHandlers.ofString());
         if (response.statusCode() != 200) {
-            throw new RuntimeException("HTTP " + response.statusCode() + ": " + response.body());
+            throw new AiUpstreamException(AiUpstreamException.Reason.UPSTREAM_ERROR,
+                    "HTTP " + response.statusCode() + ": " + response.body());
         }
 
         JsonNode root = json.readTree(response.body());

@@ -61,8 +61,10 @@ public class MemoryController {
             @RequestParam(defaultValue = "20") int size,
             @RequestParam(required = false) String privacyLevel,
             HttpServletRequest httpReq) {
+        int safePage = Math.max(0, page);
+        int safeSize = Math.max(1, Math.min(size, 100));
         String userId = RequestContext.requireUserId(httpReq);
-        Page<Memory> result = memoryService.listMemories(userId, page, size, privacyLevel);
+        Page<Memory> result = memoryService.listMemories(userId, safePage, safeSize, privacyLevel);
         List<MemoryResponse> items = result.getContent().stream()
                 .map(MemoryResponse::fromEntity)
                 .collect(Collectors.toList());
@@ -169,9 +171,10 @@ public class MemoryController {
     public ResponseEntity<ApiResponse<List<MemoryResponse>>> publicPool(
             @RequestParam(defaultValue = "200") int limit,
             HttpServletRequest httpReq) {
+        int safeLimit = Math.max(10, Math.min(limit, 500));
         String userId = RequestContext.requireUserId(httpReq);
         // 走 service 层的 Caffeine 缓存（60s），避免每次共鸣搜索都全表扫描公共池。
-        List<Memory> rows = memoryService.getPublicPool(userId, limit);
+        List<Memory> rows = memoryService.getPublicPool(userId, safeLimit);
         List<MemoryResponse> items = rows.stream()
                 .map(MemoryResponse::fromEntity)
                 .collect(Collectors.toList());
