@@ -1,11 +1,10 @@
 <script setup lang="ts">
-import { computed, ref, onMounted, onBeforeUnmount, watch } from 'vue'
+import { computed, ref, onMounted, onBeforeUnmount } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '../stores/auth'
 import LiquidMemoryBackground from '../components/auth/LiquidMemoryBackground.vue'
 import { loginBackgrounds, videos } from '../assets/media-catalog'
-import client from '../api/client'
 
 const router = useRouter()
 const auth = useAuthStore()
@@ -31,9 +30,8 @@ const defaultPlaylist: PlaylistItem[] = [
 /*
  * 登录页视频背景层级：
  *  1) .env.local 的 VITE_LOGIN_VIDEO_URL 优先（可换你自己的素材）
- *  2) 默认拉取 asset-service /static/resources（热更新 + MinIO 动态注入）
- *  3) 兜底使用 public/media/videos/ 内置三段
- *  4) 配置成空字符串则关闭视频层，回退到 WebGL + CSS
+ *  2) 未配置时使用 public/media/videos/ 内置三段轻量氛围视频
+ *  3) 配置成空字符串则关闭视频层，保留编号背景与 WebGL/CSS
  */
 const envVideo = (import.meta.env.VITE_LOGIN_VIDEO_URL as string | undefined)
 const playlist = ref<PlaylistItem[]>(defaultPlaylist)
@@ -42,17 +40,19 @@ const currentBackgroundIndex = ref(0)
 const currentBackground = computed(() => loginBackgrounds[currentBackgroundIndex.value])
 const videoUrl = computed(() => envVideo !== undefined ? envVideo : (playlist.value[currentVideoIndex.value]?.src || ''))
 
-// 选择器默认隐藏；提供一颗"维网入口"按钮唤起
+// 背景画廊默认折叠，避免控制器抢占登录表单注意力。
 const selectorOpen = ref(false)
-// 自动轮播默认开启；用户手动切换则关闭
+// 自动轮播默认开启；手动选择后从当前背景重新计时。
 const autoCycle = ref(true)
 let cycleTimer: number | null = null
 
 function startAutoCycle() {
   stopAutoCycle()
-  if (!autoCycle.value || envVideo !== undefined || playlist.value.length < 2) return
+  if (!autoCycle.value || loginBackgrounds.length < 2) return
   cycleTimer = window.setInterval(() => {
-    currentVideoIndex.value = (currentVideoIndex.value + 1) % playlist.value.length
+    if (envVideo === undefined && playlist.value.length > 1) {
+      currentVideoIndex.value = (currentVideoIndex.value + 1) % playlist.value.length
+    }
     currentBackgroundIndex.value = (currentBackgroundIndex.value + 1) % loginBackgrounds.length
   }, 18000)
 }
@@ -67,10 +67,9 @@ function toggleAutoCycle() {
   if (autoCycle.value) startAutoCycle()
   else stopAutoCycle()
 }
-function pickVideo(idx: number) {
-  if (currentVideoIndex.value === idx) return
-  currentVideoIndex.value = idx
-  // 用户手动切换 → 自动循环按用户偏好继续，但要重置计时
+function pickBackground(index: number) {
+  if (currentBackgroundIndex.value === index) return
+  currentBackgroundIndex.value = index
   if (autoCycle.value) startAutoCycle()
 }
 
@@ -81,57 +80,19 @@ function handleVideoEnded() {
   }
 }
 
-watch(playlist, () => startAutoCycle(), { deep: true })
 
-const showIcoStage = ref(false)
-let stageTimer: number | null = null
-
-onMounted(async () => {
-  try {
-    const resp = await client.get('/assets/static/resources')
-    const files = resp.data?.data || []
-    const foundVideos = files.filter((f: any) => f.type === 'video')
-    if (foundVideos.length > 0) {
-      playlist.value = foundVideos.map((fv: any) => {
-        const filename = fv.name.replace(/\.mp4$/i, '')
-        let label = filename
-        let eng = filename
-        const match = filename.match(/(.+?)[（(](.+?)[）)]/)
-        if (match) {
-          label = match[1].trim()
-          eng = match[2].trim()
-        }
-        return {
-          src: fv.path,
-          label: label,
-          eng: eng
-        }
-      })
-    }
-  } catch (e) {
-    console.warn('Failed to load dynamic videos, keeping defaults.', e)
-  }
-  startAutoCycle()
-  
-  // 10秒后切换到艺术展示与孔明灯效果
-  stageTimer = window.setTimeout(() => {
-    showIcoStage.value = true
-  }, 10000)
-})
+onMounted(startAutoCycle)
 
 onBeforeUnmount(() => {
   stopAutoCycle()
-  if (stageTimer !== null) {
-    window.clearTimeout(stageTimer)
-  }
 })
- 
+
 const canSubmit = computed(() =>
   username.value.trim().length > 0
   && password.value.trim().length > 0
   && !loading.value,
 )
- 
+
 async function handleSubmit() {
   error.value = ''
   loading.value = true
@@ -145,7 +106,7 @@ async function handleSubmit() {
   }
 }
 </script>
- 
+
 <template>
   <div class="login-stage">
     <!--
@@ -156,7 +117,7 @@ async function handleSubmit() {
       WebGL 在 GPU 缺失/用户偏好"减少动画"时自动退化，CSS 层永远保证基线视觉。
     -->
     <LiquidMemoryBackground />
- 
+
     <!-- 1–12 号生成背景按固定节奏交叉淡入；编号与素材方案保持一致。 -->
     <transition name="background-fade" mode="in-out">
       <img
@@ -174,7 +135,6 @@ async function handleSubmit() {
         v-if="videoUrl"
         :key="videoUrl"
         class="login-stage__video"
-        :class="{ 'login-stage__video--fade': showIcoStage }"
         autoplay
         muted
         :loop="!!envVideo"
@@ -186,14 +146,14 @@ async function handleSubmit() {
         <source :src="videoUrl" type="video/mp4" />
       </video>
     </transition>
- 
+
     <!-- CSS 墨水扩散层（永远存在） -->
     <div class="login-stage__ink" aria-hidden="true">
       <div class="ink-drop ink-drop--gold"></div>
       <div class="ink-drop ink-drop--teal"></div>
       <div class="ink-drop ink-drop--violet"></div>
     </div>
- 
+
     <!-- 星光粒子层 -->
     <div class="login-stage__particles" aria-hidden="true">
       <span v-for="i in 48" :key="i" class="particle" :style="{
@@ -204,38 +164,12 @@ async function handleSubmit() {
         '--scale': `${0.4 + Math.random() * 0.8}`,
       }"></span>
     </div>
- 
+
     <!-- 暗色蒙版 + 噪点 -->
     <div class="login-stage__mask" aria-hidden="true"></div>
 
-    <!-- 暖意浮空孔明灯效果层 (10秒后激活) -->
-    <transition name="video-fade">
-      <div v-if="showIcoStage" class="login-stage__lanterns" aria-hidden="true">
-        <div v-for="i in 32" :key="i" class="lantern-item" :style="{
-          '--x': `${Math.random() * 100}%`,
-          '--delay': `-${Math.random() * 20}s`,
-          '--duration': `${15 + Math.random() * 15}s`,
-          '--size': `${16 + Math.random() * 24}px`,
-          '--drift': `${-50 + Math.random() * 100}px`,
-          '--opacity': `${0.45 + Math.random() * 0.45}`
-        }">
-          <div class="lantern-body"></div>
-          <div class="lantern-glow"></div>
-        </div>
-      </div>
-    </transition>
-
-    <!-- 艺术背景巨幅虚影 Logo (10秒后激活) -->
-    <transition name="video-fade">
-      <div v-if="showIcoStage" class="login-stage__bg-logo" aria-hidden="true">
-        <img src="/favicon.ico?v=2" class="bg-logo-img" alt="Background Logo" />
-        <div class="bg-logo-halo"></div>
-      </div>
-    </transition>
- 
-    <!-- 记忆维网切换（多视频背景控制器） — 默认折叠为"维网入口"按钮 -->
+    <!-- 背景画廊：允许手动选择编号素材，也可关闭自动轮播。 -->
     <div
-      v-if="envVideo === undefined"
       class="login-stage__theme-selector reveal reveal-delay-4"
       :class="{ 'login-stage__theme-selector--open': selectorOpen }"
     >
@@ -243,52 +177,53 @@ async function handleSubmit() {
         type="button"
         class="theme-selector-trigger"
         :aria-expanded="selectorOpen"
-        :aria-label="locale === 'zh-CN' ? '展开记忆维网' : 'Toggle memory dimensions'"
+        aria-controls="login-background-panel"
+        :aria-label="locale === 'zh-CN' ? '选择登录背景' : 'Choose login background'"
         @click="selectorOpen = !selectorOpen"
       >
-        <svg viewBox="0 0 24 24" width="16" height="16" fill="none">
-          <path d="M12 21a9 9 0 1 0 0-18 9 9 0 0 0 0 18Z" stroke="currentColor" stroke-width="1.8"/>
-          <path d="M12 7v5l3 2" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/>
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" aria-hidden="true">
+          <rect x="3" y="4" width="18" height="16" rx="3" stroke="currentColor" stroke-width="1.8"/>
+          <path d="m6 16 4-4 3 3 2-2 3 3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
         </svg>
         <span class="theme-selector-trigger__label">
-          {{ locale === 'zh-CN' ? '记忆时空维网' : 'Memory Dimensions' }}
+          {{ locale === 'zh-CN' ? '背景画廊' : 'Backgrounds' }}
         </span>
-        <span class="theme-selector-trigger__current">
-          {{ locale === 'zh-CN' ? playlist[currentVideoIndex]?.label : playlist[currentVideoIndex]?.eng }}
-        </span>
-        <svg class="theme-selector-trigger__chev" viewBox="0 0 24 24" width="12" height="12" fill="none">
+        <span class="theme-selector-trigger__current">{{ currentBackground.origin }}</span>
+        <svg class="theme-selector-trigger__chev" viewBox="0 0 24 24" width="12" height="12" fill="none" aria-hidden="true">
           <path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
         </svg>
       </button>
       <transition name="theme-panel">
-        <div v-if="selectorOpen" class="theme-selector-panel">
-          <div class="theme-selector-buttons">
+        <div v-if="selectorOpen" id="login-background-panel" class="theme-selector-panel">
+          <div class="background-selector-grid" role="list" :aria-label="locale === 'zh-CN' ? '登录背景列表' : 'Login backgrounds'">
             <button
-              v-for="(vid, idx) in playlist"
-              :key="idx"
+              v-for="(background, index) in loginBackgrounds"
+              :key="background.number"
               type="button"
-              :class="['theme-sel-btn', currentVideoIndex === idx ? 'active' : '']"
-              @click="pickVideo(idx)"
+              class="background-swatch"
+              :class="{ 'background-swatch--active': currentBackgroundIndex === index }"
+              :aria-label="background.origin"
+              :aria-pressed="currentBackgroundIndex === index"
+              :title="background.origin"
+              @click="pickBackground(index)"
             >
-              <span class="theme-sel-btn__dot"></span>
-              <span class="theme-sel-btn__name">{{ locale === 'zh-CN' ? vid.label : vid.eng }}</span>
+              <img :src="background.thumb" alt="" loading="lazy" decoding="async" />
+              <span>{{ background.number }}</span>
             </button>
           </div>
           <label class="theme-selector-cycle">
             <input type="checkbox" :checked="autoCycle" @change="toggleAutoCycle" />
-            <span>{{ locale === 'zh-CN' ? '自动轮播' : 'Auto rotate' }}</span>
+            <span>{{ locale === 'zh-CN' ? '自动轮播背景' : 'Auto rotate backgrounds' }}</span>
           </label>
         </div>
       </transition>
     </div>
- 
+
     <!-- 实际内容（玻璃拟态卡片） -->
     <div class="login-stage__content">
       <div class="login-grid">
         <section class="login-hero login-glass">
-          <transition name="hero-switch" mode="out-in">
-            <!-- 状态一：常规模式（前10秒显示） -->
-            <div v-if="!showIcoStage" key="normal" class="stack stack--lg">
+          <div class="stack stack--lg">
               <p class="eyebrow reveal">{{ t('login.eyebrow') }}</p>
               <h1 class="display-title text-gradient reveal reveal-delay-1" v-html="t('login.title')"></h1>
               <p class="lead reveal reveal-delay-2">{{ t('login.lead') }}</p>
@@ -342,40 +277,6 @@ async function handleSubmit() {
                 </div>
               </div>
             </div>
-
-            <!-- 状态二：艺术“忆境星空” Logo + 艺术字模式 -->
-            <div v-else key="art" class="stack stack--lg hero-art-content">
-              <div class="art-logo-container">
-                <img src="/favicon.ico" class="art-logo-img" alt="忆镜星空 Logo" />
-                <div class="art-logo-glow"></div>
-              </div>
-              <div class="art-title-block">
-                <h1 class="art-title">
-                  <span class="star-accent">✦</span>
-                  忆境星空
-                  <span class="star-accent">✦</span>
-                </h1>
-                <div class="art-subtitle-wrap">
-                  <span class="art-subtitle">Memory Echo</span>
-                  <svg class="art-wave-line" viewBox="0 0 320 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                    <path d="M 10,12 C 60,22 120,4 180,14 C 230,22 260,10 280,12 C 290,13 293,7 296,9 C 300,12 294,22 288,15 C 282,9 294,1 302,6 C 308,10 310,12 312,12" 
-                          stroke="url(#neonGradient)" 
-                          stroke-width="2.5" 
-                          stroke-linecap="round"/>
-                    <defs>
-                      <linearGradient id="neonGradient" x1="0%" y1="0%" x2="100%" y2="0%">
-                        <stop offset="0%" stop-color="#ff7eb3" />
-                        <stop offset="40%" stop-color="#ff758c" />
-                        <stop offset="70%" stop-color="#fda085" />
-                        <stop offset="100%" stop-color="#f43f5e" />
-                      </linearGradient>
-                    </defs>
-                  </svg>
-                </div>
-              </div>
-              <p class="art-lead">将逝去的时光重组为可栖居的星宿，让记忆的回响在星海中永存。</p>
-            </div>
-          </transition>
 
           <div class="login-hero__quote reveal reveal-delay-4">
             <span aria-hidden="true">"</span>
@@ -635,6 +536,47 @@ async function handleSubmit() {
   user-select: none;
 }
 .theme-selector-cycle input { accent-color: var(--primary); }
+
+.background-selector-grid {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 8px;
+}
+.background-swatch {
+  position: relative;
+  aspect-ratio: 16 / 10;
+  overflow: hidden;
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  border-radius: 8px;
+  background: rgba(255, 255, 255, 0.04);
+  transition: border-color 180ms ease, transform 180ms ease, box-shadow 180ms ease;
+}
+.background-swatch:hover {
+  transform: translateY(-2px);
+  border-color: rgba(255, 255, 255, 0.34);
+}
+.background-swatch--active {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 2px rgba(54, 216, 180, 0.2);
+}
+.background-swatch img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+.background-swatch span {
+  position: absolute;
+  right: 4px;
+  bottom: 3px;
+  min-width: 20px;
+  padding: 1px 5px;
+  border-radius: 999px;
+  background: rgba(5, 6, 8, 0.74);
+  color: #fff;
+  font-size: 0.65rem;
+  line-height: 1.5;
+}
+
 
 .theme-panel-enter-active, .theme-panel-leave-active {
   transition: opacity 220ms ease, transform 240ms cubic-bezier(0.16, 1, 0.3, 1);
@@ -952,187 +894,20 @@ async function handleSubmit() {
 }
 
 @media (max-width: 640px) {
+  .login-stage__theme-selector {
+    right: 12px;
+    bottom: 12px;
+    min-width: min(300px, calc(100vw - 24px));
+    max-width: calc(100vw - 24px);
+  }
+  .theme-selector-trigger__current {
+    max-width: 112px;
+  }
   .login-hero__feature-grid {
     grid-template-columns: 1fr;
   }
   .login-stage__content {
     padding: 24px 16px;
-  }
-}
-
-/* ============== 艺术内容切换过渡 ============== */
-.hero-switch-enter-active,
-.hero-switch-leave-active {
-  transition: opacity 1.2s cubic-bezier(0.25, 1, 0.5, 1), transform 1.2s cubic-bezier(0.25, 1, 0.5, 1);
-}
-.hero-switch-enter-from {
-  opacity: 0;
-  transform: translateY(30px);
-}
-.hero-switch-leave-to {
-  opacity: 0;
-  transform: translateY(-30px);
-}
-
-.login-stage__video {
-  transition: opacity 2.5s ease, filter 2.5s ease;
-}
-.login-stage__video--fade {
-  opacity: 0.12 !important;
-  filter: contrast(1) saturate(0.5) brightness(0.25) blur(6px);
-}
-
-/* ============== 艺术 Logo 徽标 ============== */
-.art-logo-container {
-  position: relative;
-  width: 72px;
-  height: 72px;
-  margin-bottom: 12px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 20px;
-  background: rgba(15, 10, 25, 0.4);
-  border: 1.5px solid rgba(255, 110, 180, 0.45);
-  box-shadow: 
-    0 8px 32px rgba(255, 110, 180, 0.15),
-    inset 0 1px 0 rgba(255, 255, 255, 0.1);
-  animation: logo-float 4s ease-in-out infinite alternate;
-}
-.art-logo-img {
-  width: 44px;
-  height: 44px;
-  object-fit: contain;
-  filter: drop-shadow(0 0 8px rgba(255, 110, 180, 0.8));
-  z-index: 1;
-}
-.art-logo-glow {
-  position: absolute;
-  inset: -4px;
-  border-radius: 24px;
-  border: 2px dashed rgba(255, 110, 180, 0.3);
-  animation: rotate-dashed 20s linear infinite;
-}
-@keyframes logo-float {
-  0% { transform: translateY(0); }
-  100% { transform: translateY(-8px); }
-}
-@keyframes rotate-dashed {
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
-}
-
-/* ============== 霓虹艺术标题 ============== */
-.art-title-block {
-  display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 6px;
-}
-.art-title {
-  font-size: 3.2rem;
-  font-weight: 700;
-  color: #ffffff;
-  font-family: var(--font-display), "Noto Serif SC", serif;
-  letter-spacing: 0.12em;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  text-shadow: 
-    0 0 8px rgba(255, 110, 180, 0.95),
-    0 0 22px rgba(255, 110, 180, 0.6),
-    0 0 40px rgba(244, 63, 94, 0.3);
-  user-select: none;
-  margin: 0;
-}
-.star-accent {
-  font-size: 1.5rem;
-  color: #fda085;
-  animation: pulse-star 2s infinite ease-in-out;
-}
-.star-accent:last-child {
-  animation-delay: 1s;
-}
-@keyframes pulse-star {
-  0%, 100% { transform: scale(0.8) rotate(0deg); opacity: 0.5; filter: drop-shadow(0 0 2px #fda085); }
-  50% { transform: scale(1.2) rotate(45deg); opacity: 1; filter: drop-shadow(0 0 8px #fda085); }
-}
-
-/* ============== 英文与艺术波浪线下划线 ============== */
-.art-subtitle-wrap {
-  position: relative;
-  width: 320px;
-  height: 44px;
-  display: flex;
-  flex-direction: column;
-  justify-content: flex-start;
-  margin-top: -4px;
-}
-.art-subtitle {
-  font-size: 1.35rem;
-  font-family: 'Playfair Display', cursive, sans-serif;
-  font-style: italic;
-  color: #ffccdf;
-  padding-left: 20px;
-  letter-spacing: 0.05em;
-  text-shadow: 0 0 6px rgba(255, 110, 180, 0.6);
-  z-index: 2;
-}
-.art-wave-line {
-  position: absolute;
-  bottom: 0;
-  left: 0;
-  width: 320px;
-  height: 24px;
-  filter: drop-shadow(0 0 6px rgba(255, 110, 180, 0.85));
-  z-index: 1;
-}
-.art-lead {
-  font-size: 1.05rem;
-  line-height: 1.7;
-  color: #ffd8e5;
-  opacity: 0.88;
-  max-width: 480px;
-  text-shadow: 0 1px 4px rgba(0,0,0,0.5);
-  margin: 0;
-}
-
-/* ============== 艺术背景巨幅虚影 Logo ============== */
-.login-stage__bg-logo {
-  position: absolute;
-  top: 50%;
-  left: 50%;
-  transform: translate(-50%, -55%);
-  z-index: -2;
-  pointer-events: none;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  opacity: 0.12;
-  animation: bg-logo-pulse 8s ease-in-out infinite alternate;
-}
-.bg-logo-img {
-  width: 280px;
-  height: 280px;
-  object-fit: contain;
-  filter: drop-shadow(0 0 40px rgba(255, 110, 180, 0.6)) blur(2px);
-}
-.bg-logo-halo {
-  position: absolute;
-  width: 380px;
-  height: 380px;
-  border-radius: 50%;
-  background: radial-gradient(circle, rgba(255, 110, 180, 0.15) 0%, transparent 70%);
-  filter: blur(20px);
-}
-@keyframes bg-logo-pulse {
-  0% {
-    transform: translate(-50%, -55%) scale(0.95);
-    opacity: 0.08;
-  }
-  100% {
-    transform: translate(-50%, -55%) scale(1.05);
-    opacity: 0.14;
   }
 }
 
@@ -1146,80 +921,6 @@ async function handleSubmit() {
   vertical-align: middle;
   margin-right: 8px;
   flex-shrink: 0;
-}
-
-/* ============== 孔明灯背景层 ============== */
-.login-stage__lanterns {
-  position: absolute;
-  inset: 0;
-  z-index: 1;
-  pointer-events: none;
-  overflow: hidden;
-}
-.lantern-item {
-  position: absolute;
-  bottom: -60px;
-  left: var(--x);
-  width: var(--size);
-  height: calc(var(--size) * 1.35);
-  opacity: 0;
-  animation: rise-and-drift var(--duration) linear var(--delay) infinite;
-}
-.lantern-body {
-  width: 100%;
-  height: 100%;
-  background: linear-gradient(to top, 
-    rgba(255, 107, 36, 0.95) 0%, 
-    rgba(255, 204, 0, 0.95) 60%, 
-    rgba(255, 239, 174, 0.8) 100%
-  );
-  border-radius: 8px 8px 3px 3px / 12px 12px 3px 3px;
-  position: relative;
-  box-shadow: 
-    0 0 12px rgba(255, 107, 36, 0.8),
-    0 0 25px rgba(255, 140, 0, 0.4);
-}
-.lantern-body::after {
-  content: '';
-  position: absolute;
-  bottom: 3px;
-  left: 50%;
-  transform: translateX(-50%);
-  width: calc(var(--size) * 0.25);
-  height: calc(var(--size) * 0.25);
-  background: #ffffff;
-  border-radius: 50%;
-  box-shadow: 
-    0 0 8px #ffffff,
-    0 0 15px rgba(255, 60, 0, 0.8);
-  animation: flicker 0.15s infinite alternate;
-}
-.lantern-glow {
-  position: absolute;
-  inset: -15px;
-  border-radius: 50%;
-  background: radial-gradient(circle, rgba(255, 140, 0, 0.18) 0%, transparent 70%);
-  pointer-events: none;
-}
-@keyframes rise-and-drift {
-  0% {
-    transform: translate3d(0, 0, 0) rotate(0deg);
-    opacity: 0;
-  }
-  10% {
-    opacity: var(--opacity);
-  }
-  90% {
-    opacity: var(--opacity);
-  }
-  100% {
-    transform: translate3d(var(--drift), -108vh, 0) rotate(calc(var(--drift) * 0.12deg));
-    opacity: 0;
-  }
-}
-@keyframes flicker {
-  0% { transform: translateX(-50%) scale(0.9); opacity: 0.8; }
-  100% { transform: translateX(-50%) scale(1.1); opacity: 1; }
 }
 
 /* 降低动效给"减少动画"用户 */

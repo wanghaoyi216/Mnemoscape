@@ -35,14 +35,12 @@ const activePhotos = ref<Array<{
 }>>([])
 
 const PHOTO_SLOTS = [
-  { side: 'left', top: '14%', offset: '18px', rotate: '-4deg', delay: '-1.2s' },
-  { side: 'left', top: '35%', offset: '28px', rotate: '3deg', delay: '-3.8s' },
-  { side: 'left', top: '56%', offset: '14px', rotate: '-2deg', delay: '-2.4s' },
-  { side: 'left', top: '77%', offset: '24px', rotate: '4deg', delay: '-4.6s' },
-  { side: 'right', top: '14%', offset: '22px', rotate: '4deg', delay: '-2.9s' },
-  { side: 'right', top: '35%', offset: '14px', rotate: '-3deg', delay: '-1.7s' },
-  { side: 'right', top: '56%', offset: '28px', rotate: '2deg', delay: '-4.1s' },
-  { side: 'right', top: '77%', offset: '18px', rotate: '-4deg', delay: '-3.2s' },
+  { side: 'left', top: '18%', offset: '20px', rotate: '-3deg', delay: '-1.2s' },
+  { side: 'left', top: '47%', offset: '32px', rotate: '2deg', delay: '-3.8s' },
+  { side: 'left', top: '76%', offset: '18px', rotate: '-2deg', delay: '-2.4s' },
+  { side: 'right', top: '18%', offset: '22px', rotate: '3deg', delay: '-2.9s' },
+  { side: 'right', top: '47%', offset: '16px', rotate: '-2deg', delay: '-1.7s' },
+  { side: 'right', top: '76%', offset: '30px', rotate: '2deg', delay: '-4.1s' },
 ] as const
 
 // 随机挑选图片并计算随机位置的逻辑
@@ -113,6 +111,10 @@ function closeLightbox() {
   activeLightboxPhoto.value = null
 }
 
+function onKeydown(event: KeyboardEvent) {
+  if (event.key === 'Escape' && activeLightboxPhoto.value) closeLightbox()
+}
+
 // 隐藏逻辑
 const isHidden = computed(() => {
   return ['MemoryAtlas', 'SceneViewer'].includes(String(route.name))
@@ -126,9 +128,10 @@ watch(() => [dynamicMedia.state.photos, dynamicMedia.state.gifs], () => {
 // 定时微调：每 10 秒随机替换其中的“一张”图片，形成“原位渐变替换”的淡入淡出效果！
 let rotationTimer: number | null = null
 function startRotation() {
-  rotationTimer = setInterval(() => {
-    if (activePhotos.value.length === 0) return
-    
+  if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return
+  rotationTimer = window.setInterval(() => {
+    if (document.hidden || activePhotos.value.length === 0) return
+
     const minioAssets = [...dynamicMedia.state.photos, ...dynamicMedia.state.gifs].map(item => ({
       name: item.name.replace(/\.[^/.]+$/, ''),
       url: item.url,
@@ -138,18 +141,18 @@ function startRotation() {
     DEFAULT_PHOTOS.forEach(p => {
       if (!pool.some(x => x.url === p.url)) pool.push(p)
     })
-    
+
     const currentlyShowingUrls = activePhotos.value.map(p => p.url)
     const candidates = pool.filter(p => !currentlyShowingUrls.includes(p.url) && !hiddenUrls.value.includes(p.url))
-    
+
     if (candidates.length === 0) return
-    
+
     // 随机挑选一张新图
     const newPic = candidates[Math.floor(Math.random() * candidates.length)]
     // 随机决定替换当前展示中的哪一张
     const replaceIdx = Math.floor(Math.random() * activePhotos.value.length)
     const targetToReplace = activePhotos.value[replaceIdx]
-    
+
     // 替换展示图，触发 Transition
     activePhotos.value[replaceIdx] = {
       ...targetToReplace,
@@ -164,10 +167,12 @@ function startRotation() {
 onMounted(() => {
   regeneratePhotos()
   startRotation()
+  window.addEventListener('keydown', onKeydown)
 })
 
 onUnmounted(() => {
   if (rotationTimer !== null) window.clearInterval(rotationTimer)
+  window.removeEventListener('keydown', onKeydown)
 })
 </script>
 
@@ -177,7 +182,7 @@ onUnmounted(() => {
     <div class="ambient-gallery__side ambient-gallery__side--left">
       <div v-for="p in leftPhotos" :key="p.id" class="polaroid-wrapper">
         <transition name="polaroid-fade" mode="out-in">
-          <div 
+          <div
             :key="p.id"
             class="polaroid-card"
             :class="`polaroid-card--float-${(Math.abs(hashString(p.url)) % 4) + 1}`"
@@ -186,7 +191,7 @@ onUnmounted(() => {
           >
             <button class="polaroid-card__close" type="button" @click.stop="hidePhoto(p.url)" title="移除此照片">✕</button>
             <div class="polaroid-card__image-container">
-              <img :src="p.url" class="polaroid-card__img" :alt="p.name" loading="lazy" />
+              <img :src="p.url" class="polaroid-card__img" :alt="p.name" loading="lazy" decoding="async" />
             </div>
             <div class="polaroid-card__caption">{{ p.name }}</div>
           </div>
@@ -198,7 +203,7 @@ onUnmounted(() => {
     <div class="ambient-gallery__side ambient-gallery__side--right">
       <div v-for="p in rightPhotos" :key="p.id" class="polaroid-wrapper">
         <transition name="polaroid-fade" mode="out-in">
-          <div 
+          <div
             :key="p.id"
             class="polaroid-card"
             :class="`polaroid-card--float-${(Math.abs(hashString(p.url)) % 4) + 1}`"
@@ -207,7 +212,7 @@ onUnmounted(() => {
           >
             <button class="polaroid-card__close" type="button" @click.stop="hidePhoto(p.url)" title="移除此照片">✕</button>
             <div class="polaroid-card__image-container">
-              <img :src="p.url" class="polaroid-card__img" :alt="p.name" loading="lazy" />
+              <img :src="p.url" class="polaroid-card__img" :alt="p.name" loading="lazy" decoding="async" />
             </div>
             <div class="polaroid-card__caption">{{ p.name }}</div>
           </div>
@@ -217,8 +222,8 @@ onUnmounted(() => {
 
     <!-- 拍立得 Lightbox 放大弹窗 (沉浸式毛玻璃) -->
     <transition name="lightbox">
-      <div v-if="activeLightboxPhoto" class="lightbox-overlay" @click.self="closeLightbox">
-        <div class="lightbox-content">
+      <div v-if="activeLightboxPhoto" class="lightbox-overlay" role="presentation" @click.self="closeLightbox">
+        <div class="lightbox-content" role="dialog" aria-modal="true" :aria-label="activeLightboxPhoto.name">
           <button class="lightbox-close" type="button" @click.stop="closeLightbox" aria-label="关闭预览">✕</button>
           <img :src="activeLightboxPhoto.url" class="lightbox-img" :alt="activeLightboxPhoto.name" />
           <div class="lightbox-meta">
@@ -251,7 +256,7 @@ onUnmounted(() => {
   pointer-events: auto !important;
 }
 
-@media (max-width: 1439px) {
+@media (max-width: 1759px) {
   .ambient-gallery {
     display: none !important;
   }
@@ -261,7 +266,7 @@ onUnmounted(() => {
   position: fixed;
   top: 0;
   bottom: 0;
-  width: 240px;
+  width: 190px;
   pointer-events: none;
   z-index: 2;
 }
@@ -283,7 +288,7 @@ onUnmounted(() => {
 /* ---- 拍立得卡片结构设计 (拟真拟物风格) ---- */
 .polaroid-card {
   position: relative;
-  width: 148px;
+  width: 128px;
   background: var(--surface);
   backdrop-filter: blur(16px) saturate(180%);
   -webkit-backdrop-filter: blur(16px) saturate(180%);
@@ -292,7 +297,7 @@ onUnmounted(() => {
   box-shadow: 0 12px 32px rgba(0, 0, 0, 0.5);
   cursor: pointer;
   transform-origin: center center;
-  transition: all 400ms cubic-bezier(0.175, 0.885, 0.32, 1.275);
+  transition: transform 260ms ease, border-color 200ms ease, box-shadow 260ms ease, opacity 200ms ease;
   border: 1px solid rgba(242, 185, 92, 0.18);
 }
 
@@ -505,7 +510,7 @@ onUnmounted(() => {
 /* polaroid-fade transition */
 .polaroid-fade-enter-active,
 .polaroid-fade-leave-active {
-  transition: all 600ms cubic-bezier(0.165, 0.84, 0.44, 1);
+  transition: opacity 420ms ease, transform 420ms cubic-bezier(0.165, 0.84, 0.44, 1);
 }
 .polaroid-fade-enter-from {
   opacity: 0;

@@ -7,6 +7,7 @@ import AiMascotDock from './components/ai/AiMascotDock.vue'
 import CustomerSupportWidget from './components/support/CustomerSupportWidget.vue'
 import ToastContainer from './components/common/ToastContainer.vue'
 import WeatherFxOverlay from './components/layout/WeatherFxOverlay.vue'
+import AmbientFilmStrip from './components/layout/AmbientFilmStrip.vue'
 import { useHealthCheck } from './composables/useHealthCheck'
 import { useDynamicMedia } from './composables/useDynamicMedia'
 import { useAuthStore } from './stores/auth'
@@ -25,8 +26,8 @@ onMounted(() => {
   if (auth.isLoggedIn && !auth.user) {
     void auth.fetchProfile()
   }
-  // 即使未登录，登录页也需要 70+ 资源做背景轮播
-  void dynamicMedia.refresh()
+  // 登录页已使用本地编号素材；登录后再拉动态资源，避免后端未启动时首屏出现无关请求。
+  if (auth.isLoggedIn) void dynamicMedia.refresh()
 
   // 读取并应用用户上次保存的主题色
   const savedTheme = localStorage.getItem('mnemoscape-theme') || 'theme-mint'
@@ -70,6 +71,7 @@ onMounted(() => {
         </transition>
       </router-view>
     </main>
+    <AmbientFilmStrip v-if="auth.isLoggedIn" />
     <AiMascotDock v-if="auth.isLoggedIn" />
     <CustomerSupportWidget v-if="auth.isLoggedIn" />
     <ToastContainer />
