@@ -11,7 +11,9 @@ const dynamicMedia = useDynamicMedia()
 // Hero 区背景 — 记忆星冕图营造"记忆库"宏观氛围
 const heroBg = images.memoryCorona.src
 const heroVideo = videos.auroraMemoryRiver.src
+const heroPoster = videos.auroraMemoryRiver.poster
 const rippleVideo = videos.memoryRipple.src
+const ripplePoster = videos.memoryRipple.poster
 
 // 单条记忆缺少 sceneDataUrl 时的封面：
 // 优先使用 MinIO / 本地资源池里的图（70+ 多模态素材），
@@ -71,7 +73,7 @@ function formatDate(value?: string) {
       class="hero-card hero-card--split memory-hero"
       :style="{ backgroundImage: `linear-gradient(120deg, rgba(8,10,14,0.78) 0%, rgba(8,10,14,0.4) 55%, rgba(8,10,14,0.85) 100%), url(${heroBg})` }"
     >
-      <video class="memory-hero__video" :src="heroVideo" autoplay muted loop playsinline aria-hidden="true"></video>
+      <video class="memory-hero__video" :src="heroVideo" :poster="heroPoster" autoplay muted loop playsinline preload="metadata" aria-hidden="true"></video>
       <div class="memory-hero__grain" aria-hidden="true"></div>
       <div class="stack stack--lg">
         <p class="eyebrow reveal">{{ t('memory.list.title') }}</p>
@@ -156,7 +158,7 @@ function formatDate(value?: string) {
       </div>
 
       <div class="section-card collection-toolbar">
-        <video class="collection-toolbar__motion" :src="rippleVideo" autoplay muted loop playsinline aria-hidden="true"></video>
+        <video class="collection-toolbar__motion" :src="rippleVideo" :poster="ripplePoster" autoplay muted loop playsinline preload="metadata" aria-hidden="true"></video>
         <label class="field">
           <span class="field__label">{{ t('common.search') }}</span>
           <div class="search-input">

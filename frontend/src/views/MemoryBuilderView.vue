@@ -9,6 +9,7 @@ import CoverPickerModal from '../components/common/CoverPickerModal.vue'
 
 const heroBg = images.memoryFoundry.src
 const reconstructingVideo = videos.ebbingHourglass.src
+const reconstructingPoster = videos.ebbingHourglass.poster
 
 const router = useRouter()
 const store = useMemoryStore()
@@ -97,7 +98,7 @@ async function handleSubmit() {
     <!-- 提交期间的沉浸式遮罩 — 沙漏倒流视频替代干瘪的 Loading 圈 -->
     <transition name="reconstruct">
       <div v-if="loading" class="reconstruct-veil" role="status" aria-live="polite">
-        <video class="reconstruct-veil__video" autoplay muted loop playsinline preload="auto">
+        <video class="reconstruct-veil__video" autoplay muted loop playsinline preload="metadata" :poster="reconstructingPoster">
           <source :src="reconstructingVideo" type="video/mp4" />
         </video>
         <div class="reconstruct-veil__mask"></div>

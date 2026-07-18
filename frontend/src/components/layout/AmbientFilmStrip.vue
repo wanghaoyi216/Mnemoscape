@@ -1,35 +1,19 @@
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useRoute } from 'vue-router'
 import { useDynamicMedia } from '../../composables/useDynamicMedia'
+import { memoryCovers } from '../../assets/media-catalog'
 
 // 动态媒体 composable
 const dynamicMedia = useDynamicMedia()
 const route = useRoute()
 
-// 预设的高清、极简、复古胶片风格背景图（MinIO 为空时用作精美兜底）
-const DEFAULT_PHOTOS = [
-  {
-    name: '星野记忆 · Starry Night',
-    url: 'https://images.unsplash.com/photo-1506318137071-a8e063b4bec0?q=80&w=400',
-    caption: '“仰望同一片星空，找寻失去的时间。”'
-  },
-  {
-    name: '旧日时光 · Polaroid Cam',
-    url: 'https://images.unsplash.com/photo-1516035069371-29a1b244cc32?q=80&w=400',
-    caption: '“按下快门的那一秒，我们便成为了永恒。”'
-  },
-  {
-    name: '远行足迹 · Nostalgic Train',
-    url: 'https://images.unsplash.com/photo-1475924156734-496f6cac6ec1?q=80&w=400',
-    caption: '“旅途的终点，是记忆中最温暖的港湾。”'
-  },
-  {
-    name: '静谧黄昏 · Silent Sunset',
-    url: 'https://images.unsplash.com/photo-1472214222541-d510753a8707?q=80&w=400',
-    caption: '“日落时分，海风吹拂着关于你的诺言。”'
-  }
-]
+// 指定文件夹中已生成的 13–32 号记忆封面。远端资源池不可用时也不再访问外链。
+const DEFAULT_PHOTOS = memoryCovers.map((asset) => ({
+  name: asset.origin,
+  url: asset.src,
+  caption: `“${asset.role} · 编号 ${asset.number}”`,
+}))
 
 // 用户隐藏的拍立得照片 URL 列表
 const hiddenUrls = ref<string[]>([])
@@ -47,8 +31,19 @@ const activePhotos = ref<Array<{
   url: string
   caption: string
   side: 'left' | 'right'
-  style: any
+  style: Record<string, string>
 }>>([])
+
+const PHOTO_SLOTS = [
+  { side: 'left', top: '14%', offset: '18px', rotate: '-4deg', delay: '-1.2s' },
+  { side: 'left', top: '35%', offset: '28px', rotate: '3deg', delay: '-3.8s' },
+  { side: 'left', top: '56%', offset: '14px', rotate: '-2deg', delay: '-2.4s' },
+  { side: 'left', top: '77%', offset: '24px', rotate: '4deg', delay: '-4.6s' },
+  { side: 'right', top: '14%', offset: '22px', rotate: '4deg', delay: '-2.9s' },
+  { side: 'right', top: '35%', offset: '14px', rotate: '-3deg', delay: '-1.7s' },
+  { side: 'right', top: '56%', offset: '28px', rotate: '2deg', delay: '-4.1s' },
+  { side: 'right', top: '77%', offset: '18px', rotate: '-4deg', delay: '-3.2s' },
+] as const
 
 // 随机挑选图片并计算随机位置的逻辑
 function regeneratePhotos() {
@@ -58,66 +53,37 @@ function regeneratePhotos() {
     caption: `“岁月流转，我们在 ${item.name.slice(0, 8)} 驻足。”`
   }))
 
-  // 合并 MinIO 资产与预设兜底
-  const pool = [...minioAssets]
-  if (pool.length < 15) {
-    DEFAULT_PHOTOS.forEach(p => {
-      if (!pool.some(x => x.url === p.url)) {
-        pool.push(p)
-      }
-    })
-  }
-
-  // 过滤已隐藏的
-  const availablePool = pool.filter(p => !hiddenUrls.value.includes(p.url))
+  // 合并 MinIO 资产与本地编号素材，过滤用户已隐藏的条目。
+  const pool = [...minioAssets, ...DEFAULT_PHOTOS.filter((fallback) =>
+    !minioAssets.some((asset) => asset.url === fallback.url),
+  )]
+  const availablePool = pool.filter((photo) => !hiddenUrls.value.includes(photo.url))
   if (availablePool.length === 0) {
     activePhotos.value = []
     return
   }
 
-  // 随机决定本次展示数量：6 到 10 张
-  const count = Math.min(availablePool.length, Math.floor(Math.random() * 5) + 6)
+  const selected = [...availablePool]
+    .sort(() => 0.5 - Math.random())
+    .slice(0, Math.min(PHOTO_SLOTS.length, availablePool.length))
 
-  // 随机挑选 count 个不重复的元素
-  const shuffled = [...availablePool].sort(() => 0.5 - Math.random())
-  const selected = shuffled.slice(0, count)
-
-  // 均匀分配给左右两侧：前一半放左边，后一半放右边
-  const half = Math.ceil(selected.length / 2)
-  
-  activePhotos.value = selected.map((p, idx) => {
-    const side = idx < half ? 'left' : 'right'
-    const rowIdx = side === 'left' ? idx : idx - half
-    const rowCount = side === 'left' ? half : selected.length - half
-    
-    // 计算均匀的基础 top 比例 (15% 到 75% 之间均匀错开，避免卡片重叠)，加上随机抖动
-    const baseTop = 15 + (rowIdx / Math.max(1, rowCount - 1)) * 62
-    const randomJitter = (Math.random() * 8) - 4
-    const top = `${baseTop + randomJitter}%`
-    
-    // 左右偏移随机抖动
-    const sideOffset = `${Math.floor(Math.random() * 16) + 12}px` // 12px 到 28px
-    
-    // 随机倾斜角度
-    const rotate = `${(Math.random() * 14) - 7}deg` // -7deg 到 7deg
-    
-    // 随机浮动延迟
-    const animDelay = `${Math.random() * -5}s`
-    
+  // 槽位固定，轮换时只替换图片内容；避免每次刷新重新计算位置造成跳动和重叠。
+  activePhotos.value = selected.map((photo, index) => {
+    const slot = PHOTO_SLOTS[index]
     return {
-      id: p.url, // 用 url 作为唯一 ID，方便 transition 识别
-      name: p.name,
-      url: p.url,
-      caption: p.caption,
-      side,
+      id: photo.url,
+      name: photo.name,
+      url: photo.url,
+      caption: photo.caption,
+      side: slot.side,
       style: {
         position: 'absolute',
-        top,
-        [side]: sideOffset,
-        transform: `rotate(${rotate})`,
-        animationDelay: animDelay,
-        pointerEvents: 'auto'
-      }
+        top: slot.top,
+        [slot.side]: slot.offset,
+        transform: `rotate(${slot.rotate})`,
+        animationDelay: slot.delay,
+        pointerEvents: 'auto',
+      },
     }
   })
 }
@@ -158,7 +124,7 @@ watch(() => [dynamicMedia.state.photos, dynamicMedia.state.gifs], () => {
 }, { deep: true })
 
 // 定时微调：每 10 秒随机替换其中的“一张”图片，形成“原位渐变替换”的淡入淡出效果！
-let rotationTimer: any = null
+let rotationTimer: number | null = null
 function startRotation() {
   rotationTimer = setInterval(() => {
     if (activePhotos.value.length === 0) return
@@ -195,15 +161,13 @@ function startRotation() {
   }, 10000)
 }
 
-import { onMounted, onUnmounted, watch } from 'vue'
-
 onMounted(() => {
   regeneratePhotos()
   startRotation()
 })
 
 onUnmounted(() => {
-  if (rotationTimer) clearInterval(rotationTimer)
+  if (rotationTimer !== null) window.clearInterval(rotationTimer)
 })
 </script>
 

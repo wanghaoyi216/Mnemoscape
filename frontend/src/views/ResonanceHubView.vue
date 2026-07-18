@@ -10,7 +10,9 @@ import type { ResonanceMatch } from '../types'
 const { t } = useI18n()
 const heroBg = images.resonanceBridge.src
 const heroVideo = videos.driftPerception.src
+const heroPoster = videos.driftPerception.poster
 const signalVideo = videos.neuralResonance.src
+const signalPoster = videos.neuralResonance.poster
 
 const router = useRouter()
 const resonanceStore = useResonanceStore()
@@ -54,7 +56,7 @@ async function createSpace(match: ResonanceMatch) {
       class="hero-card hero-card--split resonance-hero"
       :style="{ backgroundImage: `linear-gradient(120deg, rgba(8,10,14,0.78) 0%, rgba(8,10,14,0.4) 55%, rgba(8,10,14,0.85) 100%), url(${heroBg})` }"
     >
-      <video class="resonance-hero__video" :src="heroVideo" autoplay muted loop playsinline aria-hidden="true"></video>
+      <video class="resonance-hero__video" :src="heroVideo" :poster="heroPoster" autoplay muted loop playsinline preload="metadata" aria-hidden="true"></video>
       <div class="resonance-hero__mesh" aria-hidden="true"></div>
       <div class="stack stack--lg">
         <p class="eyebrow">{{ t('resonance.hub.eyebrow') }}</p>
@@ -79,7 +81,7 @@ async function createSpace(match: ResonanceMatch) {
     </section>
 
     <section class="section-card stack" style="margin-top: 24px;">
-      <video class="resonance-search__signal" :src="signalVideo" autoplay muted loop playsinline aria-hidden="true"></video>
+      <video class="resonance-search__signal" :src="signalVideo" :poster="signalPoster" autoplay muted loop playsinline preload="metadata" aria-hidden="true"></video>
       <div class="page-shell__header" style="margin-bottom: 0;">
         <div>
           <h2 class="section-title">{{ t('resonance.hub.search.title') }}</h2>
@@ -117,7 +119,7 @@ async function createSpace(match: ResonanceMatch) {
         class="result-card resonance-result"
         :style="{ transitionDelay: `${Math.min(idx * 60, 360)}ms` }"
       >
-        <video class="resonance-result__video" :src="signalVideo" autoplay muted loop playsinline aria-hidden="true"></video>
+        <video class="resonance-result__video" :src="signalVideo" :poster="signalPoster" autoplay muted loop playsinline preload="metadata" aria-hidden="true"></video>
         <div class="stack">
           <div class="result-card__head">
             <h3 class="result-card__title">{{ match.title }}</h3>

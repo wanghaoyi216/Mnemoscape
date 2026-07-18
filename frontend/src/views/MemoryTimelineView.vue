@@ -21,7 +21,9 @@ const store = useMemoryStore()
 const { t, locale } = useI18n()
 const heroBg = images.timeGeometry.src
 const heroVideo = videos.nebulaTide.src
+const heroPoster = videos.nebulaTide.poster
 const auroraVideo = videos.nasaAuroraSteve.src
+const auroraPoster = videos.nasaAuroraSteve.poster
 
 interface TimelineNode {
   memory: MemoryItem
@@ -131,7 +133,7 @@ onMounted(async () => {
       class="hero-card hero-card--split timeline-hero"
       :style="{ backgroundImage: `linear-gradient(120deg, rgba(8,10,14,0.82) 0%, rgba(8,10,14,0.42) 55%, rgba(8,10,14,0.92) 100%), url(${heroBg})` }"
     >
-      <video class="timeline-hero__video" :src="heroVideo" autoplay muted loop playsinline aria-hidden="true"></video>
+      <video class="timeline-hero__video" :src="heroVideo" :poster="heroPoster" autoplay muted loop playsinline preload="metadata" aria-hidden="true"></video>
       <span class="timeline-hero__scan" aria-hidden="true"></span>
       <div class="stack stack--lg">
         <p class="eyebrow">{{ t('memory.timeline.eyebrow') }}</p>
@@ -156,7 +158,7 @@ onMounted(async () => {
     </section>
 
     <section class="section-card timeline-shell" style="margin-top: 24px;">
-      <video class="timeline-shell__aurora" :src="auroraVideo" autoplay muted loop playsinline aria-hidden="true"></video>
+      <video class="timeline-shell__aurora" :src="auroraVideo" :poster="auroraPoster" autoplay muted loop playsinline preload="metadata" aria-hidden="true"></video>
       <header class="page-shell__header" style="margin-bottom: 12px;">
         <div>
           <h2 class="section-title">{{ t('memory.timeline.shell.title') }}</h2>

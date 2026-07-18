@@ -4,7 +4,7 @@ import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '../stores/auth'
 import LiquidMemoryBackground from '../components/auth/LiquidMemoryBackground.vue'
-import { videos } from '../assets/media-catalog'
+import { loginBackgrounds, videos } from '../assets/media-catalog'
 import client from '../api/client'
 
 const router = useRouter()
@@ -38,6 +38,8 @@ const defaultPlaylist: PlaylistItem[] = [
 const envVideo = (import.meta.env.VITE_LOGIN_VIDEO_URL as string | undefined)
 const playlist = ref<PlaylistItem[]>(defaultPlaylist)
 const currentVideoIndex = ref(0)
+const currentBackgroundIndex = ref(0)
+const currentBackground = computed(() => loginBackgrounds[currentBackgroundIndex.value])
 const videoUrl = computed(() => envVideo !== undefined ? envVideo : (playlist.value[currentVideoIndex.value]?.src || ''))
 
 // 选择器默认隐藏；提供一颗"维网入口"按钮唤起
@@ -51,6 +53,7 @@ function startAutoCycle() {
   if (!autoCycle.value || envVideo !== undefined || playlist.value.length < 2) return
   cycleTimer = window.setInterval(() => {
     currentVideoIndex.value = (currentVideoIndex.value + 1) % playlist.value.length
+    currentBackgroundIndex.value = (currentBackgroundIndex.value + 1) % loginBackgrounds.length
   }, 18000)
 }
 function stopAutoCycle() {
@@ -74,6 +77,7 @@ function pickVideo(idx: number) {
 function handleVideoEnded() {
   if (envVideo === undefined && playlist.value.length > 0) {
     currentVideoIndex.value = (currentVideoIndex.value + 1) % playlist.value.length
+    currentBackgroundIndex.value = (currentBackgroundIndex.value + 1) % loginBackgrounds.length
   }
 }
 
@@ -153,7 +157,18 @@ async function handleSubmit() {
     -->
     <LiquidMemoryBackground />
  
-    <!-- 可选视频背景（叠加在着色器之上、CSS 层之下） -->
+    <!-- 1–12 号生成背景按固定节奏交叉淡入；编号与素材方案保持一致。 -->
+    <transition name="background-fade" mode="in-out">
+      <img
+        :key="currentBackground.src"
+        class="login-stage__image"
+        :src="currentBackground.src"
+        :alt="currentBackground.origin"
+        fetchpriority="high"
+      />
+    </transition>
+
+    <!-- 旧视频仅作为轻量动态纹理，不再遮盖新生成背景。 -->
     <transition name="video-fade" mode="out-in">
       <video
         v-if="videoUrl"
@@ -164,7 +179,8 @@ async function handleSubmit() {
         muted
         :loop="!!envVideo"
         playsinline
-        preload="auto"
+        preload="metadata"
+        :poster="currentBackground.src"
         @ended="handleVideoEnded"
       >
         <source :src="videoUrl" type="video/mp4" />
@@ -448,16 +464,39 @@ async function handleSubmit() {
   justify-content: center;
 }
 
+.login-stage__image {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  object-position: center;
+  z-index: -3;
+  filter: saturate(1.04) contrast(1.02);
+}
+
+.background-fade-enter-active,
+.background-fade-leave-active {
+  transition: opacity 1.8s ease, transform 8s ease;
+}
+.background-fade-enter-from,
+.background-fade-leave-to {
+  opacity: 0;
+}
+.background-fade-enter-from {
+  transform: scale(1.025);
+}
+
 .login-stage__video {
   position: absolute;
   inset: 0;
   width: 100%;
   height: 100%;
   object-fit: cover;
-  z-index: -3;
-  /* 提升清晰度：opacity 调高 + 轻度对比/饱和度，减弱 CSS 蒙版上压时的浑浊感 */
-  opacity: 0.92;
-  filter: contrast(1.06) saturate(1.12) brightness(1.02);
+  z-index: -2;
+  opacity: 0.18;
+  mix-blend-mode: screen;
+  filter: contrast(1.05) saturate(0.9) brightness(0.78);
 }
 
 /* ============== 记忆时空维网切换器 — 默认折叠 ============== */
@@ -1190,6 +1229,9 @@ async function handleSubmit() {
   }
   .login-stage__video {
     display: none;
+  }
+  .login-stage__image {
+    transition: none !important;
   }
 }
 </style>

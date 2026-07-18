@@ -4,7 +4,7 @@ import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '../stores/auth'
 import LiquidMemoryBackground from '../components/auth/LiquidMemoryBackground.vue'
-import { videos } from '../assets/media-catalog'
+import { loginBackgrounds, videos } from '../assets/media-catalog'
 
 const router = useRouter()
 const auth = useAuthStore()
@@ -36,6 +36,7 @@ const passwordsMatch = computed(() =>
 // 注册页与登录页共用视频素材策略 — Chronos Flow 作时间长河氛围
 const envVideo = (import.meta.env.VITE_LOGIN_VIDEO_URL as string | undefined)
 const videoUrl = computed(() => envVideo === undefined ? videos.chronosFlow.src : envVideo)
+const registerBackground = loginBackgrounds[2]
 
 const canSubmit = computed(() => (
   username.value.trim().length >= 3
@@ -71,10 +72,13 @@ async function handleSubmit() {
   <div class="login-stage">
     <LiquidMemoryBackground />
 
+    <img class="login-stage__image" :src="registerBackground.src" :alt="registerBackground.origin" fetchpriority="high" />
+
     <video
       v-if="videoUrl"
       class="login-stage__video"
-      autoplay muted loop playsinline preload="auto"
+      autoplay muted loop playsinline preload="metadata"
+      :poster="registerBackground.src"
     >
       <source :src="videoUrl" type="video/mp4" />
     </video>
@@ -217,6 +221,7 @@ async function handleSubmit() {
   justify-content: center;
 }
 
+.login-stage__image,
 .login-stage__video {
   position: absolute;
   inset: 0;
@@ -224,7 +229,12 @@ async function handleSubmit() {
   height: 100%;
   object-fit: cover;
   z-index: -3;
-  opacity: 0.7;
+}
+
+.login-stage__video {
+  z-index: -2;
+  opacity: 0.18;
+  mix-blend-mode: screen;
 }
 
 .login-stage__ink {
