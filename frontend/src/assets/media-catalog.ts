@@ -1,8 +1,9 @@
 /**
  * 前端媒体素材目录。
  *
- * 编号素材严格对应仓库根目录的《AI生成图片素材提示词.md》。只登记已经存在的
- * 编号，缺失素材不会用不相干的图片顶替。原始 PNG 通过
+ * 编号素材源自仓库根目录的《AI生成图片素材提示词.md》，但 013–032 的实际成图与
+ * 文档大面积偏离（见 docs/媒体对照表-53张目检.md），故标签以实际画面为准，不硬套文档。
+ * 只登记已经存在的编号，缺失素材不会用不相干的图片顶替。原始 PNG 通过
  * scripts/import-numbered-media.py 转为高质量 WebP 与轻量缩略图。
  */
 export interface MediaAsset {
@@ -43,38 +44,38 @@ export const loginBackgrounds = [
   generatedImage('login', 1, '淡紫水墨山水', '登录页与全局氛围背景'),
   generatedImage('login', 2, '桃粉晨光河谷', '登录页与全局氛围背景'),
   generatedImage('login', 3, '星空浮岛', '登录页与全局氛围背景'),
-  generatedImage('login', 4, '记忆之门', '登录页与全局氛围背景'),
+  generatedImage('login', 4, '推门见山', '登录页与全局氛围背景'),
   generatedImage('login', 5, '极光莲湖', '登录页与全局氛围背景'),
   generatedImage('login', 6, '水晶记忆宫殿', '登录页与全局氛围背景'),
   generatedImage('login', 7, '极简桃花水墨', '登录页与全局氛围背景'),
   generatedImage('login', 8, '竹林月亮门', '登录页与全局氛围背景'),
   generatedImage('login', 9, '桃月薰衣草夜', '登录页与全局氛围背景'),
   generatedImage('login', 10, '云海仙鹤', '登录页与全局氛围背景'),
-  generatedImage('login', 11, '记忆古树', '登录页与全局氛围背景'),
+  generatedImage('login', 11, '记忆樱树', '登录页与全局氛围背景'),
   generatedImage('login', 12, '古铜圆门', '登录页与全局氛围背景'),
 ] as const satisfies readonly MediaAsset[]
 
 export const memoryCovers = [
   generatedImage('memory-covers', 13, '温暖', '暖色记忆封面'),
-  generatedImage('memory-covers', 14, '欢乐', '暖色记忆封面'),
-  generatedImage('memory-covers', 15, '家', '暖色记忆封面'),
+  generatedImage('memory-covers', 14, '祈愿', '暖色记忆封面'),
+  generatedImage('memory-covers', 15, '冬暖', '暖色记忆封面'),
   generatedImage('memory-covers', 16, '童年', '暖色记忆封面'),
-  generatedImage('memory-covers', 17, '友情', '暖色记忆封面'),
-  generatedImage('memory-covers', 18, '爱情', '暖色记忆封面'),
-  generatedImage('memory-covers', 19, '庆祝', '暖色记忆封面'),
-  generatedImage('memory-covers', 20, '旅行', '暖色记忆封面'),
-  generatedImage('memory-covers', 21, '美食', '暖色记忆封面'),
-  generatedImage('memory-covers', 22, '宠物', '暖色记忆封面'),
-  generatedImage('memory-covers', 23, '成长', '暖色记忆封面'),
-  generatedImage('memory-covers', 24, '毕业', '暖色记忆封面'),
-  generatedImage('memory-covers', 25, '音乐', '暖色记忆封面'),
+  generatedImage('memory-covers', 17, '拥抱', '暖色记忆封面'),
+  generatedImage('memory-covers', 18, '生日', '暖色记忆封面'),
+  generatedImage('memory-covers', 19, '远行', '暖色记忆封面'),
+  generatedImage('memory-covers', 20, '守候', '暖色记忆封面'),
+  generatedImage('memory-covers', 21, '毕业', '暖色记忆封面'),
+  generatedImage('memory-covers', 22, '烟火', '暖色记忆封面'),
+  generatedImage('memory-covers', 23, '音乐', '暖色记忆封面'),
+  generatedImage('memory-covers', 24, '陪伴', '暖色记忆封面'),
+  generatedImage('memory-covers', 25, '约定', '暖色记忆封面'),
   generatedImage('memory-covers', 26, '节日', '暖色记忆封面'),
-  generatedImage('memory-covers', 27, '重逢', '暖色记忆封面'),
-  generatedImage('memory-covers', 28, '梦想成真', '暖色记忆封面'),
-  generatedImage('memory-covers', 29, '忧郁', '冷色记忆封面'),
-  generatedImage('memory-covers', 30, '孤独', '冷色记忆封面'),
-  generatedImage('memory-covers', 31, '遗憾', '冷色记忆封面'),
-  generatedImage('memory-covers', 32, '思念', '冷色记忆封面'),
+  generatedImage('memory-covers', 27, '漫步', '暖色记忆封面'),
+  generatedImage('memory-covers', 28, '日出', '暖色记忆封面'),
+  generatedImage('memory-covers', 29, '思念', '冷色记忆封面'),
+  generatedImage('memory-covers', 30, '雨天', '冷色记忆封面'),
+  generatedImage('memory-covers', 31, '迷雾', '冷色记忆封面'),
+  generatedImage('memory-covers', 32, '沉默', '冷色记忆封面'),
 ] as const satisfies readonly MediaAsset[]
 
 export const sceneBackgrounds = [

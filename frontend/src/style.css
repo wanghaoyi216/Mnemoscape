@@ -1386,8 +1386,19 @@ select:disabled {
   height: 100%;
   object-fit: cover;
   transition: transform 600ms var(--ease-out-expo);
+  animation: media-fade-in 700ms ease both;
 }
 .art-frame:hover img { transform: scale(1.03); }
+
+/* 加载淡入：仅透明度，避免与 hover 位移动画打架；reduced-motion 下被全局归零 */
+@keyframes media-fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+.empty-state__art {
+  animation: media-fade-in 700ms ease both;
+}
 
 .cover-img {
   width: 100%;
@@ -1416,6 +1427,28 @@ select:disabled {
   -webkit-mask-image: linear-gradient(100deg, #000 20%, transparent 75%);
   mask-image: linear-gradient(100deg, #000 20%, transparent 75%);
   pointer-events: none;
+}
+
+/* 顶部桃粉渐变细线 — museum 印章式收边 */
+.page-hero::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 8%;
+  right: 8%;
+  height: 1px;
+  background: linear-gradient(90deg, transparent, color-mix(in srgb, var(--primary) 55%, transparent), color-mix(in srgb, var(--gold) 45%, transparent), transparent);
+  pointer-events: none;
+}
+
+@media (max-width: 720px) {
+  .empty-state__art {
+    width: 128px;
+    height: 128px;
+  }
+  .page-hero {
+    border-radius: var(--radius-lg);
+  }
 }
 
 .empty-state__title {

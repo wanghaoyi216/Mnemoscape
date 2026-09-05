@@ -3,7 +3,7 @@ import { ref, onMounted, watch } from 'vue'
 import { useMemoryStore } from '../../stores/memory'
 import { useDynamicMedia } from '../../composables/useDynamicMedia'
 import { useI18n } from 'vue-i18n'
-import { fallbackSceneCover, memoryCovers, sceneBackgrounds } from '../../assets/media-catalog'
+import { fallbackSceneCover, memoryCovers } from '../../assets/media-catalog'
 
 const store = useMemoryStore()
 const dynamicMedia = useDynamicMedia()
@@ -15,7 +15,7 @@ const DEFAULT_MEMORIES = [
     id: 'placeholder-1',
     title: '星野记忆 · Starry Night',
     description: '“仰望同一片星空，在浩瀚的宇宙中找寻失去的时间。”',
-    coverUrl: memoryCovers[19].src,
+    coverUrl: memoryCovers[16].src,
     memoryYear: '2025',
     memoryLocation: '星空观测站',
     memorySeason: 'WINTER',
@@ -39,7 +39,7 @@ const DEFAULT_MEMORIES = [
     id: 'placeholder-3',
     title: '远行足迹 · Nostalgic Train',
     description: '“旅途的终点也许并不重要，重要的是记忆中最温暖的那段时光。”',
-    coverUrl: sceneBackgrounds[3].src,
+    coverUrl: memoryCovers[6].src,
     memoryYear: '2024',
     memoryLocation: '林间铁轨',
     memorySeason: 'SPRING',
@@ -51,7 +51,7 @@ const DEFAULT_MEMORIES = [
     id: 'placeholder-4',
     title: '静谧黄昏 · Silent Sunset',
     description: '“日落时分，温暖的海风轻轻吹拂着关于夏天的诺言。”',
-    coverUrl: sceneBackgrounds[1].src,
+    coverUrl: memoryCovers[15].src,
     memoryYear: '2022',
     memoryLocation: '黄金海岸',
     memorySeason: 'SUMMER',
