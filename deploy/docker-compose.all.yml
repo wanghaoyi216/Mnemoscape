@@ -1,3 +1,5 @@
+name: mnemoscape
+
 include:
   - docker-compose.yml
   - docker-compose.services.yml

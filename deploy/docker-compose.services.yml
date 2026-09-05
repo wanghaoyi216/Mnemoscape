@@ -1,3 +1,5 @@
+name: mnemoscape
+
 services:
   frontend:
     build:
