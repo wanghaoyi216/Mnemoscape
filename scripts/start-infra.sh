@@ -3,7 +3,7 @@
 echo "=== Starting Mnemoscape Infrastructure ==="
 cd "$(dirname "$0")/.."
 
-docker compose -f docker/docker-compose.yml up -d
+docker compose -f deploy/docker-compose.yml up -d
 
 echo ""
 echo "Waiting for services to be healthy..."
@@ -44,4 +44,4 @@ echo " ready!"
 
 echo ""
 echo "=== All infrastructure services are healthy! ==="
-docker compose -f docker/docker-compose.yml ps
+docker compose -f deploy/docker-compose.yml ps

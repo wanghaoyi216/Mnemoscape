@@ -9,7 +9,7 @@
 # reported to the end user can be located across services in one grep.
 #
 # Prerequisites:
-#   docker compose -f docker/docker-compose.all.yml up -d
+#   docker compose -f deploy/docker-compose.all.yml up -d
 #
 # Usage:
 #   ./scripts/verify-trace.sh            # uses default localhost:8080
