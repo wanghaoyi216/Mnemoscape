@@ -5,9 +5,12 @@ import { useI18n } from 'vue-i18n'
 import * as THREE from 'three'
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js'
 import { useMemoryStore } from '../stores/memory'
+import { conceptIllustrations, loginBackgrounds } from '../assets/media-catalog'
 
 const router = useRouter()
 const memoryStore = useMemoryStore()
+const constellationArt = conceptIllustrations[1]
+const constellationBg = loginBackgrounds[8]
 const containerRef = ref<HTMLElement | null>(null)
 const hoveredMemory = ref<any | null>(null)
 const hoveredEmotion = ref<string | null>(null)
@@ -502,12 +505,16 @@ const i18nLocale = computed(() => useI18n().locale.value)
 
 <template>
   <div class="page-shell page-shell--wide">
-    <section class="hero-card" style="margin-bottom: 24px;">
-      <div class="stack stack--lg">
+    <section class="hero-card hero-card--split page-hero" style="margin-bottom: 24px;">
+      <div class="page-hero__bg" :style="{ backgroundImage: `url(${constellationBg.src})` }" aria-hidden="true"></div>
+      <div class="stack stack--lg" style="position:relative;z-index:1;">
         <p class="eyebrow">PENTAGRAM CONSTELLATION · 五芒星阵</p>
         <h1 class="display-title text-gradient">记忆星阵图谱</h1>
         <p class="lead">相似的记忆凝聚成五芒星阵，每个星阵代表一种情感共鸣。星辰沿轨迹流转，诉说着时光的秘密。</p>
       </div>
+      <figure class="art-frame" style="position:relative;z-index:1;max-width:340px;margin:0;aspect-ratio:1;">
+        <img :src="constellationArt.src" :alt="constellationArt.origin" loading="lazy" decoding="async" />
+      </figure>
     </section>
 
     <section

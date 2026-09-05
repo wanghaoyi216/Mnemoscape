@@ -1,0 +1,281 @@
+/* ==========================================================================
+   Mnemoscape Design Tokens System
+   Apple HIG Glassmorphism, Semantic Color Palettes, Motion & Elevation Tokens
+   ========================================================================== */
+
+/* --------------------------------------------------------------------------
+   1. SCSS Variables (Compile-Time)
+   -------------------------------------------------------------------------- */
+
+// Canvas & Base Surfaces
+$bg-0: #050608;
+$bg-1: #0a0d12;
+$bg-2: #11151b;
+$bg-3: #161b22;
+$bg-canvas: #050608;
+$bg-canvas-subtle: #0a0d12;
+$bg-canvas-muted: #11151b;
+$bg-canvas-inset: #030406;
+
+// Apple HIG Glassmorphism Surfaces
+$glass-surface: rgba(20, 24, 31, 0.78);
+$glass-surface-strong: rgba(26, 30, 38, 0.94);
+$glass-surface-soft: rgba(34, 38, 46, 0.62);
+$glass-surface-elevated: rgba(22, 26, 33, 0.86);
+$glass-surface-ultra: rgba(8, 10, 14, 0.72);
+$glass-bg: rgba(15, 23, 42, 0.68);
+$glass-bg-hover: rgba(22, 34, 60, 0.78);
+$glass-bg-card: rgba(8, 14, 28, 0.72);
+
+// Glass Borders & Outlines
+$glass-border: rgba(255, 255, 255, 0.08);
+$glass-border-subtle: rgba(210, 218, 228, 0.10);
+$glass-border-strong: rgba(210, 218, 228, 0.22);
+$glass-border-accent: rgba(54, 216, 180, 0.32);
+$glass-border-hover: rgba(0, 242, 254, 0.35);
+
+// Glass Highlights & Inner Glows
+$glass-glow: 0 0 24px rgba(54, 216, 180, 0.25);
+$glass-inner-glow: inset 0 1px 1px 0 rgba(255, 255, 255, 0.12);
+$glass-inner-highlight: inset 0 1px 0 rgba(255, 255, 255, 0.20), inset 0 0 0 1px rgba(255, 255, 255, 0.06);
+
+// Glass Blur Filters
+$glass-blur-sm: 8px;
+$glass-blur-md: 16px;
+$glass-blur-lg: 24px;
+$glass-blur-xl: 32px;
+$glass-saturate: 180%;
+
+// Brand & Palette Colors — 默认 museum（桃粉/淡紫/鎏金），与 style.css :root 保持一致
+$primary: #d8b4fe;
+$primary-strong: #b984ed;
+$primary-glow: rgba(216, 180, 254, 0.34);
+$accent: #93c5fd;
+$accent-glow: rgba(147, 197, 253, 0.26);
+$gold: #f6cf94;
+$gold-glow: rgba(246, 207, 148, 0.24);
+$peach: #f0a9cf;
+$lavender: #c4b5fd;
+
+// Semantic Status
+$success: #4ade80;
+$warning: #facc15;
+$danger: #f87171;
+$info: #60a5fa;
+
+// Typography Colors
+$text: #f4f7fa;
+$text-soft: #cdd5dd;
+$text-muted: #8b95a1;
+$text-faint: #5a6573;
+
+// Multi-Agent Workflow Status
+$status-pending: #94a3b8;
+$status-pending-bg: rgba(148, 163, 184, 0.12);
+$status-running: #00f2fe;
+$status-running-bg: rgba(0, 242, 254, 0.12);
+$status-running-pulse: rgba(0, 242, 254, 0.45);
+$status-completed: #4ade80;
+$status-completed-bg: rgba(74, 222, 128, 0.12);
+$status-failed: #f87171;
+$status-failed-bg: rgba(248, 113, 113, 0.12);
+
+// Apple Spring & Ease Motion Curves
+$spring-bounce: cubic-bezier(0.34, 1.56, 0.64, 1);
+$spring-smooth: cubic-bezier(0.16, 1, 0.3, 1);
+$ease-apple: cubic-bezier(0.25, 1, 0.5, 1);
+$ease-out-quart: cubic-bezier(0.165, 0.84, 0.44, 1);
+$ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
+$ease-in-out-quart: cubic-bezier(0.77, 0, 0.175, 1);
+$duration-fast: 150ms;
+$duration-base: 240ms;
+$duration-slow: 360ms;
+$duration-ultra-slow: 600ms;
+
+// Apple HIG Elevation Shadows
+$elevation-1: 0 2px 8px -2px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+$elevation-2: 0 6px 16px -4px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.12);
+$elevation-3: 0 12px 28px -6px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.16);
+$elevation-4: 0 20px 48px -8px rgba(0, 0, 0, 0.7), inset 0 1px 0 rgba(255, 255, 255, 0.20);
+$elevation-5: 0 28px 72px -12px rgba(0, 0, 0, 0.8), inset 0 1px 0 rgba(255, 255, 255, 0.25);
+
+// Radii
+$radius-xs: 6px;
+$radius-sm: 8px;
+$radius-md: 12px;
+$radius-lg: 16px;
+$radius-xl: 24px;
+$radius-full: 999px;
+
+// Z-Index Master Layering
+$z-canvas: 1;
+$z-base: 10;
+$z-card: 20;
+$z-popover: 30;
+$z-header: 40;
+$z-theme-switch: 50;
+$z-mascot: 800;
+$z-modal-backdrop: 900;
+$z-drawer-backdrop: 950;
+$z-drawer: 1000;
+$z-modal: 1000;
+$z-toast: 1100;
+$z-tooltip: 1200;
+
+
+/* --------------------------------------------------------------------------
+   2. SCSS Mixins for Glassmorphism & Micro-Interactions
+   -------------------------------------------------------------------------- */
+
+@mixin glass-panel($bg: var(--glass-surface-ultra), $blur: var(--glass-blur-lg), $saturate: var(--glass-saturate), $border: var(--glass-border)) {
+  background: $bg;
+  backdrop-filter: blur($blur) saturate($saturate);
+  -webkit-backdrop-filter: blur($blur) saturate($saturate);
+  border: 1px solid $border;
+  box-shadow: var(--elevation-4), var(--glass-inner-highlight);
+}
+
+@mixin glass-card($bg: var(--glass-bg-card), $blur: var(--glass-blur-md)) {
+  background: $bg;
+  backdrop-filter: blur($blur) saturate(var(--glass-saturate));
+  -webkit-backdrop-filter: blur($blur) saturate(var(--glass-saturate));
+  border: 1px solid var(--glass-border);
+  box-shadow: var(--elevation-2), var(--glass-inner-glow);
+}
+
+@mixin spring-transition($prop: all, $duration: var(--duration-base)) {
+  transition: $prop $duration var(--spring-smooth);
+}
+
+
+/* --------------------------------------------------------------------------
+   3. CSS Custom Properties (:root Export)
+   -------------------------------------------------------------------------- */
+
+:root {
+  /* Canvas & Base Surfaces */
+  --bg-0: #{$bg-0};
+  --bg-1: #{$bg-1};
+  --bg-2: #{$bg-2};
+  --bg-3: #{$bg-3};
+  --bg-canvas: #{$bg-canvas};
+  --bg-canvas-subtle: #{$bg-canvas-subtle};
+  --bg-canvas-muted: #{$bg-canvas-muted};
+  --bg-canvas-inset: #{$bg-canvas-inset};
+
+  /* Apple HIG Glassmorphism Surfaces */
+  --glass-surface: #{$glass-surface};
+  --glass-surface-strong: #{$glass-surface-strong};
+  --glass-surface-soft: #{$glass-surface-soft};
+  --glass-surface-elevated: #{$glass-surface-elevated};
+  --glass-surface-ultra: #{$glass-surface-ultra};
+  --glass-bg: #{$glass-bg};
+  --glass-bg-hover: #{$glass-bg-hover};
+  --glass-bg-card: #{$glass-bg-card};
+
+  /* Glass Borders & Outlines */
+  --glass-border: #{$glass-border};
+  --glass-border-subtle: #{$glass-border-subtle};
+  --glass-border-strong: #{$glass-border-strong};
+  --glass-border-accent: #{$glass-border-accent};
+  --glass-border-hover: #{$glass-border-hover};
+
+  /* Glass Glow & Inner Light */
+  --glass-glow: #{$glass-glow};
+  --glass-inner-glow: #{$glass-inner-glow};
+  --glass-inner-highlight: #{$glass-inner-highlight};
+
+  /* Glass Blur Scale */
+  --glass-blur-sm: #{$glass-blur-sm};
+  --glass-blur-md: #{$glass-blur-md};
+  --glass-blur-lg: #{$glass-blur-lg};
+  --glass-blur-xl: #{$glass-blur-xl};
+  --glass-saturate: #{$glass-saturate};
+
+  /* Glass Shadows */
+  --glass-shadow: 0 16px 36px -8px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.05);
+  --glass-shadow-elevated: 0 24px 64px -12px rgba(0, 0, 0, 0.65), 0 0 24px 0 rgba(0, 242, 254, 0.15);
+
+  /* Apple Spring & Motion Curves */
+  --spring-bounce: #{$spring-bounce};
+  --spring-smooth: #{$spring-smooth};
+  --ease-apple: #{$ease-apple};
+  --ease-out-quart: #{$ease-out-quart};
+  --ease-out-expo: #{$ease-out-expo};
+  --ease-in-out-quart: #{$ease-in-out-quart};
+  --duration-fast: #{$duration-fast};
+  --duration-base: #{$duration-base};
+  --duration-slow: #{$duration-slow};
+  --duration-ultra-slow: #{$duration-ultra-slow};
+
+  /* Apple HIG Elevation Hierarchy */
+  --elevation-1: #{$elevation-1};
+  --elevation-2: #{$elevation-2};
+  --elevation-3: #{$elevation-3};
+  --elevation-4: #{$elevation-4};
+  --elevation-5: #{$elevation-5};
+
+  /* Semantic Colors */
+  --primary: #{$primary};
+  --primary-strong: #{$primary-strong};
+  --primary-glow: #{$primary-glow};
+  --accent: #{$accent};
+  --accent-glow: #{$accent-glow};
+  --gold: #{$gold};
+  --gold-glow: #{$gold-glow};
+  --success: #{$success};
+  --warning: #{$warning};
+  --danger: #{$danger};
+  --info: #{$info};
+
+  /* Typography */
+  --text: #{$text};
+  --text-soft: #{$text-soft};
+  --text-muted: #{$text-muted};
+  --text-faint: #{$text-faint};
+
+  /* Multi-Agent Workflow Tokens */
+  --status-pending: #{$status-pending};
+  --status-pending-bg: #{$status-pending-bg};
+  --status-running: #{$status-running};
+  --status-running-bg: #{$status-running-bg};
+  --status-running-pulse: #{$status-running-pulse};
+  --status-completed: #{$status-completed};
+  --status-completed-bg: #{$status-completed-bg};
+  --status-failed: #{$status-failed};
+  --status-failed-bg: #{$status-failed-bg};
+
+  /* Subagent Chips & Verification Cards */
+  --subagent-chip-bg: rgba(168, 85, 247, 0.14);
+  --subagent-chip-border: rgba(168, 85, 247, 0.38);
+  --subagent-chip-glow: rgba(192, 132, 252, 0.45);
+  --verdict-pass-bg: rgba(74, 222, 128, 0.09);
+  --verdict-pass-border: rgba(74, 222, 128, 0.32);
+  --verdict-pass-text: #dcfce7;
+  --verdict-fail-bg: rgba(244, 63, 94, 0.09);
+  --verdict-fail-border: rgba(244, 63, 94, 0.32);
+  --verdict-fail-text: #ffe4e6;
+
+  /* Apple HIG Radii Scale */
+  --radius-xs: #{$radius-xs};
+  --radius-sm: #{$radius-sm};
+  --radius-md: #{$radius-md};
+  --radius-lg: #{$radius-lg};
+  --radius-xl: #{$radius-xl};
+  --radius-full: #{$radius-full};
+
+  /* Master Layering */
+  --z-canvas: #{$z-canvas};
+  --z-base: #{$z-base};
+  --z-card: #{$z-card};
+  --z-popover: #{$z-popover};
+  --z-header: #{$z-header};
+  --z-theme-switch: #{$z-theme-switch};
+  --z-mascot: #{$z-mascot};
+  --z-modal-backdrop: #{$z-modal-backdrop};
+  --z-modal: #{$z-modal};
+  --z-drawer-backdrop: #{$z-drawer-backdrop};
+  --z-drawer: #{$z-drawer};
+  --z-toast: #{$z-toast};
+  --z-tooltip: #{$z-tooltip};
+}

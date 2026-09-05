@@ -109,6 +109,8 @@ function handleChatSocketMessage(data: any) {
 
     if (isCurrentPrivate || isCurrentGroup) {
       messages.value.push(data)
+      // 上限 500 条，超出丢弃最旧的，避免长会话 DOM 无限增长导致渲染退化
+      if (messages.value.length > 500) messages.value.splice(0, messages.value.length - 500)
       scrollToBottom()
     }
   } else if (data.type === 'GROUP_CREATED') {
@@ -804,7 +806,7 @@ function formatBytes(bytes: number) {
         <!-- No Conversation Selected Overlay -->
         <div v-else class="chat-no-selection">
           <div class="no-selection-content stack">
-            <span class="empty-bubble-icon">💬</span>
+            <img :src="images.resonanceBridge.src" class="empty-state__art" :alt="images.resonanceBridge.origin" loading="lazy" />
             <h2>{{ t('chat.body.noSelectionTitle') }}</h2>
             <p class="subtitle" style="max-width: 42ch; margin: 0 auto;">
               {{ t('chat.body.noSelectionSubtitle') }}

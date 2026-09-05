@@ -1,22 +1,29 @@
 <script setup lang="ts">
-import { onMounted } from 'vue'
+import { computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useRoute } from 'vue-router'
 import AppHeader from './components/layout/AppHeader.vue'
 import AiMascotDock from './components/ai/AiMascotDock.vue'
 import CustomerSupportWidget from './components/support/CustomerSupportWidget.vue'
 import ToastContainer from './components/common/ToastContainer.vue'
+import ErrorBoundary from './components/common/ErrorBoundary.vue'
+import PwaBanner from './components/common/PwaBanner.vue'
 import WeatherFxOverlay from './components/layout/WeatherFxOverlay.vue'
 import AmbientFilmStrip from './components/layout/AmbientFilmStrip.vue'
 import { useHealthCheck } from './composables/useHealthCheck'
 import { useDynamicMedia } from './composables/useDynamicMedia'
 import { useAuthStore } from './stores/auth'
+import { conceptIllustrations } from './assets/media-catalog'
 
 const { t, locale } = useI18n()
 const { isOffline, setOffline } = useHealthCheck()
 const auth = useAuthStore()
 const year = new Date().getFullYear()
 const route = useRoute()
+const ambientArtwork = conceptIllustrations[0].src
+/* 模板表达式内不可直接写 import.meta（rollup 按 classic script 解析会构建失败），提到 script 作用域 */
+const isDev = import.meta.env.DEV
+const showFooter = computed(() => !['MemoryAtlas', 'Login', 'Register'].includes(String(route.name || '')))
 
 // 启动即拉一次 asset-service 的资源清单（本地 + MinIO），
 // 让登录页 / 列表 / AI / 图谱拿到的不是空数组
@@ -30,17 +37,24 @@ onMounted(() => {
   if (auth.isLoggedIn) void dynamicMedia.refresh()
 
   // 读取并应用用户上次保存的主题色
-  const savedTheme = localStorage.getItem('mnemoscape-theme') || 'theme-mint'
+  const savedTheme = localStorage.getItem('mnemoscape-theme') || 'theme-museum'
   document.documentElement.classList.add(savedTheme)
 })
 </script>
 
 <template>
   <div class="app-shell">
+    <a class="skip-link" href="#main-content">{{ t('common.skipToContent') }}</a>
     <div class="app-shell__ambient" aria-hidden="true"></div>
+    <div
+      v-if="auth.isLoggedIn"
+      class="app-shell__artwork"
+      :style="{ backgroundImage: `url(${ambientArtwork})` }"
+      aria-hidden="true"
+    ></div>
     <div class="app-shell__grain" aria-hidden="true"></div>
     <div class="app-shell__aura" aria-hidden="true"></div>
-    <div class="app-shell__frame ai-glow-border ai-glow-border--static ai-glow-border--intense" aria-hidden="true"></div>
+    <div class="app-shell__frame" aria-hidden="true"></div>
     <transition name="banner">
       <div v-if="isOffline" class="infra-offline-banner" role="alert">
         <div class="infra-offline-banner__content">
@@ -64,20 +78,23 @@ onMounted(() => {
       </div>
     </transition>
     <AppHeader />
-    <main class="app-shell__main">
-      <router-view v-slot="{ Component, route }">
-        <transition name="page" mode="out-in">
-          <component :is="Component" :key="route.fullPath" />
-        </transition>
-      </router-view>
+    <main id="main-content" class="app-shell__main" tabindex="-1">
+      <ErrorBoundary scope="app-shell-router" :show-stack="isDev">
+        <router-view v-slot="{ Component, route }">
+          <transition name="page" mode="out-in">
+            <component :is="Component" :key="route.fullPath" />
+          </transition>
+        </router-view>
+      </ErrorBoundary>
     </main>
     <AmbientFilmStrip v-if="auth.isLoggedIn" />
     <AiMascotDock v-if="auth.isLoggedIn" />
     <CustomerSupportWidget v-if="auth.isLoggedIn" />
     <ToastContainer />
+    <PwaBanner />
     <!-- 16+ 环境特效层（登录后启用，避免与登录页 WebGL 背景冲突） -->
     <WeatherFxOverlay v-if="auth.isLoggedIn" />
-    <footer v-if="route.name !== 'MemoryAtlas'" class="app-footer" role="contentinfo">
+    <footer v-if="showFooter" class="app-footer" role="contentinfo">
       <div class="page-shell app-footer__inner">
         <div class="app-footer__brand">
           <span class="app-footer__mark" aria-hidden="true">M</span>
@@ -95,6 +112,40 @@ onMounted(() => {
 </template>
 
 <style scoped>
+.skip-link {
+  position: fixed;
+  top: 12px;
+  left: 12px;
+  z-index: 1300;
+  padding: 10px 16px;
+  border-radius: 999px;
+  color: #120f20;
+  background: var(--primary);
+  box-shadow: var(--shadow-lg);
+  font-size: 0.84rem;
+  font-weight: 800;
+  transform: translateY(-160%);
+  transition: transform 160ms ease;
+}
+
+.skip-link:focus {
+  transform: translateY(0);
+}
+
+.app-shell__artwork {
+  position: fixed;
+  inset: 0;
+  z-index: -2;
+  pointer-events: none;
+  background-position: 82% 12%;
+  background-repeat: no-repeat;
+  background-size: min(72vw, 980px) auto;
+  opacity: 0.045;
+  filter: saturate(0.75) contrast(1.08);
+  -webkit-mask-image: linear-gradient(120deg, transparent 14%, #000 50%, transparent 92%);
+  mask-image: linear-gradient(120deg, transparent 14%, #000 50%, transparent 92%);
+}
+
 .page-enter-active,
 .page-leave-active {
   transition: opacity 240ms cubic-bezier(0.165, 0.84, 0.44, 1),
@@ -113,8 +164,8 @@ onMounted(() => {
 
 .app-footer {
   border-top: 1px solid var(--border);
-  margin-top: 80px;
-  background: rgba(8, 10, 14, 0.7);
+  margin-top: 56px;
+  background: rgba(8, 8, 18, 0.62);
   backdrop-filter: blur(20px);
 }
 
@@ -140,7 +191,7 @@ onMounted(() => {
   display: grid;
   place-items: center;
   background: linear-gradient(135deg, var(--primary), var(--gold));
-  color: #052017;
+  color: #151124;
   font-weight: 800;
   font-size: 0.92rem;
 }

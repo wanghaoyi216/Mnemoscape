@@ -4,6 +4,8 @@
    refined typography, choreographed motion.
    ================================================================ */
 
+@import './assets/styles/tokens.scss';
+
 /* Google Fonts @import 移除：用户字体方案为本地 ComicShannsMono + 华文行楷（见 @font-face），
    远程 @import 阻塞关键渲染且 200KB+ 下载量不必要。Inter/Playfair 仅作 fallback 名字保留，
    系统未安装时自动回退到系统字体。如需远程字体请改在 index.html 用 preconnect + async link。 */
@@ -61,37 +63,42 @@
 :root {
   color-scheme: dark;
 
-  /* Base canvas */
-  --bg-0: #050608;
-  --bg-1: #0a0d12;
-  --bg-2: #11151b;
-  --bg-3: #161b22;
+  /* Base canvas — 墨底 + 桃粉霞光（默认即 museum，避免首屏 mint 闪烁） */
+  --bg-0: #0a0716;
+  --bg-1: #100b22;
+  --bg-2: #171130;
+  --bg-3: #1f1840;
 
   /* Glass surfaces */
-  --surface: rgba(20, 24, 31, 0.78);
-  --surface-strong: rgba(26, 30, 38, 0.94);
-  --surface-soft: rgba(34, 38, 46, 0.62);
-  --surface-elevated: rgba(22, 26, 33, 0.86);
+  --surface: rgba(24, 18, 46, 0.76);
+  --surface-strong: rgba(30, 23, 56, 0.94);
+  --surface-soft: rgba(48, 38, 80, 0.58);
+  --surface-elevated: rgba(28, 22, 52, 0.88);
 
   /* Borders & dividers */
-  --border: rgba(210, 218, 228, 0.10);
-  --border-strong: rgba(210, 218, 228, 0.22);
-  --border-accent: rgba(64, 224, 195, 0.32);
+  --border: rgba(231, 224, 255, 0.11);
+  --border-strong: rgba(231, 224, 255, 0.22);
+  --border-accent: rgba(216, 180, 254, 0.34);
 
   /* Typography */
-  --text: #f4f7fa;
-  --text-soft: #cdd5dd;
-  --text-muted: #8b95a1;
-  --text-faint: #5a6573;
+  --text: #f8f5ff;
+  --text-soft: #d8d1e8;
+  --text-muted: #9c95b2;
+  --text-faint: #69627e;
 
-  /* Brand palette — emerald & ochre */
-  --primary: #36d8b4;
-  --primary-strong: #14a98b;
-  --primary-glow: rgba(54, 216, 180, 0.42);
-  --accent: #6cc6ff;
-  --accent-glow: rgba(108, 198, 255, 0.32);
-  --gold: #f2b95c;
-  --gold-glow: rgba(242, 185, 92, 0.28);
+  /* Brand palette — 桃粉 / 淡紫 / 鎏金（水墨国风 × AI 感，默认 museum） */
+  --primary: #d8b4fe;
+  --primary-strong: #b984ed;
+  --primary-glow: rgba(216, 180, 254, 0.34);
+  --accent: #93c5fd;
+  --accent-glow: rgba(147, 197, 253, 0.26);
+  --gold: #f6cf94;
+  --gold-glow: rgba(246, 207, 148, 0.24);
+  --peach: #f0a9cf;
+  --peach-glow: rgba(240, 169, 207, 0.28);
+  --lavender: #c4b5fd;
+  --ink: #0a0716;
+  --paper: #f5efe4;
 
   /* Semantic */
   --success: #4ade80;
@@ -99,28 +106,41 @@
   --danger: #f87171;
   --info: #60a5fa;
 
-  /* Shadows — layered for depth */
-  --shadow-xs: 0 1px 2px rgba(0, 0, 0, 0.35);
-  --shadow-sm: 0 4px 12px rgba(0, 0, 0, 0.32);
-  --shadow-md: 0 12px 32px rgba(0, 0, 0, 0.36), 0 2px 8px rgba(0, 0, 0, 0.24);
-  --shadow-lg: 0 32px 80px rgba(0, 0, 0, 0.46), 0 8px 24px rgba(0, 0, 0, 0.28);
+  /* Apple HIG Elevation Hierarchy — Multi-layer ambient and directional light */
+  --elevation-1: 0 2px 8px -2px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  --elevation-2: 0 6px 16px -4px rgba(0, 0, 0, 0.5), inset 0 1px 0 rgba(255, 255, 255, 0.12);
+  --elevation-3: 0 12px 28px -6px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.16);
+  --elevation-4: 0 20px 48px -8px rgba(0, 0, 0, 0.7), inset 0 1px 0 rgba(255, 255, 255, 0.20);
+  --elevation-5: 0 28px 72px -12px rgba(0, 0, 0, 0.8), inset 0 1px 0 rgba(255, 255, 255, 0.25);
+
+  /* Shadows — legacy aliases */
+  --shadow-xs: var(--elevation-1);
+  --shadow-sm: var(--elevation-2);
+  --shadow-md: var(--elevation-3);
+  --shadow-lg: var(--elevation-4);
   --shadow-glow: 0 0 0 1px rgba(54, 216, 180, 0.18), 0 24px 60px rgba(54, 216, 180, 0.14);
 
-  /* Radii */
+  /* Apple HIG Radii Scale (8/12/16/24px) */
   --radius-xs: 6px;
-  --radius-sm: 10px;
-  --radius-md: 14px;
-  --radius-lg: 20px;
-  --radius-xl: 28px;
+  --radius-sm: 8px;
+  --radius-md: 12px;
+  --radius-lg: 16px;
+  --radius-xl: 24px;
   --radius-full: 999px;
 
-  /* Motion */
+  /* Apple Spring & Ease Motion Curves */
+  --spring-bounce: cubic-bezier(0.34, 1.56, 0.64, 1);
+  --spring-smooth: cubic-bezier(0.16, 1, 0.3, 1);
+  --ease-apple: cubic-bezier(0.25, 1, 0.5, 1);
   --ease-out-quart: cubic-bezier(0.165, 0.84, 0.44, 1);
   --ease-out-expo: cubic-bezier(0.16, 1, 0.3, 1);
   --ease-in-out-quart: cubic-bezier(0.77, 0, 0.175, 1);
-  --duration-fast: 160ms;
+  --duration-fast: 150ms;
   --duration-base: 240ms;
-  --duration-slow: 420ms;
+  --duration-slow: 360ms;
+
+  /* Focus Ring */
+  --focus-ring: 0 0 0 2px var(--bg-0), 0 0 0 4px var(--primary);
 
   /* Layout */
   --page-width: min(1280px, calc(100vw - 48px));
@@ -138,11 +158,30 @@
   --font-mono: "Mnemoscape Mono", "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
   --font-art: "Mnemoscape Hand", "Playfair Display", "STSong", serif;
 
-  /* z-index 层级管理：避免各组件硬编码 999/1000 导致冲突 */
+  /* Master Layering System (严格图层堆叠与层级解耦) */
+  --z-canvas: 1;
+  --z-base: 10;
+  --z-card: 20;
+  --z-popover: 30;
   --z-header: 40;
   --z-theme-switch: 50;
-  --z-drawer-backdrop: 999;
+  --z-mascot: 800;
+  --z-modal-backdrop: 900;
+  --z-modal: 1000;
+  --z-drawer-backdrop: 950;
   --z-drawer: 1000;
+  --z-toast: 1100;
+  --z-tooltip: 1200;
+
+  /* Layered Glassmorphism & Enterprise Lighting Tokens */
+  --glass-bg: rgba(15, 23, 42, 0.68);
+  --glass-bg-hover: rgba(22, 34, 60, 0.78);
+  --glass-bg-card: rgba(8, 14, 28, 0.72);
+  --glass-border: rgba(255, 255, 255, 0.08);
+  --glass-border-hover: rgba(0, 242, 254, 0.35);
+  --glass-inner-glow: inset 0 1px 1px 0 rgba(255, 255, 255, 0.12);
+  --glass-shadow: 0 16px 36px -8px rgba(0, 0, 0, 0.5), 0 0 0 1px rgba(255, 255, 255, 0.05);
+  --glass-shadow-elevated: 0 24px 64px -12px rgba(0, 0, 0, 0.65), 0 0 24px 0 rgba(0, 242, 254, 0.15);
 }
 
 /* ================================================================
@@ -160,6 +199,25 @@ html.theme-mint, :root {
   --gold-glow: rgba(242, 185, 92, 0.28);
   --border-accent: rgba(64, 224, 195, 0.32);
   --shadow-glow: 0 0 0 1px rgba(54, 216, 180, 0.18), 0 24px 60px rgba(54, 216, 180, 0.14);
+}
+
+/* 默认“星空博物馆”色谱：从项目生成插画中提取薰衣草、月白与陈列金。 */
+html.theme-museum {
+  --primary: #d8b4fe;
+  --primary-strong: #b984ed;
+  --primary-glow: rgba(216, 180, 254, 0.34);
+  --accent: #93c5fd;
+  --accent-glow: rgba(147, 197, 253, 0.26);
+  --gold: #f6cf94;
+  --gold-glow: rgba(246, 207, 148, 0.24);
+  --border-accent: rgba(216, 180, 254, 0.34);
+  --shadow-glow: 0 0 0 1px rgba(216, 180, 254, 0.16), 0 24px 64px rgba(91, 63, 132, 0.22);
+  --ai-glow-stops:
+    #d8b4fe 0deg,
+    #93c5fd 110deg,
+    #f6cf94 225deg,
+    #f0a9cf 310deg,
+    #d8b4fe 360deg;
 }
 
 /* 2. 梦幻粉/紫星空主题 (与图标契合) */
@@ -180,6 +238,46 @@ html.theme-pink {
     var(--gold) 180deg,
     var(--accent) 270deg,
     var(--primary) 360deg;
+}
+
+/* 2.1 星野治愈 · 萌系暖星主题 (Morandi Starlight & Kawaii Peach) */
+html.theme-kawaii {
+  --primary: #ff758c; /* 蜜桃粉 */
+  --primary-strong: #ff5277;
+  --primary-glow: rgba(255, 117, 140, 0.42);
+  --accent: #a18cd1; /* 柔和薰衣草紫 */
+  --accent-glow: rgba(161, 140, 209, 0.35);
+  --gold: #fbc2eb; /* 樱花金粉 */
+  --gold-glow: rgba(251, 194, 235, 0.32);
+  --border-accent: rgba(255, 117, 140, 0.35);
+  --shadow-glow: 0 0 0 1px rgba(255, 117, 140, 0.22), 0 20px 50px rgba(255, 117, 140, 0.16);
+  
+  --ai-glow-stops:
+    #ff758c 0deg,
+    #fbc2eb 90deg,
+    #a6c1ee 180deg,
+    #a18cd1 270deg,
+    #ff758c 360deg;
+}
+
+/* 2.2 企业级数智星穹 · 驾驶舱大屏专属主题 (Enterprise Cyberpunk Cockpit) */
+html.theme-cockpit {
+  --primary: #00f2fe; /* 电光青蓝 */
+  --primary-strong: #00c6ff;
+  --primary-glow: rgba(0, 242, 254, 0.45);
+  --accent: #38ef7d; /* 量子荧绿 */
+  --accent-glow: rgba(56, 239, 125, 0.35);
+  --gold: #ffd200; /* 恒星金 */
+  --gold-glow: rgba(255, 210, 0, 0.32);
+  --border-accent: rgba(0, 242, 254, 0.38);
+  --shadow-glow: 0 0 0 1px rgba(0, 242, 254, 0.25), 0 24px 64px rgba(0, 242, 254, 0.18);
+  
+  --ai-glow-stops:
+    #00f2fe 0deg,
+    #4facfe 90deg,
+    #38ef7d 180deg,
+    #ffd200 270deg,
+    #00f2fe 360deg;
 }
 
 /* 3. 暖阳金沙漏主题 */
@@ -203,7 +301,7 @@ html.theme-gold {
 }
 
 /* 4. 极光深海蓝主题 */
-html.theme-blue {
+html.theme-blue, html.theme-aurora {
   --primary: #4fc3f7; /* 天蓝 */
   --primary-strong: #0288d1;
   --primary-glow: rgba(79, 195, 247, 0.45);
@@ -231,6 +329,48 @@ html.theme-blue {
   box-sizing: border-box;
 }
 
+p, span, h1, h2, h3, h4, h5, h6, li, td, th, button, a {
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+.numeric, .mono, [data-num], .metric-card__value, .kpi-metric-val {
+  font-variant-numeric: tabular-nums;
+  font-feature-settings: "tnum";
+}
+
+/* Modal & Drawer Layer System */
+.modal-backdrop {
+  position: fixed;
+  inset: 0;
+  z-index: var(--z-modal-backdrop);
+  background: rgba(3, 7, 18, 0.75);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
+  transition: opacity 0.25s ease;
+}
+
+.drawer-right {
+  position: fixed;
+  top: 0;
+  right: 0;
+  bottom: 0;
+  width: min(520px, 92vw);
+  z-index: var(--z-drawer);
+  background: var(--glass-bg-card);
+  border-left: 1px solid var(--glass-border);
+  box-shadow: var(--glass-shadow-elevated);
+  backdrop-filter: blur(28px);
+  -webkit-backdrop-filter: blur(28px);
+  display: flex;
+  flex-direction: column;
+  transform: translateX(100%);
+  transition: transform 0.32s cubic-bezier(0.16, 1, 0.3, 1);
+}
+.drawer-right--open {
+  transform: translateX(0);
+}
+
 html {
   min-height: 100%;
   background-color: var(--bg-0);
@@ -251,7 +391,7 @@ body {
   /* v8 → v9：字体放大 (15 → 17px) + 整体加粗 (默认 500)；
      行高保持舒适，letter-spacing 略放宽配合 ComicShannsMono 偏窄的字身。 */
   font-family: var(--font-sans);
-  font-size: 17px;
+  font-size: 16px;
   font-weight: 500;
   line-height: 1.62;
   letter-spacing: 0.005em;
@@ -259,6 +399,30 @@ body {
   -moz-osx-font-smoothing: grayscale;
   text-rendering: optimizeLegibility;
   font-feature-settings: "ss01", "cv01", "cv11";
+}
+
+/* Accessible focus ring across all interactive controls */
+:focus-visible {
+  outline: none;
+  box-shadow: var(--focus-ring);
+}
+
+/* Media CLS Prevention */
+img, video, canvas {
+  max-width: 100%;
+  height: auto;
+}
+
+/* Respect user accessibility motion settings */
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.001ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.001ms !important;
+    scroll-behavior: auto !important;
+  }
 }
 
 /* ────────────────────────────────────────────────────────────────────
@@ -278,10 +442,6 @@ body {
 }
 
 .text-aurora,
-.display-title,
-.section-title,
-.brand strong,
-.brand__copy strong,
 .ai-msg--assistant .ai-md-body :where(p, li, span, h1, h2, h3, h4, strong, code),
 .ai-msg--assistant .ai-msg__text,
 .message-bubble--ai :where(p, li, span, h1, h2, h3, h4, strong, code),
@@ -498,10 +658,9 @@ select:disabled {
   pointer-events: none;
   z-index: 5;
   border-radius: 30px;
-  opacity: 0.3;
-  --ai-glow-thickness: 1px !important;
-  --ai-glow-duration: 16s !important;
-  --ai-glow-halo: 12px !important;
+  opacity: 0.42;
+  border: 1px solid color-mix(in srgb, var(--primary) 18%, transparent);
+  box-shadow: inset 0 0 32px rgba(216, 180, 254, 0.025);
 }
 
 @keyframes aura-drift {
@@ -626,7 +785,7 @@ select:disabled {
   color: transparent;
   -webkit-text-fill-color: transparent;
   font-weight: 800;
-  animation: auroraShift 22s linear infinite;
+  animation: none;
 }
 
 @keyframes gradient-shimmer {
@@ -1195,6 +1354,68 @@ select:disabled {
   padding: 80px 24px;
   text-align: center;
   color: var(--text-muted);
+}
+
+/* 空态配图：统一圆形画框 + 桃粉光晕，复用 图/记忆封面/功能插画 */
+.empty-state__art {
+  width: 168px;
+  height: 168px;
+  object-fit: cover;
+  border-radius: 50%;
+  margin: 0 auto 20px;
+  border: 1px solid var(--border-accent);
+  box-shadow: 0 18px 48px rgba(20, 8, 40, 0.5), 0 0 32px var(--primary-glow);
+}
+
+.empty-state__art--wide {
+  width: min(420px, 80%);
+  height: auto;
+  aspect-ratio: 16 / 9;
+  border-radius: var(--radius-lg);
+}
+
+/* 通用画框：记忆封面 / 场景底图 / 功能插画统一圆角描边 */
+.art-frame {
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  background: linear-gradient(145deg, rgba(216,180,254,0.08), rgba(10,7,22,0.6));
+}
+.art-frame img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  transition: transform 600ms var(--ease-out-expo);
+}
+.art-frame:hover img { transform: scale(1.03); }
+
+.cover-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* 页面 hero 通用：左文右图 + 淡紫底纹，缺图时渐变兜底不断裂 */
+.page-hero {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-xl);
+  background:
+    radial-gradient(circle at 12% 12%, color-mix(in srgb, var(--primary) 16%, transparent), transparent 36%),
+    radial-gradient(circle at 88% 90%, color-mix(in srgb, var(--gold) 12%, transparent), transparent 38%),
+    linear-gradient(145deg, rgba(20, 14, 40, 0.96), rgba(10, 7, 22, 0.9));
+}
+.page-hero__bg {
+  position: absolute;
+  inset: 0;
+  background-size: cover;
+  background-position: center;
+  opacity: 0.16;
+  filter: saturate(0.9) contrast(1.05);
+  -webkit-mask-image: linear-gradient(100deg, #000 20%, transparent 75%);
+  mask-image: linear-gradient(100deg, #000 20%, transparent 75%);
+  pointer-events: none;
 }
 
 .empty-state__title {

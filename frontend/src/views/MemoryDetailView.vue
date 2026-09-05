@@ -3,6 +3,7 @@ import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useMemoryStore } from '../stores/memory'
+import { fallbackSceneCover } from '../assets/media-catalog'
 
 const route = useRoute()
 const router = useRouter()
@@ -12,6 +13,13 @@ const id = route.params.id as string
 const loadError = ref('')
 
 const fragments = computed(() => store.currentFragments)
+
+/* Hero 底图：优先后端 sceneDataUrl，否则按记忆 id 稳定哈希到本地 图/记忆封面，避免纯色断裂 */
+const heroBg = computed(() => {
+  const url = store.current?.sceneDataUrl
+  if (url && (/^https?:\/\//.test(url) || url.startsWith('/'))) return url
+  return fallbackSceneCover(store.current?.id ?? id).src
+})
 
 /**
  * 把英文历史 fragment 内容映射为中文。
@@ -102,7 +110,7 @@ function viewScene() {
     <div v-else-if="store.current" class="detail-grid">
       <section 
         class="hero-card hero-card--split"
-        :style="store.current.sceneDataUrl && (store.current.sceneDataUrl.startsWith('http') || store.current.sceneDataUrl.startsWith('/')) ? { backgroundImage: `linear-gradient(120deg, rgba(8,10,14,0.85) 0%, rgba(8,10,14,0.55) 60%, rgba(8,10,14,0.92) 100%), url(${store.current.sceneDataUrl})`, backgroundSize: 'cover', backgroundPosition: 'center', backgroundRepeat: 'no-repeat' } : {}"
+        :style="{ backgroundImage: `linear-gradient(120deg, rgba(10,7,22,0.88) 0%, rgba(10,7,22,0.55) 58%, rgba(10,7,22,0.92) 100%), url(${heroBg})`, backgroundSize: 'cover', backgroundPosition: 'center', backgroundRepeat: 'no-repeat' }"
       >
         <div class="stack stack--lg">
           <p class="eyebrow">{{ t('memory.detail.eyebrow') }}</p>

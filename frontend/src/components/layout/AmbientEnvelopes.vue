@@ -3,19 +3,19 @@ import { ref, onMounted, watch } from 'vue'
 import { useMemoryStore } from '../../stores/memory'
 import { useDynamicMedia } from '../../composables/useDynamicMedia'
 import { useI18n } from 'vue-i18n'
-import { fallbackSceneCover } from '../../assets/media-catalog'
+import { fallbackSceneCover, memoryCovers, sceneBackgrounds } from '../../assets/media-catalog'
 
 const store = useMemoryStore()
 const dynamicMedia = useDynamicMedia()
 const { t } = useI18n()
 
-// Default photos to use as fallbacks if the user has no memories
+// Default photos — 全部使用本地 图/记忆封面+场景底图，不再请求外部图床 if the user has no memories
 const DEFAULT_MEMORIES = [
   {
     id: 'placeholder-1',
     title: '星野记忆 · Starry Night',
     description: '“仰望同一片星空，在浩瀚的宇宙中找寻失去的时间。”',
-    coverUrl: 'https://images.unsplash.com/photo-1506318137071-a8e063b4bec0?q=80&w=600',
+    coverUrl: memoryCovers[19].src,
     memoryYear: '2025',
     memoryLocation: '星空观测站',
     memorySeason: 'WINTER',
@@ -27,7 +27,7 @@ const DEFAULT_MEMORIES = [
     id: 'placeholder-2',
     title: '旧日时光 · Polaroid Cam',
     description: '“按下快门的那一秒，我们便成为了彼此的永恒记忆。”',
-    coverUrl: 'https://images.unsplash.com/photo-1516035069371-29a1b244cc32?q=80&w=600',
+    coverUrl: memoryCovers[3].src,
     memoryYear: '2023',
     memoryLocation: '街角照相馆',
     memorySeason: 'AUTUMN',
@@ -39,7 +39,7 @@ const DEFAULT_MEMORIES = [
     id: 'placeholder-3',
     title: '远行足迹 · Nostalgic Train',
     description: '“旅途的终点也许并不重要，重要的是记忆中最温暖的那段时光。”',
-    coverUrl: 'https://images.unsplash.com/photo-1475924156734-496f6cac6ec1?q=80&w=600',
+    coverUrl: sceneBackgrounds[3].src,
     memoryYear: '2024',
     memoryLocation: '林间铁轨',
     memorySeason: 'SPRING',
@@ -51,7 +51,7 @@ const DEFAULT_MEMORIES = [
     id: 'placeholder-4',
     title: '静谧黄昏 · Silent Sunset',
     description: '“日落时分，温暖的海风轻轻吹拂着关于夏天的诺言。”',
-    coverUrl: 'https://images.unsplash.com/photo-1472214222541-d510753a8707?q=80&w=600',
+    coverUrl: sceneBackgrounds[1].src,
     memoryYear: '2022',
     memoryLocation: '黄金海岸',
     memorySeason: 'SUMMER',
