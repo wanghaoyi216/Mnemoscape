@@ -2,7 +2,8 @@ name: mnemoscape
 
 services:
   mysql:
-    image: mysql:8.0
+    build:
+      context: ./mysql
     container_name: mnemoscape-mysql
     ports:
       - "3306:3306"
@@ -12,7 +13,6 @@ services:
       MYSQL_COLLATION: utf8mb4_unicode_ci
     volumes:
       - mysql-data:/var/lib/mysql
-      - ./mysql/init:/docker-entrypoint-initdb.d
     command: --default-authentication-plugin=mysql_native_password --character-set-server=utf8mb4 --collation-server=utf8mb4_unicode_ci
     healthcheck:
       test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "root", "-proot123"]
@@ -48,7 +48,6 @@ services:
       MINIO_ROOT_PASSWORD: minioadmin123
     volumes:
       - minio-data:/data
-      - ./minio/init-buckets.sh:/usr/local/bin/init-buckets.sh
     command: server /data --console-address ":9001"
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
@@ -86,7 +85,6 @@ services:
       RABBITMQ_DEFAULT_PASS: guest
     volumes:
       - rabbitmq-data:/var/lib/rabbitmq
-      - ./rabbitmq/definitions.json:/etc/rabbitmq/definitions.json
     healthcheck:
       test: ["CMD", "rabbitmq-diagnostics", "check_port_connectivity"]
       interval: 10s

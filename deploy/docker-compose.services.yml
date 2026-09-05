@@ -20,8 +20,9 @@ services:
     ports:
       - "8080:8080"
     environment:
+      REDIS_HOST: redis
       NACOS_HOST: nacos
-      JWT_SECRET: "bW5lbW9zY2FwZS1zZWNyZXQta2V5LWZvci1qd3Qtc2lnbmluZy1hbmQtdmVyaWZpY2F0aW9u"
+      MNEMOSCAPE_JWT_SECRET: "bW5lbW9zY2FwZS1zZWNyZXQta2V5LWZvci1qd3Qtc2lnbmluZy1hbmQtdmVyaWZpY2F0aW9u"
     depends_on:
       nacos:
         condition: service_healthy
@@ -36,11 +37,17 @@ services:
     ports:
       - "8081:8081"
     environment:
+      # 本地 docker 直连：优先级高于 yml（含 Jasypt ENC），绕开启动期解密链路排障
+      SPRING_DATASOURCE_PASSWORD: root123
+      REDIS_HOST: redis
+        # 注意：yml 属性是 mnemoscape.admin.bootstrap-secret，env 名必须加 MNEMOSCAPE_ 前缀才能绑定
+      MNEMOSCAPE_ADMIN_BOOTSTRAP_SECRET: "${ADMIN_BOOTSTRAP_SECRET:?missing in deploy/.env}"
+      JAVA_TOOL_OPTIONS: "-Djasypt.encryptor.password=${JASYPT_MASTER_KEY:?missing in deploy/.env}"
       NACOS_HOST: nacos
       MYSQL_HOST: mysql
       MYSQL_USER: root
       MYSQL_PASSWORD: root123
-      JWT_SECRET: "bW5lbW9zY2FwZS1zZWNyZXQta2V5LWZvci1qd3Qtc2lnbmluZy1hbmQtdmVyaWZpY2F0aW9u"
+      MNEMOSCAPE_JWT_SECRET: "bW5lbW9zY2FwZS1zZWNyZXQta2V5LWZvci1qd3Qtc2lnbmluZy1hbmQtdmVyaWZpY2F0aW9u"
     depends_on:
       mysql:
         condition: service_healthy
@@ -57,6 +64,8 @@ services:
     ports:
       - "8082:8082"
     environment:
+      MNEMOSCAPE_JWT_SECRET: "bW5lbW9zY2FwZS1zZWNyZXQta2V5LWZvci1qd3Qtc2lnbmluZy1hbmQtdmVyaWZpY2F0aW9u"
+      REDIS_HOST: redis
       NACOS_HOST: nacos
       MYSQL_HOST: mysql
       MYSQL_USER: root
@@ -88,8 +97,20 @@ services:
     ports:
       - "8083:8083"
     environment:
+      MNEMOSCAPE_JWT_SECRET: "bW5lbW9zY2FwZS1zZWNyZXQta2V5LWZvci1qd3Qtc2lnbmluZy1hbmQtdmVyaWZpY2F0aW9u"
+      REDIS_HOST: redis
+      MILVUS_HOST: milvus
+      NEO4J_HOST: neo4j
+      NEO4J_USER: neo4j
+      NEO4J_PASSWORD: password123
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USER: guest
+      RABBITMQ_PASSWORD: guest
       NACOS_HOST: nacos
-      NVIDIA_API_KEY: ${NVIDIA_API_KEY}
+      # 为空时 fallback 到占位符，让 ai-service 优雅降级而不是启动崩溃；
+      # 有真实 key 时 export NVIDIA_API_KEY 再 up 即可生效
+      NVIDIA_API_KEY: "${NVIDIA_API_KEY:-nvapi-placeholder-not-configured}"
     depends_on:
       nacos:
         condition: service_healthy
@@ -104,6 +125,12 @@ services:
     ports:
       - "8084:8084"
     environment:
+      MNEMOSCAPE_JWT_SECRET: "bW5lbW9zY2FwZS1zZWNyZXQta2V5LWZvci1qd3Qtc2lnbmluZy1hbmQtdmVyaWZpY2F0aW9u"
+      RABBITMQ_HOST: rabbitmq
+      RABBITMQ_PORT: 5672
+      RABBITMQ_USER: guest
+      RABBITMQ_PASSWORD: guest
+      REDIS_HOST: redis
       NACOS_HOST: nacos
       MYSQL_HOST: mysql
       MYSQL_USER: root
@@ -124,6 +151,8 @@ services:
     ports:
       - "8085:8085"
     environment:
+      MNEMOSCAPE_JWT_SECRET: "bW5lbW9zY2FwZS1zZWNyZXQta2V5LWZvci1qd3Qtc2lnbmluZy1hbmQtdmVyaWZpY2F0aW9u"
+      REDIS_HOST: redis
       NACOS_HOST: nacos
       MINIO_ENDPOINT: http://minio:9000
       MINIO_ACCESS_KEY: minioadmin

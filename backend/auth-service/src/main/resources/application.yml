@@ -22,8 +22,15 @@ spring:
         await-termination-period: 15s
   datasource:
     url: jdbc:mysql://${MYSQL_HOST:100.66.166.46}:3306/mnemoscape_auth?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true&characterEncoding=UTF-8
+    # MySQL 密码走 Jasypt 加密。生成命令（algorithm 必须与 JasyptConfig.ALGORITHM 一致，
+    # 用旧算法 MD5+DES 生成的密文在运行时无法解密）：
+    #   java -cp jasypt-1.9.3.jar org.jasypt.intf.cli.JasyptPBEStringEncryptionCLI \
+    #        input="root123" password="$JASYPT_MASTER_KEY" algorithm=PBEWithHmacSHA512AndAES_256 \
+    #        ivGeneratorClassName=org.jasypt.iv.RandomIvGenerator
+    # 替换下方的 ENC 占位字符串；master-key 通过 -Djasypt.encryptor.password 注入。
     username: ${MYSQL_USER:root}
-    password: ${MYSQL_PASSWORD:root123}
+    # 警告：未替换此占位符前服务必然启动失败（解密异常 EncryptionOperationNotPossibleException）
+    password: ENC(5ausBvY3z2FoFYYdQTiO2qBdGy3VSPw0lLO2/nPShZKJ1kR0TAgXXSA2Vsd6pP+3)
     driver-class-name: com.mysql.cj.jdbc.Driver
     hikari:
       # 高并发优化：连接池从 20→30
@@ -85,7 +92,14 @@ spring:
 
 mnemoscape:
   jwt:
-    secret: ${JWT_SECRET:bW5lbW9zY2FwZS1zZWNyZXQta2V5LWZvci1obWFjLXNoYTI1Ni1hbGdvcml0aG0tMjAyNQ==}
+    # JWT 签名密钥。Base64 编码后再走 Jasypt 加密。
+    # 生成命令（algorithm/ivGenerator 必须与 JasyptConfig.ALGORITHM 及其 IV 配置一致，
+    # 用旧算法 MD5+DES 生成的密文在运行时无法解密）：
+    #   java -cp jasypt-1.9.3.jar org.jasypt.intf.cli.JasyptPBEStringEncryptionCLI \
+    #        input="<Base64-encoded-secret>" password="$JASYPT_MASTER_KEY" \
+    #        algorithm=PBEWithHmacSHA512AndAES_256 ivGeneratorClassName=org.jasypt.iv.RandomIvGenerator
+    # 警告：未替换此占位符前服务必然启动失败（解密异常 EncryptionOperationNotPossibleException）
+    secret: ENC(olyY8VKzrghIpWRUilEEGs9XeNuxtsZ1vFU4XEi4+Et1tms6z8avLuwpx1SQd+lIH8UZmgC4q34AzyPTTjwp6wgIa0Ootp2B4xWPMft+5sWC6D2261+8u6/egGQXOdQcij6ZkRnJS93E3iS2xF4Gzg==)
     access-token-expiration: 3600000
     refresh-token-expiration: 604800000
   ai:
@@ -101,11 +115,23 @@ springdoc:
     tags-sorter: alpha
   packages-to-scan: com.mnemoscape.auth
 
+feign:
+  client:
+    config:
+      default:
+        connectTimeout: 3000
+        readTimeout: 15000
+      memory-service:
+        readTimeout: 20000
+
 management:
   endpoints:
     web:
       exposure:
-        include: health,info,metrics,prometheus,loggers
+        # R32: 必须显式暴露 health / info / prometheus / metrics。
+        # auth-service 还额外暴露 loggers（OAuth2 token store 排查）
+        # 和 caches（auth-token 缓存命中率）。
+        include: health,info,prometheus,metrics,loggers,caches
   endpoint:
     health:
       show-details: when_authorized
@@ -119,3 +145,25 @@ logging:
   level:
     root: INFO
     com.mnemoscape: INFO
+
+# ---------------------------------------------------------------------------
+# Jasypt 本地加密配置 (P0 R1.1)
+# ---------------------------------------------------------------------------
+# 注意：下方 jasypt.encryptor.* 配置块实为死配置 —— 项目里定义了名为
+# jasyptStringEncryptor 的自定义 bean（见 JasyptConfig.java 的 @Bean），它整体
+# 取代了 jasypt-spring-boot starter 按 yml 构建的默认 encryptor，所以这里写的
+# algorithm / iv-generator-classname 等并不会生效；实际算法以 JasyptConfig.java
+# 为准（PBEWithHmacSHA512AndAES_256 + RandomIvGenerator）。保留此块仅作文档参考。
+# 启动命令必须传：-Djasypt.encryptor.password=<your-master-key>
+# master-key 不进 yml / 不进 git；只在部署时通过环境变量或 k8s Secret 注入。
+# 生成 ENC 字符串见 JasyptConfig.java 顶部的 javadoc。
+jasypt:
+  encryptor:
+    # 算法：PBEWithHmacSHA512AndAES_256（R3 从 1999 年的 MD5+DES 升级，合规要求）
+    algorithm: PBEWithHmacSHA512AndAES_256
+    # IV 生成器：AES 分组密码必须配随机 IV（NoIvGenerator 只适用旧 DES 算法）
+    iv-generator-classname: org.jasypt.iv.RandomIvGenerator
+    # salt 生成器：随机即可
+    salt-generator-classname: org.jasypt.salt.RandomSaltGenerator
+    # 密钥获取策略：必须从系统属性拿（不允许 yml 写死，yml 本身就是明文风险源）
+    password-property: jasypt.encryptor.password
