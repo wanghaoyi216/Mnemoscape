@@ -241,7 +241,7 @@
     "username": "Username",
     "usernamePlaceholder": "your.username",
     "email": "Email",
-    "emailPlaceholder": "name@company.com",
+    "emailPlaceholder": "name{'@'}company.com",
     "password": "Password",
     "passwordPlaceholder": "At least 8 characters",
     "confirmPassword": "Confirm password",
@@ -639,8 +639,8 @@
       "icebreakerError": "Echo Envoy is offline right now, try again later.",
       "suggestionTitle": "Echo Envoy's icebreaker",
       "useSuggestion": "Use this",
-      "mentionTip": "Mention @AI in a group to summon me",
-      "mentionHint": "Start a message with @AI or @Echo and I'll reply using recent group context",
+      "mentionTip": "Mention {x27@'}AI in a group to summon me",
+      "mentionHint": "Start a message with {x27@'}AI or {x27@'}Echo and I'll reply using recent group context",
       "thoughtProcess": "Thinking Process"
     },
     "tabs": {

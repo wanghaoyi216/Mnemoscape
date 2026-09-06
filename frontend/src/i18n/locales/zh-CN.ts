@@ -54,6 +54,7 @@ export default {
       "locale": "语言",
       "menu": "打开导航菜单",
       "closeMenu": "关闭导航菜单",
+      "drawerHint": "按 Esc 关闭 · 点击空白处收起",
       "groups":
       {
           "memory": "记忆",
@@ -261,7 +262,7 @@ export default {
   "login":
   {
       "eyebrow": "私人记忆工作室",
-      "title": "踏入你的<br/>记忆博物馆。",
+      "title": "让被遗忘的<br/>重新闪烁。",
       "lead": "重新登入，回到那些被重建的场景；锁住易逝的瞬间，追溯记忆之间的共鸣。这里是为长时间深度工作而生的画布。",
       "features":
       {
@@ -336,7 +337,7 @@ export default {
       "username": "用户名",
       "usernamePlaceholder": "你的用户名",
       "email": "邮箱",
-      "emailPlaceholder": "name@company.com",
+      "emailPlaceholder": "name{'@'}company.com",
       "password": "密码",
       "passwordPlaceholder": "至少 8 个字符",
       "confirmPassword": "确认密码",
@@ -983,8 +984,8 @@ export default {
             "icebreakerError": "星空使者暂时无法连线，稍后再试～",
             "suggestionTitle": "星空使者的破冰建议",
             "useSuggestion": "采用这条",
-            "mentionTip": "在群里 @AI 即可召唤我",
-            "mentionHint": "在消息开头输入 @AI 或 @Echo，我会结合最近群聊内容回复",
+            "mentionTip": "在群里 {'@'}AI 即可召唤我",
+            "mentionHint": "在消息开头输入 {'@'}AI 或 {'@'}Echo，我会结合最近群聊内容回复",
             "thoughtProcess": "星空思绪脉络"
           },
       "tabs":

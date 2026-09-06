@@ -217,11 +217,17 @@ function switchLocale(l: Locale) {
       </nav>
 
       <!-- Hamburger Button for responsive drawer -->
-      <button class="hamburger-btn" @click="isDrawerOpen = true" :aria-label="t('nav.menu')">
-        <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-          <line x1="3" y1="12" x2="21" y2="12"></line>
-          <line x1="3" y1="6" x2="21" y2="6"></line>
-          <line x1="3" y1="18" x2="21" y2="18"></line>
+      <button
+        class="hamburger-btn"
+        :class="{ 'hamburger-btn--open': isDrawerOpen }"
+        @click="isDrawerOpen = !isDrawerOpen"
+        :aria-label="isDrawerOpen ? t('nav.closeMenu') : t('nav.menu')"
+        :aria-expanded="isDrawerOpen"
+      >
+        <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <line class="hamburger-bar hamburger-bar--top" x1="4" y1="7" x2="20" y2="7"></line>
+          <line class="hamburger-bar hamburger-bar--mid" x1="4" y1="12" x2="20" y2="12"></line>
+          <line class="hamburger-bar hamburger-bar--bot" x1="4" y1="17" x2="20" y2="17"></line>
         </svg>
       </button>
 
@@ -317,9 +323,9 @@ function switchLocale(l: Locale) {
         <div class="drawer-sidebar__header">
           <span class="drawer-sidebar__logo">{{ t('brand.name') }}</span>
           <button class="drawer-sidebar__close" @click="isDrawerOpen = false" :aria-label="t('nav.closeMenu')">
-            <svg viewBox="0 0 24 24" width="22" height="22" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round">
-              <line x1="18" y1="6" x2="6" y2="18"></line>
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
               <line x1="6" y1="6" x2="18" y2="18"></line>
+              <line x1="18" y1="6" x2="6" y2="18"></line>
             </svg>
           </button>
         </div>
@@ -345,6 +351,21 @@ function switchLocale(l: Locale) {
             </RouterLink>
           </div>
         </nav>
+
+        <div class="drawer-sidebar__foot">
+          <p class="drawer-sidebar__hint">{{ t('nav.drawerHint') }}</p>
+          <button
+            v-if="auth.isLoggedIn"
+            type="button"
+            class="drawer-sidebar__signout"
+            @click="handleLogout"
+          >
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9" />
+            </svg>
+            <span>{{ t('nav.logout') }}</span>
+          </button>
+        </div>
       </aside>
     </Transition>
   </Teleport>
@@ -668,26 +689,60 @@ function switchLocale(l: Locale) {
   }
 }
 
-/* Hamburger 按钮 */
+/* Hamburger 按钮 — 体积小、有动效、左对齐而非右置 */
 .hamburger-btn {
   display: none;
   align-items: center;
   justify-content: center;
-  width: 38px;
-  height: 38px;
-  border-radius: var(--radius-full);
-  border: 1px solid var(--border);
-  background: rgba(25, 21, 46, 0.62);
+  width: 34px;
+  height: 34px;
+  border-radius: 10px;
+  border: 1px solid rgba(216, 180, 254, 0.18);
+  background: rgba(231, 224, 255, 0.04);
   color: var(--text-soft);
   cursor: pointer;
-  transition: all 180ms ease;
+  transition: transform 160ms ease, background-color 180ms ease,
+              border-color 180ms ease, color 180ms ease, box-shadow 200ms ease;
   flex-shrink: 0;
 }
 
 .hamburger-btn:hover {
-  background: rgba(255, 255, 255, 0.06);
-  border-color: rgba(255, 255, 255, 0.2);
-  color: var(--primary);
+  background: rgba(216, 180, 254, 0.12);
+  border-color: rgba(216, 180, 254, 0.45);
+  color: #fff;
+  box-shadow: 0 6px 16px rgba(118, 86, 196, 0.22);
+}
+
+.hamburger-btn:active {
+  transform: scale(0.92);
+}
+
+.hamburger-btn:focus-visible {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(216, 180, 254, 0.28);
+}
+
+.hamburger-btn[aria-expanded="true"] {
+  background: linear-gradient(135deg, rgba(216, 180, 254, 0.32), rgba(242, 185, 92, 0.22));
+  border-color: rgba(216, 180, 254, 0.55);
+  color: #fff;
+}
+
+.hamburger-bar {
+  transform-origin: 12px 12px;
+  transition: transform 220ms cubic-bezier(0.16, 1, 0.3, 1),
+              opacity 160ms ease;
+}
+.hamburger-btn--open .hamburger-bar--top {
+  transform: translateY(5px) rotate(45deg);
+}
+.hamburger-btn--open .hamburger-bar--mid {
+  opacity: 0;
+  transform: scaleX(0.2);
+}
+.hamburger-btn--open .hamburger-bar--bot {
+  transform: translateY(-5px) rotate(-45deg);
 }
 
 /* 响应式滑出式侧边栏 Drawer */
@@ -697,28 +752,28 @@ function switchLocale(l: Locale) {
   left: 0;
   width: 100vw;
   height: 100vh;
-  background: rgba(0, 0, 0, 0.65);
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
+  background: rgba(7, 6, 17, 0.55);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
   z-index: var(--z-drawer-backdrop);
 }
 
 .drawer-sidebar {
   position: fixed;
   top: 0;
-  right: 0;
-  width: 330px;
-  max-width: 85vw;
+  left: 0;
+  width: 296px;
+  max-width: 84vw;
   height: 100vh;
-  background: rgba(10, 8, 24, 0.96);
-  backdrop-filter: blur(20px);
-  -webkit-backdrop-filter: blur(20px);
-  border-left: 1px solid var(--border);
-  box-shadow: -10px 0 30px rgba(0, 0, 0, 0.65);
-  padding: 24px;
+  background: linear-gradient(180deg, rgba(14, 11, 30, 0.97), rgba(8, 6, 22, 0.97));
+  backdrop-filter: blur(22px) saturate(150%);
+  -webkit-backdrop-filter: blur(22px) saturate(150%);
+  border-right: 1px solid rgba(216, 180, 254, 0.16);
+  box-shadow: 18px 0 42px rgba(3, 2, 10, 0.55);
+  padding: 22px 18px;
   display: flex;
   flex-direction: column;
-  gap: 28px;
+  gap: 24px;
   z-index: var(--z-drawer);
   box-sizing: border-box;
 }
@@ -727,13 +782,13 @@ function switchLocale(l: Locale) {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
-  padding-bottom: 16px;
+  border-bottom: 1px solid rgba(216, 180, 254, 0.12);
+  padding: 4px 4px 14px 4px;
 }
 
 .drawer-sidebar__logo {
   font-family: var(--font-display);
-  font-size: 1.22rem;
+  font-size: 1.18rem;
   font-weight: 800;
   letter-spacing: -0.01em;
   background: linear-gradient(135deg, var(--primary), var(--gold));
@@ -743,58 +798,101 @@ function switchLocale(l: Locale) {
 }
 
 .drawer-sidebar__close {
-  display: flex;
+  display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 34px;
-  height: 34px;
-  border-radius: var(--radius-full);
-  border: 1px solid var(--border);
-  background: rgba(255, 255, 255, 0.02);
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  border: 1px solid rgba(216, 180, 254, 0.18);
+  background: rgba(231, 224, 255, 0.04);
   color: var(--text-soft);
   cursor: pointer;
-  transition: all 180ms ease;
+  transition: background-color 160ms ease, border-color 160ms ease, color 160ms ease;
 }
 
 .drawer-sidebar__close:hover {
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(216, 180, 254, 0.12);
+  border-color: rgba(216, 180, 254, 0.45);
   color: #fff;
-  border-color: rgba(255, 255, 255, 0.2);
 }
 
 .drawer-sidebar__nav {
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 4px;
   flex-grow: 1;
   overflow-y: auto;
+  padding-right: 4px;
 }
 
 .drawer-sidebar__link {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 10px 14px;
-  border-radius: var(--radius-md);
-  color: rgba(245, 248, 252, 0.82);
-  font-size: 0.95rem;
-  font-weight: 700;
+  padding: 9px 12px;
+  border-radius: 10px;
+  color: rgba(245, 248, 252, 0.78);
+  font-size: 0.94rem;
+  font-weight: 600;
   text-decoration: none;
-  transition: all 180ms ease;
+  transition: background-color 160ms ease, color 160ms ease,
+              transform 160ms ease;
   background-image: none;
   -webkit-text-fill-color: currentColor;
+  border: 1px solid transparent;
 }
 
 .drawer-sidebar__link:hover {
-  background: rgba(255, 255, 255, 0.04);
+  background: rgba(216, 180, 254, 0.08);
   color: #fff;
+  border-color: rgba(216, 180, 254, 0.16);
+  transform: translateX(2px);
 }
 
 .drawer-sidebar__link.router-link-active {
-  color: #171022;
-  -webkit-text-fill-color: #171022;
+  color: #1a1230;
+  -webkit-text-fill-color: #1a1230;
   background: linear-gradient(135deg, var(--primary), var(--gold));
-  box-shadow: 0 4px 16px color-mix(in srgb, var(--primary) 24%, transparent);
+  box-shadow: 0 6px 18px color-mix(in srgb, var(--primary) 28%, transparent);
+}
+
+.drawer-sidebar__foot {
+  border-top: 1px solid rgba(216, 180, 254, 0.1);
+  padding-top: 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.drawer-sidebar__hint {
+  margin: 0;
+  font-size: 0.74rem;
+  letter-spacing: 0.02em;
+  color: rgba(231, 224, 255, 0.42);
+  text-align: center;
+}
+
+.drawer-sidebar__signout {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 109, 142, 0.25);
+  background: rgba(255, 109, 142, 0.06);
+  color: rgba(255, 200, 215, 0.88);
+  font-size: 0.86rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background-color 160ms ease, color 160ms ease, border-color 160ms ease;
+}
+
+.drawer-sidebar__signout:hover {
+  background: rgba(255, 109, 142, 0.16);
+  border-color: rgba(255, 109, 142, 0.5);
+  color: #fff;
 }
 
 :global(html.nav-drawer-open) {
@@ -813,11 +911,16 @@ function switchLocale(l: Locale) {
 
 .drawer-slide-enter-active,
 .drawer-slide-leave-active {
-  transition: transform 250ms cubic-bezier(0.16, 1, 0.3, 1);
+  transition: transform 260ms cubic-bezier(0.16, 1, 0.3, 1),
+              opacity 220ms ease;
+}
+.drawer-slide-enter-active {
+  box-shadow: 18px 0 48px rgba(118, 86, 196, 0.18);
 }
 .drawer-slide-enter-from,
 .drawer-slide-leave-to {
-  transform: translateX(100%);
+  transform: translateX(-100%);
+  opacity: 0.6;
 }
 
 /* 窄屏 960px：user-chip meta 隐藏，按钮文字隐藏 */

@@ -54,6 +54,7 @@ export default {
       "locale": "Language",
       "menu": "Open navigation menu",
       "closeMenu": "Close navigation menu",
+      "drawerHint": "Press Esc to close · tap outside to dismiss",
       "groups":
       {
           "memory": "Memory",
@@ -283,7 +284,7 @@ export default {
   "login":
   {
       "eyebrow": "Private memory studio",
-      "title": "Step into your<br/>memory museum.",
+      "title": "Let the forgotten<br/>shimmer again.",
       "lead": "Sign back in to revisit reconstructed scenes, lock fragile memories, and trace resonance between moments. Built for long-form work — one focused canvas at a time.",
       "features":
       {
@@ -358,7 +359,7 @@ export default {
       "username": "Username",
       "usernamePlaceholder": "your.username",
       "email": "Email",
-      "emailPlaceholder": "name@company.com",
+      "emailPlaceholder": "name{'@'}company.com",
       "password": "Password",
       "passwordPlaceholder": "At least 8 characters",
       "confirmPassword": "Confirm password",
@@ -1005,8 +1006,8 @@ export default {
             "icebreakerError": "Echo Envoy is offline right now, try again later.",
             "suggestionTitle": "Echo Envoy's icebreaker",
             "useSuggestion": "Use this",
-            "mentionTip": "Mention @AI in a group to summon me",
-            "mentionHint": "Start a message with @AI or @Echo and I'll reply using recent group context",
+            "mentionTip": "Mention {'@'}AI in a group to summon me",
+            "mentionHint": "Start a message with {'@'}AI or {'@'}Echo and I'll reply using recent group context",
             "thoughtProcess": "Thinking Process"
           },
       "tabs":
