@@ -7,11 +7,65 @@ spring:
     name: ai-service
   lifecycle:
     timeout-per-shutdown-phase: 30s
+  # @Async 线程池显式收口。AI 服务有大量异步任务（场景重建/实体提取/向量索引），
+  # 默认队列无界会无限堆积导致 OOM。这里改成有界队列 + CALLER_RUNS 背压。
+  task:
+    execution:
+      pool:
+        core-size: 8
+        max-size: 32
+        queue-capacity: 200
+        keep-alive: 60s
+      thread-name-prefix: ai-async-
+      shutdown:
+        await-termination: true
+        await-termination-period: 30s
+  data:
+    redis:
+      host: ${REDIS_HOST:100.66.166.46}
+      port: ${REDIS_PORT:6379}
+      timeout: 3s
+      connect-timeout: 3s
+      lettuce:
+        pool:
+          # 高并发优化：Redis 连接池从 16→50（AI 缓存 + 限流 + 向量检索结果缓存）
+          max-active: 50
+          max-idle: 20
+          min-idle: 5
+          max-wait: 3s
+  cloud:
+    openfeign:
+      client:
+        config:
+          default:
+            connectTimeout: 3000
+            readTimeout: 15000
+          memory-service:
+            readTimeout: 20000
   neo4j:
-    uri: bolt://${NEO4J_HOST:100.66.166.46}:7687
+    # 默认指向 workpc Neo4j；本机 dev 时设 NEO4J_HOST=localhost 即可
+    uri: bolt://${NEO4J_HOST:100.66.166.46}:${NEO4J_PORT:7687}
     authentication:
       username: ${NEO4J_USER:neo4j}
       password: ${NEO4J_PASSWORD:password123}
+  rabbitmq:
+    host: ${RABBITMQ_HOST:100.66.166.46}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USER:guest}
+    password: ${RABBITMQ_PASSWORD:guest}
+    # consumer 端 prefetch — Milvus 写一次约 200-500ms；拉太大反而挤压同一队列
+    listener:
+      simple:
+        prefetch: 8
+        # 异常时不 requeue，由 RejectAndDontRequeueRecoverer 推到 DLX
+        acknowledge-mode: auto
+        retry:
+          enabled: true
+          initial-interval: 1s
+          multiplier: 2.0
+          max-interval: 8s
+          max-attempts: 4
+        default-requeue-rejected: false
   cloud:
     inetutils:
       preferred-networks:
@@ -20,7 +74,6 @@ spring:
     nacos:
       discovery:
         server-addr: ${NACOS_HOST:100.66.166.46}:8848
-        enabled: true
         ip: ${SPRING_CLOUD_NACOS_DISCOVERY_IP:}
       config:
         enabled: false
@@ -97,6 +150,7 @@ mnemoscape:
     vector:
       enabled: ${VECTOR_SEARCH_ENABLED:true}
       embedding-model: ${EMBEDDING_MODEL:nvidia/nv-embed-v1}
+      embedding-base-url: ${EMBEDDING_BASE_URL:https://ai.api.nvidia.com/v1}
       embedding-dimension: ${EMBEDDING_DIMENSION:4096}
       embedding-timeout-ms: ${EMBEDDING_TIMEOUT_MS:15000}
       milvus-host: ${MILVUS_HOST:100.66.166.46}
@@ -106,6 +160,46 @@ mnemoscape:
       collection-name: ${MILVUS_COLLECTION:mnemoscape_memories}
       milvus-timeout-ms: ${MILVUS_TIMEOUT_MS:8000}
       default-top-k: ${VECTOR_DEFAULT_TOPK:5}
+      # ---------------- R19: Milvus 索引参数外部化 + 重建策略 ----------------
+      # 5w 节点默认参数：M=16 / efConstruction=200 足够（实测 recall@10 ≈ 0.95）
+      # 10w+ 节点建议把 M 提到 24~32，efConstruction 提到 300~400（牺牲建索引时间换召回）
+      index:
+        index-type: ${MILVUS_INDEX_TYPE:HNSW}
+        metric-type: ${MILVUS_METRIC_TYPE:COSINE}
+        hnsw-m: ${MILVUS_HNSW_M:16}
+        hnsw-ef-construction: ${MILVUS_HNSW_EF_CONSTRUCTION:200}
+        hnsw-ef: ${MILVUS_HNSW_EF:128}
+        nlist: ${MILVUS_NLIST:1024}
+        # 每累计多少条 upsert 触发一次后台重建（R19 设计：1000）
+        dirty-threshold: ${MILVUS_DIRTY_THRESHOLD:1000}
+        # 兜底周期重建 cron（业务低峰：每天 3 点）
+        rebuild-cron: ${MILVUS_REBUILD_CRON:0 3 * * *}
+        drop-on-rebuild: ${MILVUS_DROP_ON_REBUILD:true}
+        online-rebuild: ${MILVUS_ONLINE_REBUILD:true}
+        max-rebuild-batch-size: ${MILVUS_MAX_REBUILD_BATCH:100000}
+    # ---------------- Redis 性能加速层 (AiCacheService 统一管控) ----------------
+    # 三类用途, 默认全开; 任一开关关掉走"无缓存直连 + 无限流"的旧行为, 业务不变.
+    # 失败行为统一: Redis 抖动 → 静默降级到无缓存, 绝不阻塞 NVIDIA 真实调用.
+    cache:
+      # Embedding 缓存: 同一段文本 7 天内只调一次 NVIDIA /v1/embeddings.
+      # 命中率高且能省 NVIDIA Token 配额 (1 query embed ~$0.0001, 高频会议聊天场景命中率可到 40-60%).
+      embedding:
+        enabled: ${AI_CACHE_EMBEDDING_ENABLED:true}
+        ttl-seconds: ${AI_CACHE_EMBEDDING_TTL:604800}
+      # Milvus 搜索结果缓存: 60s 内同一 (userId, topK, query) 直接复用上次召回结果.
+      # 写入 (新增/更新/删除记忆) 由 memory-service 发 MQ 触发主动失效 (见 A 系列改造).
+      search:
+        enabled: ${AI_CACHE_SEARCH_ENABLED:true}
+        ttl-seconds: ${AI_CACHE_SEARCH_TTL:60}
+    # ---------------- NVIDIA 上游限流 (令牌桶, Redis 实现, 跨实例一致) ----------------
+    # 免费档 NVIDIA Integrate 有 RPM 限制 (chat ~60 RPM, embed ~120 RPM);
+    # 超额会返回 429 把整次请求打挂. 我们在客户端先做软限流, 超额抛 RATE_LIMITED.
+    rate-limit:
+      enabled: ${AI_RATELIMIT_ENABLED:true}
+      # 按模型分桶, 默认值是保守估计, 真实配额查 NVIDIA 控制台后改 env.
+      default-rpm: ${AI_RATELIMIT_DEFAULT_RPM:40}
+      embed-rpm: ${AI_RATELIMIT_EMBED_RPM:100}
+      vision-rpm: ${AI_RATELIMIT_VISION_RPM:20}
   asset-service:
     base-url: ${ASSET_SERVICE_BASE_URL:http://asset-service}
   memory-service:
@@ -155,10 +249,23 @@ springdoc:
   packages-to-scan: com.mnemoscape.ai
 
 management:
+  # 分布式追踪试点：Micrometer Tracing（桥接 OpenTelemetry）。
+  # traceId 自动写入 slf4j MDC，与网关 RequestCorrelationFilter 下发的
+  # X-Correlation-Id 并存互不影响：correlationId 是应用层业务 ID，traceId 是 W3C 标准链路上下文。
+  tracing:
+    sampling:
+      probability: 1.0 # 试点期全采样，量大后调低
+  otlp:
+    tracing:
+      # OTLP HTTP exporter；容器内部署时通过环境变量覆盖为 http://jaeger:4318/v1/traces
+      endpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:http://localhost:4318/v1/traces}
   endpoints:
     web:
       exposure:
-        include: health,info,metrics,prometheus,circuitbreakers,retries
+        # R32: 必须显式暴露 health / info / prometheus / metrics —— 这四个端点是
+        # Prometheus 抓取 + Grafana 健康检查 + 服务间 readiness/liveness 的最小集。
+        # 其余（circuitbreakers / retries / caches）是 ai-service 特有的可观测面板。
+        include: health,info,prometheus,metrics,circuitbreakers,retries,caches
   endpoint:
     health:
       show-details: when_authorized
@@ -175,3 +282,6 @@ logging:
   level:
     root: INFO
     com.mnemoscape: INFO
+    com.alibaba.nacos.client.naming: WARN
+    com.alibaba.nacos.common.remote.client: WARN
+    com.alibaba.nacos.client.config: WARN

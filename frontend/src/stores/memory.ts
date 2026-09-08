@@ -2,6 +2,7 @@ import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import type { MemoryItem, DriftState, MemoryVersion, MemoryFragment } from '../types'
 import * as api from '../api/memory'
+import { useDebouncedAction } from '../composables/useDebounce'
 
 export const useMemoryStore = defineStore('memory', () => {
   const memories = ref<MemoryItem[]>([])
@@ -14,6 +15,11 @@ export const useMemoryStore = defineStore('memory', () => {
   const error = ref('')
   const errorStatus = ref<number | null>(null)
   const errorRequestId = ref('')
+
+  // 写操作防抖包装：用户快速连点提交按钮也不会发出多个请求。
+  // pending=true 期间再次调用会直接跳过，避免重复创建记忆。
+  const debouncedCreate = useDebouncedAction(api.createMemory)
+  const debouncedRegenerate = useDebouncedAction(api.regenerateScene)
 
   async function fetchList(page = 0, size = 12, privacyLevel?: string) {
     loadingList.value = true
@@ -66,9 +72,13 @@ export const useMemoryStore = defineStore('memory', () => {
     privacyLevel?: string
     sceneDataUrl?: string
   }) {
-    const { data } = await api.createMemory(memory)
-    memories.value.unshift(data.data)
-    return data.data
+    // 防抖执行：飞行中再点会被忽略，避免重复创建
+    const res = await debouncedCreate.run(memory)
+    if (res) {
+      memories.value.unshift(res.data.data)
+      return res.data.data
+    }
+    return undefined
   }
 
   async function update(id: string, updates: Partial<MemoryItem>) {
@@ -104,11 +114,15 @@ export const useMemoryStore = defineStore('memory', () => {
     current.value = data.data
   }
 
-  /** 让 AI 重新基于记忆描述生成 grounded scene + fragments。 */
+  /** 让 AI 重新基于记忆描述生成 grounded scene + fragments。
+   *  防抖保护：场景重建很慢（30-60s），连点会发多个 LLM 调用烧钱。 */
   async function regenerateScene(id: string) {
-    const { data } = await api.regenerateScene(id)
-    current.value = data.data
-    return data.data
+    const res = await debouncedRegenerate.run(id)
+    if (res) {
+      current.value = res.data.data
+      return res.data.data
+    }
+    return undefined
   }
 
   async function fetchFragments(id: string) {

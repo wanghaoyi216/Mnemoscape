@@ -1,10 +1,9 @@
 <script setup lang="ts">
-import { ref } from 'vue'
-import { useI18n } from 'vue-i18n'
+import { computed, ref } from 'vue'
+import { featureIllustrations, loginBackgrounds } from '../assets/media-catalog'
 import { useAuthStore } from '../stores/auth'
 import axios from 'axios'
 
-const { t } = useI18n()
 const auth = useAuthStore()
 
 const generating = ref(false)
@@ -20,6 +19,9 @@ const filters = ref({
 
 const seasons = ['spring', 'summer', 'autumn', 'winter']
 const emotions = ['joy', 'nostalgia', 'calm', 'melancholy', 'gratitude']
+const diaryHero = featureIllustrations[7]
+const diaryHeroBg = loginBackgrounds[10]
+const diaryEmptyArt = computed(() => featureIllustrations[7].src)
 
 async function generate() {
   generating.value = true
@@ -61,12 +63,16 @@ function copyToClipboard() {
 
 <template>
   <div class="page-shell page-shell--wide">
-    <section class="hero-card" style="margin-bottom: 24px;">
-      <div class="stack stack--lg">
+    <section class="hero-card hero-card--split page-hero" style="margin-bottom: 24px;">
+      <div class="page-hero__bg" :style="{ backgroundImage: `url(${diaryHeroBg.src})` }" aria-hidden="true"></div>
+      <div class="stack stack--lg" style="position:relative;z-index:1;">
         <p class="eyebrow">AI DIARY GENERATOR · AI 日记</p>
         <h1 class="display-title text-gradient">记忆日记生成器</h1>
         <p class="lead">AI 分析你的记忆，创作富有文学性和情感深度的日记。每一篇都是独一无二的时光诗篇。</p>
       </div>
+      <figure class="art-frame" style="position:relative;z-index:1;max-width:360px;margin:0;aspect-ratio:1;">
+        <img :src="diaryHero.src" :alt="diaryHero.origin" loading="lazy" decoding="async" />
+      </figure>
     </section>
 
     <div class="diary-layout">
@@ -78,7 +84,7 @@ function copyToClipboard() {
           <input
             v-model.number="filters.year"
             type="number"
-            class="form-input"
+            class="input"
             placeholder="留空表示全部"
             min="1900"
             max="2100"
@@ -165,7 +171,8 @@ function copyToClipboard() {
           </footer>
         </div>
 
-        <div v-else class="diary-empty">
+        <div v-else class="diary-empty empty-state" style="padding:48px 24px;">
+          <img :src="diaryEmptyArt" class="empty-state__art" alt="" aria-hidden="true" loading="lazy" />
           <p>点击左侧"生成日记"按钮，AI 将为你创作一篇独特的记忆日记。</p>
         </div>
       </main>

@@ -4,9 +4,11 @@ import com.mnemoscape.asset.model.StaticResource;
 import com.mnemoscape.asset.service.AssetService;
 import com.mnemoscape.asset.service.LocalResourceWatcher;
 import com.mnemoscape.common.dto.ApiResponse;
+import com.mnemoscape.common.ratelimit.RateLimit;
 import com.mnemoscape.common.web.RequestContext;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.http.MediaType;
 import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
@@ -18,6 +20,7 @@ import java.nio.file.Path;
 import java.util.List;
 import java.util.Map;
 
+@Slf4j
 @RestController
 @RequestMapping("/api/v1/assets")
 public class AssetController {
@@ -29,12 +32,16 @@ public class AssetController {
         this.localResourceWatcher = localResourceWatcher;
     }
 
+    @RateLimit(key = "asset:upload", limit = 10, windowSeconds = 60,
+            dimension = RateLimit.Dimension.USER_OR_IP,
+            message = "上传过于频繁，请稍后再试")
     @PostMapping("/upload")
     public ApiResponse<Map<String, String>> upload(@RequestParam("file") MultipartFile file,
+                                                    @RequestParam(value = "purpose", required = false) String purpose,
                                                     HttpServletRequest request) {
         // 必须身份感知：每个用户上传的对象都加 users/{userId}/ 前缀，互相不可见
         String userId = RequestContext.requireUserId(request);
-        String objectName = assetService.uploadForUser(file, userId);
+        String objectName = assetService.uploadForUser(file, userId, purpose);
         String url = assetService.getPresignedUrl(objectName);
         return ApiResponse.success(Map.of("objectName", objectName, "url", url));
     }
@@ -81,7 +88,7 @@ public class AssetController {
         try {
             merged.addAll(assetService.listMinioStaticForUser(userId));
         } catch (Exception e) {
-            // MinIO 不可达不影响本地资源返回
+            log.warn("[static] MinIO list failed, returning local-only: {}", e.toString());
         }
         return ApiResponse.success(merged);
     }
@@ -129,6 +136,7 @@ public class AssetController {
                 response.flushBuffer();
             }
         } catch (Exception e) {
+            log.warn("[static] serve failed for {}/{}: {}", type, filename, e.toString());
             response.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
         }
     }

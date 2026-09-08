@@ -1,0 +1,57 @@
+﻿<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1600 900" width="1600" height="900" preserveAspectRatio="xMidYMid slice">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#0a2520"/><stop offset="0.5" stop-color="#0a1815"/><stop offset="1" stop-color="#020a08"/>
+    </linearGradient>
+    <radialGradient id="vig" cx="0.5" cy="0.5" r="0.8">
+      <stop offset="0.5" stop-color="black" stop-opacity="0"/>
+      <stop offset="1" stop-color="black" stop-opacity="0.7"/>
+    </radialGradient>
+    <filter id="grain">
+      <feTurbulence type="fractalNoise" baseFrequency="0.9" numOctaves="2" seed="3"/>
+      <feColorMatrix values="0 0 0 0 1   0 0 0 0 1   0 0 0 0 1   0 0 0 0.08 0"/>
+    </filter>
+  </defs>
+  <rect width="1600" height="900" fill="url(#bg)"/>
+  <ellipse cx="800" cy="700" rx="1200" ry="80" fill="#36d8b4" opacity="0.15"/>
+  <path d="M0,500 L200,450 L400,470 L600,420 L800,440 L1000,400 L1200,430 L1400,410 L1600,440 L1600,900 L0,900 Z" fill="#0a2018" opacity="0.8"/>
+  <path d="M0,700 L1600,700 L1600,900 L0,900 Z" fill="#021008" opacity="0.9"/>
+  <circle cx='448' cy='547' r='131' fill='white' opacity='0.05'/>
+  <circle cx='681' cy='568' r='193' fill='white' opacity='-0.06'/>
+  <circle cx='1267' cy='544' r='185' fill='white' opacity='-0.03'/>
+  <circle cx='1508' cy='829' r='178' fill='white' opacity='0.01'/>
+  <circle cx='990' cy='121' r='190' fill='white' opacity='0.04'/>
+  <circle cx='98' cy='340' r='188' fill='white' opacity='0.03'/>
+  <circle cx='489' cy='680' r='81' fill='white' opacity='0.1'/>
+  <circle cx='846' cy='839' r='116' fill='white' opacity='0.1'/>
+  <circle cx='315' cy='150' r='29' fill='white' opacity='0.09'/>
+  <circle cx='1540' cy='370' r='90' fill='white' opacity='0.06'/>
+  <circle cx='938' cy='696' r='21' fill='white' opacity='0.05'/>
+  <circle cx='1099' cy='166' r='78' fill='white' opacity='-0.03'/>
+  <circle cx='1181' cy='389' r='176' fill='white' opacity='0.12'/>
+  <circle cx='1243' cy='56' r='129' fill='white' opacity='0.12'/>
+  <circle cx='1076' cy='151' r='71' fill='white' opacity='0.07'/>
+  <circle cx='462' cy='139' r='108' fill='white' opacity='0.11'/>
+  <circle cx='106' cy='76' r='193' fill='white' opacity='0.09'/>
+  <circle cx='1387' cy='72' r='95' fill='white' opacity='-0.02'/>
+  <circle cx='1189' cy='274' r='186' fill='white' opacity='-0.01'/>
+  <circle cx='590' cy='308' r='157' fill='white' opacity='-0.04'/>
+  <circle cx='685' cy='134' r='32' fill='white' opacity='-0.05'/>
+  <circle cx='100' cy='573' r='30' fill='white' opacity='-0.04'/>
+  <circle cx='897' cy='137' r='42' fill='white' opacity='0.09'/>
+  <circle cx='204' cy='649' r='83' fill='white' opacity='0.02'/>
+  <circle cx='449' cy='135' r='114' fill='white' opacity='0.06'/>
+  <circle cx='353' cy='496' r='78' fill='white' opacity='0.07'/>
+  <circle cx='21' cy='596' r='48' fill='white' opacity='0.03'/>
+  <circle cx='218' cy='285' r='115' fill='white' opacity='0'/>
+  <circle cx='646' cy='146' r='63' fill='white' opacity='-0.04'/>
+  <circle cx='135' cy='357' r='163' fill='white' opacity='0.02'/>
+  <circle cx='46' cy='747' r='58' fill='white' opacity='0.08'/>
+  <circle cx='1526' cy='563' r='34' fill='white' opacity='-0.06'/>
+  <circle cx='1520' cy='445' r='21' fill='white' opacity='-0.02'/>
+  <circle cx='1307' cy='146' r='182' fill='white' opacity='0.11'/>
+  <circle cx='1317' cy='371' r='34' fill='white' opacity='0.01'/>
+
+  <rect width="1600" height="900" fill="url(#vig)"/>
+  <rect width="1600" height="900" filter="url(#grain)" opacity="0.5"/>
+</svg>

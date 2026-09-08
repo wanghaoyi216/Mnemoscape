@@ -1,15 +1,17 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue'
-import { useI18n } from 'vue-i18n'
+import { featureIllustrations, loginBackgrounds, memoryCovers } from '../assets/media-catalog'
 import { useAuthStore } from '../stores/auth'
 import { useMemoryStore } from '../stores/memory'
 import axios from 'axios'
 
-const { t } = useI18n()
 const auth = useAuthStore()
 const memoryStore = useMemoryStore()
 
 const activeTab = ref<'throw' | 'pick' | 'my' | 'picked'>('pick')
+const bottleHero = featureIllustrations[9]
+const bottleHeroBg = loginBackgrounds[4]
+const bottleEmptyArt = memoryCovers[7].src
 const throwing = ref(false)
 const picking = ref(false)
 const selectedMemory = ref('')
@@ -82,12 +84,16 @@ async function loadPickedBottles() {
 
 <template>
   <div class="page-shell page-shell--wide">
-    <section class="hero-card" style="margin-bottom: 24px;">
-      <div class="stack stack--lg">
+    <section class="hero-card hero-card--split page-hero" style="margin-bottom: 24px;">
+      <div class="page-hero__bg" :style="{ backgroundImage: `url(${bottleHeroBg.src})` }" aria-hidden="true"></div>
+      <div class="stack stack--lg" style="position:relative;z-index:1;">
         <p class="eyebrow">DRIFT BOTTLE · 漂流瓶</p>
         <h1 class="display-title text-gradient">记忆漂流瓶</h1>
         <p class="lead">将你的记忆片段装入瓶中，投入时光之海。也许某天，会有陌生人捡起你的故事。</p>
       </div>
+      <figure class="art-frame" style="position:relative;z-index:1;max-width:340px;margin:0;aspect-ratio:1;">
+        <img :src="bottleHero.src" :alt="bottleHero.origin" loading="lazy" decoding="async" />
+      </figure>
     </section>
 
     <div class="tabs">
@@ -108,6 +114,7 @@ async function loadPickedBottles() {
           </div>
         </div>
         <div v-else class="empty-state">
+          <img :src="bottleEmptyArt" class="empty-state__art" alt="" aria-hidden="true" loading="lazy" />
           <p>点击下方按钮，从时光之海中捡起一个漂流瓶</p>
         </div>
         <button class="button button--primary" :disabled="picking" @click="pickBottle">

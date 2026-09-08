@@ -1,131 +1,65 @@
-# Mnemoscape — Remote middleware deployment kit
+# Mnemoscape 远程中间件 (workpc) 运维脚本
 
-> Local laptop (M:) hosts the dev frontend + Java microservices.
-> Workpc (Tailscale `100.66.166.46`) hosts every middleware container.
-> Data lives on **D:\MnemoscapeInfra**.  The C: drive on workpc is off-limits.
+所有脚本设计为 **workpc 本地 PowerShell 7+** 执行（`本机访问无需密码`）。
+不需要 SSH 跳板。
 
----
-
-## TL;DR — one command from the laptop
+## 一键启动
 
 ```powershell
-# from M:\Study\ProjectTest\Mnemoscape
-powershell -File scripts\remote\Deploy-To-Workpc.ps1 -Pull -OpenFirewall
+# 1. 把整个项目 git pull 到 workpc（或者 rsync 过来），例如 D:\Mnemoscape
+cd D:\Mnemoscape\scripts\remote
+
+# 2. 启动所有中间件容器 + 推 Nacos 配置
+.\start-remote-infra.ps1
+
+# 只看就绪状态（不重启容器）
+.\start-remote-infra.ps1 -OnlyWait
+
+# 跳过 docker up（容器已跑），只同步配置 + 推 Nacos
+.\start-remote-infra.ps1 -SkipDockerUp
+
+# 启动后不推 Nacos
+.\start-remote-infra.ps1 -SkipNacosPush
 ```
 
-That uploads every artifact in this folder to `D:\MnemoscapeInfra` on workpc,
-brings the stack up, waits for healthchecks, and (optionally) opens Windows
-firewall.  Re-run with `-Stop` or `-Status` for the lifecycle operations.
+## 其他脚本
 
----
+| 脚本 | 用途 |
+|---|---|
+| `start-remote-infra.ps1` | docker compose up + 等待就绪 + 推 Nacos 配置 |
+| `stop-remote-infra.ps1` | `docker compose down`（保留数据卷） |
+| `status-remote-infra.ps1` | 端口连通性 + 容器列表 |
+| `diagnose-nacos.ps1` | 排 Nacos 9848 timeout 专项 |
+| `rabbitmq/definitions.json` | 5 队列 + DLX + policy 定义 |
+| `rabbitmq/rabbitmq.conf` | RabbitMQ 主配置（开启 mgmt, load_definitions） |
+| `nacos/ai-service.yaml` | AI 业务配置（推 Nacos 用） |
+| `nacos/ai-service-dev.yaml` | dev profile 覆盖 |
+| `nacos/ai-service-prod.yaml` | prod profile 覆盖 |
+| `nacos/push-nacos-config.ps1` | 推送 yaml 到 Nacos OpenAPI |
+| `nacos/push-nacos-config.sh` | 推送 yaml 到 Nacos OpenAPI（Bash 备用） |
 
-## Files in this folder
+## 端口速查
 
-| File | Where it runs | Purpose |
-| --- | --- | --- |
-| `Deploy-To-Workpc.ps1`          | **laptop** | scp → ssh orchestrator |
-| `docker-compose.remote.yml`     | workpc     | infra-only compose, all bind mounts on D: |
-| `Deploy-Remote.ps1`             | workpc     | applied by the orchestrator |
-| `Stop-Remote.ps1`               | workpc     | `down` + optional `-Wipe` |
-| `Status-Remote.ps1`             | workpc     | health, ports, D: usage |
-| `Open-Firewall.ps1`             | workpc     | `Allow Inbound TCP` rules (run as admin) |
-| `docker_credential_noop.py` + `docker-credential-noop.exe` | workpc | bypass `docker-credential-desktop` over SSH |
-| `Use-LocalDev-WorkpcInfra.ps1`  | **laptop** | source `backend/.env.workpc` into the current shell |
+| 服务 | Tailscale 端口 | 用户 / 密码 |
+|---|---|---|
+| MySQL | 100.66.166.46:3306 | root / root123 |
+| Redis | 100.66.166.46:6379 | 无 |
+| Nacos | 100.66.166.46:8848 (HTTP) + 9848 (gRPC) | 关闭鉴权 |
+| RabbitMQ | 100.66.166.46:5672 (AMQP) + 15672 (UI) | guest / guest |
+| MinIO | 100.66.166.46:9000 (S3) + 9001 (UI) | minioadmin / minioadmin123 |
+| Neo4j | 100.66.166.46:7687 (Bolt) + 7474 (UI) | neo4j / password123 |
+| Milvus | 100.66.166.46:19530 (gRPC) + 9091 (UI) | 无 |
 
----
+## 数据卷位置
 
-## Topology
-
+所有数据卷挂载到 `D:\MnemoscapeInfra\<service>\`，**不会写 C 盘**：
 ```
-┌─────────────────────────────────────────────────────────────────┐
-│  Dev laptop  (M:\Study\ProjectTest\Mnemoscape)                  │
-│                                                                 │
-│  • Vue 3 frontend (vite, npm run dev)        → http://:5173     │
-│  • api-gateway     (Spring Cloud Gateway)    → http://:8080     │
-│  • auth-service    (Spring Boot, MVC)        → http://:8081     │
-│  • memory-service  (Spring Boot, MVC)        → http://:8082     │
-│  • ai-service      (Spring Boot, MVC)        → http://:8083     │
-│  • resonance-service (Spring Boot, WS)       → http://:8084     │
-│  • asset-service   (Spring Boot, MVC)        → http://:8085     │
-└─────────────────────────────┬───────────────────────────────────┘
-                              │ Tailscale (100.66.166.46)
-┌─────────────────────────────┴───────────────────────────────────┐
-│  Workpc — DESKTOP-MJGHIQ6   (D:\MnemoscapeInfra)                │
-│                                                                 │
-│  • mysql              → :3306    (root / root123)               │
-│  • redis              → :6379                                   │
-│  • nacos              → :8848  + :9848                          │
-│  • rabbitmq           → :5672  + :15672 mgmt UI (guest / guest) │
-│  • minio              → :9000  + :9001 console                  │
-│  • neo4j              → :7474  + :7687                          │
-│  • etcd (internal for Milvus only)                              │
-│  • milvus             → :19530 + :9091                          │
-└─────────────────────────────────────────────────────────────────┘
+D:\MnemoscapeInfra\mysql\data
+D:\MnemoscapeInfra\redis\data
+D:\MnemoscapeInfra\nacos\data
+D:\MnemoscapeInfra\rabbitmq\data
+D:\MnemoscapeInfra\minio\data
+D:\MnemoscapeInfra\neo4j\data
+D:\MnemoscapeInfra\milvus\data
+D:\MnemoscapeInfra\etcd\data
 ```
-
----
-
-## Recurring chores
-
-```powershell
-# Update images + restart with fresh containers
-powershell -File scripts\remote\Deploy-To-Workpc.ps1 -Pull -Recreate
-
-# Just check what's running
-powershell -File scripts\remote\Deploy-To-Workpc.ps1 -Status
-
-# Stop everything (keep data)
-powershell -File scripts\remote\Deploy-To-Workpc.ps1 -Stop
-
-# Stop + wipe D:\MnemoscapeInfra data (asks for confirmation)
-ssh workpc 'powershell -File D:\MnemoscapeInfra\Stop-Remote.ps1 -Wipe'
-
-# Open firewall (must be elevated on workpc — see note below)
-ssh workpc 'powershell -File D:\MnemoscapeInfra\Open-Firewall.ps1'
-```
-
-> **About `Open-Firewall.ps1`** — Windows requires admin to create firewall
-> rules.  An SSH session typically isn't elevated, so the script bails with a
-> clear message.  RDP into workpc once, open an Administrator PowerShell, and
-> run `D:\MnemoscapeInfra\Open-Firewall.ps1` — that's a one-shot setup.
-
----
-
-## After deployment, run services locally
-
-```powershell
-cd M:\Study\ProjectTest\Mnemoscape
-# load workpc endpoints into env
-. .\scripts\remote\Use-LocalDev-WorkpcInfra.ps1
-
-# start backend services one tab at a time
-cd backend
-.\mvnw -pl api-gateway       spring-boot:run
-.\mvnw -pl auth-service      spring-boot:run
-.\mvnw -pl memory-service    spring-boot:run
-.\mvnw -pl ai-service        spring-boot:run
-.\mvnw -pl resonance-service spring-boot:run
-.\mvnw -pl asset-service     spring-boot:run
-
-# in another tab — frontend
-cd ..\frontend
-npm install
-npm run dev
-```
-
----
-
-## The Docker-credential-desktop workaround
-
-Windows OpenSSH non-interactive sessions can't reach the user's logon token,
-so `docker-credential-desktop.exe` fails with `A specified logon session does
-not exist` on every `docker pull`.  Deploy-Remote handles this by:
-
-1. Setting `~/.docker/config.json` → `"credsStore": "noop"`
-2. Installing **docker-credential-noop.exe** into the user's PATH
-   (`%USERPROFILE%\bin`)
-3. That helper just answers `{}` to every `list` query — Docker proceeds with
-   anonymous pulls, which is what you want for public registry images.
-
-The helper sources live in `docker_credential_noop.py`; the .exe is built with
-PyInstaller and shipped alongside.

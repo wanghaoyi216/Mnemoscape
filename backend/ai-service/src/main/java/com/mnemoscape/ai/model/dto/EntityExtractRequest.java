@@ -1,10 +1,18 @@
 package com.mnemoscape.ai.model.dto;
 
 import jakarta.validation.constraints.NotBlank;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Data;
+import lombok.NoArgsConstructor;
 
 /**
  * 实体提取请求：以记忆原始描述为主，可附结构化字段以提高准确率。
  */
+@Data
+@NoArgsConstructor
+@AllArgsConstructor
+@Builder
 public class EntityExtractRequest {
 
     @NotBlank
@@ -15,15 +23,4 @@ public class EntityExtractRequest {
 
     /** memory.memoryYear — 当后续需要时间相关的实体时可用 */
     private Integer memoryYear;
-
-    public EntityExtractRequest() {}
-
-    public String getDescription() { return description; }
-    public void setDescription(String description) { this.description = description; }
-
-    public String getMemoryLocation() { return memoryLocation; }
-    public void setMemoryLocation(String memoryLocation) { this.memoryLocation = memoryLocation; }
-
-    public Integer getMemoryYear() { return memoryYear; }
-    public void setMemoryYear(Integer memoryYear) { this.memoryYear = memoryYear; }
 }

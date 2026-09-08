@@ -2,20 +2,24 @@
 <html lang="zh-CN">
   <head>
     <meta charset="UTF-8" />
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
+    <link rel="icon" href="/favicon.ico?v=2" />
+    <link rel="manifest" href="/manifest.webmanifest" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <meta name="description" content="Mnemoscape — AI 驱动的个人记忆博物馆，把文字化的记忆重建为可漫游的 3D 场景。" />
     <meta name="theme-color" content="#0a0c10" />
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="Mnemoscape" />
     <title>Mnemoscape · 个人记忆博物馆</title>
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
     <!--
-      中英文混排排版：思源黑体 (Noto Sans SC) + 思源宋体 (Noto Serif SC)
-      + Inter (拉丁正文) + Playfair Display (拉丁标题)。
-      如果 Google Fonts CDN 在你的网络环境下不稳定，可以替换为
-      https://fonts.font.im 或自建镜像，下面这两行 link 是唯一外部依赖。
+      字体加载策略：主体走本地 ComicShannsMono + 华文行楷（见 style.css @font-face），
+      Google Fonts（Inter/Playfair/Noto Sans SC/Noto Serif SC/JetBrains Mono）仅作 fallback。
+      用 media="print" + onload 技巧异步加载，不阻塞首屏渲染；本地字体已装时几乎不会用到。
+      CDN 不稳定可替换为 fonts.font.im 或自建镜像。
     -->
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Playfair+Display:ital,wght@0,500;0,700;1,500&family=Noto+Sans+SC:wght@400;500;700&family=Noto+Serif+SC:wght@500;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=Playfair+Display:ital,wght@0,500;0,700;1,500&family=Noto+Sans+SC:wght@400;500;700&family=Noto+Serif+SC:wght@500;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet" media="print" onload="this.media='all'" />
   </head>
   <body>
     <div id="app"></div>

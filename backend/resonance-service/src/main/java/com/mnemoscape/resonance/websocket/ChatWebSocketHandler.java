@@ -19,14 +19,19 @@ import java.io.IOException;
 import java.util.*;
 import java.util.concurrent.ConcurrentHashMap;
 
-@Component
+@Component // IOC
 public class ChatWebSocketHandler extends TextWebSocketHandler {
+    //  Slf4j 日志记录器，便于审计
     private static final Logger log = LoggerFactory.getLogger(ChatWebSocketHandler.class);
+    // 序列化器，用于Bean的序列化和反序列化
     private final ObjectMapper objectMapper = new ObjectMapper();
 
+    // JPA操作类
     private final ChatMessageRepository chatMessageRepository;
     private final ChatGroupRepository chatGroupRepository;
     private final ChatGroupMemberRepository chatGroupMemberRepository;
+
+    // AI助手服务
     private final ChatAiAssistant aiAssistant;
 
     // Registry: userId -> Set of active WebSocketSessions
@@ -50,6 +55,12 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
         this.aiAssistant = aiAssistant;
     }
 
+    @jakarta.annotation.PreDestroy
+    void shutdown() {
+        aiExec.shutdownNow();
+    }
+
+    // Jackson注解，用于控制JSON序列化、反序列化的行为
     @JsonIgnoreProperties(ignoreUnknown = true)
     private static class ChatPayload {
         public String type; // SEND_MSG, GET_HISTORY, CREATE_GROUP, AUTH
@@ -67,8 +78,10 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
 
     @Override
     public void afterConnectionEstablished(WebSocketSession session) throws Exception {
+        // 从Session的URL里面去找用户的URL
         String userId = getQueryParam(session, "userId");
         if (userId != null && !userId.isBlank()) {
+            // 如果用户名不存在，在userSession种创建一个线程安全的Set，把当前session塞进去
             userSessions.computeIfAbsent(userId, k -> ConcurrentHashMap.newKeySet()).add(session);
             session.getAttributes().put("userId", userId);
             log.info("Chat WS connected: userId={} sessionId={}", userId, session.getId());
@@ -83,14 +96,17 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
     @Override
     protected void handleTextMessage(WebSocketSession session, TextMessage message) throws Exception {
         try {
+            // 反序列化方法
             ChatPayload payload = objectMapper.readValue(message.getPayload(), ChatPayload.class);
             if (payload == null || payload.type == null) {
                 sendError(session, "INVALID_PAYLOAD", "Missing message type.");
                 return;
             }
 
+            // 获取当前会话的用户
             String sessionUserId = (String) session.getAttributes().get("userId");
             if (payload.type.equalsIgnoreCase("AUTH")) {
+                // 身份认证
                 handleAuth(session, payload);
                 return;
             }
@@ -100,6 +116,7 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
                 return;
             }
 
+            // 匹配消息类型
             switch (payload.type.toUpperCase(Locale.ROOT)) {
                 case "SEND_MSG" -> handleSendMessage(sessionUserId, payload);
                 case "GET_HISTORY" -> handleGetHistory(session, sessionUserId, payload);
@@ -112,6 +129,7 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
         }
     }
 
+    // 身份认证，删除上次当前会话的用户
     private void handleAuth(WebSocketSession session, ChatPayload payload) throws IOException {
         if (payload.userId == null || payload.userId.isBlank()) {
             sendError(session, "INVALID_AUTH", "Missing userId.");
@@ -119,11 +137,14 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
         }
         String oldUserId = (String) session.getAttributes().get("userId");
         if (oldUserId != null) {
+            // 获取老的所有session
             Set<WebSocketSession> oldSessions = userSessions.get(oldUserId);
             if (oldSessions != null) {
+                // 清除掉对应的session
                 oldSessions.remove(session);
             }
         }
+        // 把新的userId加进去
         session.getAttributes().put("userId", payload.userId);
         userSessions.computeIfAbsent(payload.userId, k -> ConcurrentHashMap.newKeySet()).add(session);
         log.info("Chat WS authenticated post-connection: userId={} session={}", payload.userId, session.getId());
@@ -139,10 +160,12 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
         chatMsg.setMessageType(payload.messageType != null ? payload.messageType : "TEXT");
         chatMsg.setFileName(payload.fileName);
         chatMsg.setFileSize(payload.fileSize);
-        
+
+        // 保存到数据库
         chatMessageRepository.save(chatMsg);
         log.info("Chat message saved: sender={} msgId={}", senderId, chatMsg.getId());
 
+        // 拼接广播内容
         Map<String, Object> response = new LinkedHashMap<>();
         response.put("type", "MSG_RECEIVE");
         response.put("id", chatMsg.getId());
@@ -156,7 +179,7 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
         response.put("createdAt", System.currentTimeMillis());
 
         if (payload.groupId != null && !payload.groupId.isBlank()) {
-            // Group Chat: broadcast to all active members of the group
+            // 群聊：向群内所有活跃成员广播
             List<ChatGroupMember> members = chatGroupMemberRepository.findByGroupId(payload.groupId);
             for (ChatGroupMember member : members) {
                 sendToUser(member.getUserId(), response);
@@ -281,19 +304,24 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
         if (sessions == null || sessions.isEmpty()) {
             return;
         }
+        // 序列化
         String json = objectMapper.writeValueAsString(msg);
         TextMessage textMsg = new TextMessage(json);
         List<WebSocketSession> deadSessions = new ArrayList<>();
         for (WebSocketSession s : sessions) {
             if (s.isOpen()) {
+                // 对每一个会话广播消息
                 s.sendMessage(textMsg);
             } else {
+                // 断开连接的Session
                 deadSessions.add(s);
             }
         }
         for (WebSocketSession dead : deadSessions) {
+            // 移除断开连接的Sessions
             sessions.remove(dead);
         }
+        // 会话列表为空，当作用户下线
         if (sessions.isEmpty()) {
             userSessions.remove(userId);
         }
@@ -315,9 +343,11 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
     }
 
     private void removeSession(WebSocketSession session) {
+        // 获取用户的Id
         String userId = (String) session.getAttributes().get("userId");
         if (userId != null) {
             Set<WebSocketSession> sessions = userSessions.get(userId);
+            // 移除Session
             if (sessions != null) {
                 sessions.remove(session);
                 if (sessions.isEmpty()) {
@@ -347,11 +377,13 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
 
     private void sendMessage(WebSocketSession session, Map<String, Object> msg) throws IOException {
         if (session.isOpen()) {
+            // 序列化方法
             String json = objectMapper.writeValueAsString(msg);
             session.sendMessage(new TextMessage(json));
         }
     }
 
+    // 从Url里面获取所需数据
     private String getQueryParam(WebSocketSession session, String key) {
         String query = session.getUri() != null ? session.getUri().getQuery() : null;
         if (query != null) {

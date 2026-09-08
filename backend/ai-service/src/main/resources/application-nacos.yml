@@ -1,0 +1,15 @@
+# =============================================================================
+# ai-service / profile=nacos 专属配置
+#
+# 启动方式：SPRING_PROFILES_ACTIVE=nacos mvnw -pl ai-service spring-boot:run
+# 作用：让 bootstrap.yml 里的 spring.cloud.nacos.config.enabled 切到 true，
+#      走 Nacos 远端配置中心。
+#
+# 注意：本文件只放"覆盖值"，业务配置全在 Nacos Server 的 ai-service.yaml 里。
+# Nacos 不可达时不要使用此 profile —— AI 服务会卡 30s+ 才放弃 Nacos 拉取。
+# =============================================================================
+spring:
+  cloud:
+    nacos:
+      config:
+        enabled: true

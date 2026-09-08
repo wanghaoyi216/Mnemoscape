@@ -9,7 +9,11 @@
     "build": "vue-tsc --noEmit && vite build",
     "preview": "vite preview",
     "typecheck": "vue-tsc --noEmit",
-    "test": "vitest"
+    "test": "vitest",
+    "test:r31": "vitest run r31",
+    "qa:walkthrough": "npx -y tsx tests/frontend-optimization-acceptance.check.ts",
+    "i18n:convert": "node scripts/convert-i18n.mjs",
+    "i18n:extract": "node scripts/i18n-extract.mjs"
   },
   "dependencies": {
     "@deck.gl/aggregation-layers": "^9.3.2",
@@ -43,10 +47,13 @@
     "@vue/tsconfig": "^0.7.0",
     "fast-check": "^3.23.1",
     "happy-dom": "^15.11.7",
+    "sass": "^1.103.1",
     "typescript": "~5.6.3",
     "vite": "^5.4.11",
+    "vite-plugin-pwa": "^0.21.2",
     "vitest": "^2.1.8",
-    "vue-tsc": "^2.1.10"
+    "vue-tsc": "^2.1.10",
+    "workbox-window": "^7.4.1"
   },
   "engines": {
     "node": ">=18.18.0"

@@ -81,6 +81,10 @@ public class AuthGlobalFilter implements GlobalFilter, Ordered {
         Claims claims;
         try {
             claims = jwtTokenProvider.validateToken(token);
+            // R6 安全修复：API 网关只接受 access token。refresh token 即使签名有效，
+            // 也不允许作为 API 凭证（防止"轮换即撤销"语义被旧 refresh 冒充绕过）。
+            // requireType 对无 typ 的历史 token 放行（见 JwtTokenProvider#requireType 注释）。
+            jwtTokenProvider.requireType(claims, JwtTokenProvider.TOKEN_TYPE_ACCESS);
         } catch (Exception e) {
             log.warn("JWT validation failed for path={} correlationId={} reason={}", path, correlationId, e.getClass().getSimpleName());
             log.debug("JWT validation error for path={}", path, e);
@@ -136,7 +140,7 @@ public class AuthGlobalFilter implements GlobalFilter, Ordered {
      */
     private ServerWebExchange maybeAttachIdentity(ServerWebExchange exchange) {
         String token = extractBearerToken(exchange.getRequest().getHeaders());
-        if (token == null) return exchange;
+        if (token == null) return sanitizeIdentity(exchange);
         try {
             Claims claims = jwtTokenProvider.validateToken(token);
             ServerHttpRequest.Builder builder = exchange.getRequest().mutate()
@@ -144,6 +148,8 @@ public class AuthGlobalFilter implements GlobalFilter, Ordered {
             String username = claims.get("username", String.class);
             if (username != null && !username.isBlank()) {
                 builder.header("X-User-Name", username);
+            } else {
+                builder.headers(h -> h.remove("X-User-Name"));
             }
             // Same strict mapping as the authenticated path so downstream services
             // see a consistent X-User-Role header semantics regardless of which
@@ -151,8 +157,19 @@ public class AuthGlobalFilter implements GlobalFilter, Ordered {
             builder.header("X-User-Role", resolveRole(claims.get("role", String.class)));
             return exchange.mutate().request(builder.build()).build();
         } catch (Exception ignored) {
-            return exchange;
+            return sanitizeIdentity(exchange);
         }
+    }
+
+    private ServerWebExchange sanitizeIdentity(ServerWebExchange exchange) {
+        ServerHttpRequest modified = exchange.getRequest().mutate()
+                .headers(h -> {
+                    h.remove("X-User-Id");
+                    h.remove("X-User-Name");
+                    h.remove("X-User-Role");
+                })
+                .build();
+        return exchange.mutate().request(modified).build();
     }
 
     /**

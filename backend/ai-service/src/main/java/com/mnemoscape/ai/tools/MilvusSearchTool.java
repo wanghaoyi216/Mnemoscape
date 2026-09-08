@@ -1,6 +1,7 @@
 package com.mnemoscape.ai.tools;
 
 import com.mnemoscape.ai.client.MemoryServiceClient;
+import com.mnemoscape.ai.tools.audit.Tool;
 import com.mnemoscape.common.dto.ApiResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -74,15 +75,20 @@ public class MilvusSearchTool {
     /** 真实向量检索依赖；为空（纯单测 / 未装配）时自动退回关键词检索。 */
     private final com.mnemoscape.ai.service.EmbeddingClient embeddingClient;
     private final com.mnemoscape.ai.service.MilvusVectorStore vectorStore;
+    /** 搜索结果缓存层 (C-2)；为空走"无缓存直查 Milvus"。 */
+    private final com.mnemoscape.ai.service.AiCacheService aiCache;
 
     public MilvusSearchTool(MemoryServiceClient memoryClient,
                             @org.springframework.beans.factory.annotation.Autowired(required = false)
                             com.mnemoscape.ai.service.EmbeddingClient embeddingClient,
                             @org.springframework.beans.factory.annotation.Autowired(required = false)
-                            com.mnemoscape.ai.service.MilvusVectorStore vectorStore) {
+                            com.mnemoscape.ai.service.MilvusVectorStore vectorStore,
+                            @org.springframework.beans.factory.annotation.Autowired(required = false)
+                            com.mnemoscape.ai.service.AiCacheService aiCache) {
         this.memoryClient = memoryClient;
         this.embeddingClient = embeddingClient;
         this.vectorStore = vectorStore;
+        this.aiCache = aiCache;
     }
 
     /** 暴露为 FunctionCallback bean，由 ChatClient 通过 OpenAI tool-calling 调用。
@@ -104,6 +110,7 @@ public class MilvusSearchTool {
 
     /** 真实查询：先从 memory-service 拉用户记忆，再按关键词打分。 */
     @SuppressWarnings("unchecked")
+    @Tool("milvusSearchTool")
     public Response search(Request req) {
         return searchForUser(req, currentUserId());
     }
@@ -149,6 +156,22 @@ public class MilvusSearchTool {
         if (embeddingClient == null || vectorStore == null) return null;
         if (!vectorStore.isEnabled() || !embeddingClient.isConfigured()) return null;
         if (req.query == null || req.query.isBlank()) return null;
+
+        // ---------- C-2: 60s 结果缓存 ----------
+        // 同一用户同一 query 在 60 秒内复用结果。写入失效由 memory-service 通过
+        // RabbitMQ "memory.indexed" 事件触发 aiCache.invalidateUserSearch(userId) 主动清理 (A 系列).
+        if (aiCache != null) {
+            List<Hit> cached = aiCache.getCachedSearch(userId, topK, req.query);
+            if (cached != null) {
+                Response resp = new Response();
+                resp.hits = new ArrayList<>(cached);
+                resp.message = "vector-cache";
+                log.debug("[milvusSearchTool] cache HIT userId={} topK={} hits={}",
+                        userId, topK, cached.size());
+                return resp;
+            }
+        }
+
         try {
             float[] qv = embeddingClient.embedQuery(req.query);
             List<com.mnemoscape.ai.service.MilvusVectorStore.SearchHit> hits =
@@ -161,6 +184,10 @@ public class MilvusSearchTool {
             resp.message = "vector";
             log.info("[milvusSearchTool] vector search returned {} hits (userId={})",
                     resp.hits.size(), userId);
+            // 写入缓存。失败静默。
+            if (aiCache != null) {
+                aiCache.cacheSearch(userId, topK, req.query, resp.hits);
+            }
             return resp;
         } catch (Exception e) {
             log.warn("[milvusSearchTool] vector search failed, falling back to keyword: {}", e.toString());

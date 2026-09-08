@@ -3,9 +3,15 @@ package com.mnemoscape.memory.model.entity;
 import jakarta.persistence.*;
 import java.time.LocalDateTime;
 import java.util.UUID;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
 
 @Entity
 @Table(name = "memory_fragments")
+@Getter
+@Setter
+@NoArgsConstructor
 public class MemoryFragment {
     @Id
     @Column(length = 36)
@@ -31,8 +37,6 @@ public class MemoryFragment {
 
     @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;
-
-    public MemoryFragment() {}
 
     public MemoryFragment(String id, String memoryId, String fragmentType, String content, String position3d, String triggerCondition, Boolean isDiscovered, LocalDateTime createdAt) {
         this.id = id;
@@ -74,23 +78,6 @@ public class MemoryFragment {
             return new MemoryFragment(id, memoryId, fragmentType, content, position3d, triggerCondition, isDiscovered, createdAt);
         }
     }
-
-    public String getId() { return id; }
-    public void setId(String id) { this.id = id; }
-    public String getMemoryId() { return memoryId; }
-    public void setMemoryId(String memoryId) { this.memoryId = memoryId; }
-    public String getFragmentType() { return fragmentType; }
-    public void setFragmentType(String fragmentType) { this.fragmentType = fragmentType; }
-    public String getContent() { return content; }
-    public void setContent(String content) { this.content = content; }
-    public String getPosition3d() { return position3d; }
-    public void setPosition3d(String position3d) { this.position3d = position3d; }
-    public String getTriggerCondition() { return triggerCondition; }
-    public void setTriggerCondition(String triggerCondition) { this.triggerCondition = triggerCondition; }
-    public Boolean getIsDiscovered() { return isDiscovered; }
-    public void setIsDiscovered(Boolean isDiscovered) { this.isDiscovered = isDiscovered; }
-    public LocalDateTime getCreatedAt() { return createdAt; }
-    public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
 
     @PrePersist
     protected void onCreate() {

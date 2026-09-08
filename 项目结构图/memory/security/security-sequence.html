@@ -1,0 +1,44 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8"><title>security 模块时序图</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+<style>
+body{background:#1a1a2e;color:#e0e0e0;font-family:"Microsoft YaHei",sans-serif;display:flex;justify-content:center;padding:40px 20px}
+.container{max-width:1100px;width:100%}
+h1{text-align:center;color:#81C784;font-size:1.6em;margin-bottom:30px}
+.mermaid{background:#16213e;border-radius:8px;padding:20px}
+</style>
+</head>
+<body>
+<div class="container">
+<h1>security 模块时序图</h1>
+<div class="mermaid">
+sequenceDiagram
+    participant C as 客户端
+    participant GW as api-gateway
+    participant Filter as JwtAuthFilter
+    participant SC as SecurityContextHolder
+    participant CTL as Controller
+
+    C->>GW: GET /api/v1/memories<br/>Authorization: Bearer &lt;token&gt;
+    GW->>Filter: 转发请求
+
+    Note over Filter,SC: JWT 过滤器拦截（在表单认证之前）
+    Filter->>Filter: 取 Header → 去 Bearer 前缀 → 解析
+    alt Token 有效
+        Filter->>SC: setAuthentication(userId, role)
+        Note over SC: 票据存入 ThreadLocal
+    else Token 无效 / 过期
+        Filter-->>C: 401 Unauthorized
+    end
+
+    Note over CTL,SC: 业务层获取当前用户
+    CTL->>SC: getAuthentication()
+    SC-->>CTL: 当前用户身份
+    CTL-->>C: 200 OK + 响应体
+</div>
+</div>
+<script>mermaid.initialize({startOnLoad:true,theme:'dark'});</script>
+</body>
+</html>

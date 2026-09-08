@@ -1,6 +1,7 @@
 package com.mnemoscape.ai.config;
 
 import org.springframework.boot.context.properties.ConfigurationProperties;
+import org.springframework.cloud.context.config.annotation.RefreshScope;
 import org.springframework.context.annotation.Configuration;
 
 /**
@@ -30,6 +31,7 @@ import org.springframework.context.annotation.Configuration;
  * 的"裸 HttpClient"风格一致。
  */
 @Configuration
+@RefreshScope
 @ConfigurationProperties(prefix = "mnemoscape.ai.vector")
 public class VectorStoreProperties {
 
@@ -40,6 +42,9 @@ public class VectorStoreProperties {
 
     /** NVIDIA Integrate 上的 embedding 模型 id。 */
     private String embeddingModel = "nvidia/nv-embed-v1";
+
+    /** NVIDIA Embedding 基础 URL。 */
+    private String embeddingBaseUrl = "https://ai.api.nvidia.com/v1";
 
     /** embedding 维度，必须与 {@link #embeddingModel} 实际输出一致 + Milvus collection 对齐。 */
     private int embeddingDimension = 4096;
@@ -75,6 +80,9 @@ public class VectorStoreProperties {
 
     public String getEmbeddingModel() { return embeddingModel; }
     public void setEmbeddingModel(String embeddingModel) { this.embeddingModel = embeddingModel; }
+
+    public String getEmbeddingBaseUrl() { return embeddingBaseUrl; }
+    public void setEmbeddingBaseUrl(String embeddingBaseUrl) { this.embeddingBaseUrl = embeddingBaseUrl; }
 
     public int getEmbeddingDimension() { return embeddingDimension; }
     public void setEmbeddingDimension(int embeddingDimension) {

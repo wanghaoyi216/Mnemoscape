@@ -179,7 +179,7 @@ async function onFilePicked(ev: Event) {
   try {
     const fd = new FormData()
     fd.append('file', file)
-    const upResp = await client.post('/assets/upload', fd, {
+    const upResp = await client.post('/assets/upload?purpose=support', fd, {
       headers: { 'Content-Type': 'multipart/form-data' },
     })
     if (upResp.data.code === 200) {

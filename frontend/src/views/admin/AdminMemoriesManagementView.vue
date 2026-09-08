@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { onMounted, ref, watch } from 'vue'
+import { onMounted, onUnmounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import AdminPanel from '../../components/admin/AdminPanel.vue'
 import AdminDataTable from '../../components/admin/AdminDataTable.vue'
@@ -70,12 +70,15 @@ async function load() {
 }
 
 onMounted(load)
-watch([page, size, search, userIdFilter, privacyFilter, lockedFilter], () => {
-  if (page.value !== 0 && (search.value || userIdFilter.value || privacyFilter.value || lockedFilter.value)) {
-    page.value = 0
-    return
-  }
-  void load()
+let filterTimer: ReturnType<typeof setTimeout> | undefined
+onUnmounted(() => clearTimeout(filterTimer))
+watch([page], () => void load())
+watch([size, search, userIdFilter, privacyFilter, lockedFilter], () => {
+  clearTimeout(filterTimer)
+  filterTimer = setTimeout(() => {
+    if (page.value !== 0) page.value = 0
+    else void load()
+  }, 300)
 })
 
 function toastFail(e: unknown) {
@@ -230,22 +233,28 @@ function uiState() {
           </span>
         </template>
         <template #cell-isLocked="{ value }">
-          <span :title="value ? 'locked' : 'unlocked'">{{ value ? '🔒' : '·' }}</span>
+          <span class="lock-cell" :title="value ? t('admin.memoriesMgmt.actions.lock') : t('admin.memoriesMgmt.actions.unlock')">
+            <svg v-if="value" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/></svg>
+            <svg v-else viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+          </span>
         </template>
         <template #cell-createdAt="{ value }">
           <span class="datestamp">{{ (value as string)?.slice(0, 10) || '—' }}</span>
         </template>
         <template #row-actions="{ row }">
           <button class="button-icon" type="button" :title="row.isLocked ? t('admin.memoriesMgmt.actions.unlock') : t('admin.memoriesMgmt.actions.lock')" @click="onToggleLock(row as AdminMemoryRow)">
-            {{ row.isLocked ? '🔓' : '🔒' }}
+            <svg v-if="row.isLocked" viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 9.9-1"/></svg>
+            <svg v-else viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
           </button>
           <button class="button-icon" type="button" :title="t('admin.memoriesMgmt.actions.makePublic')" @click="onPatchPrivacy(row as AdminMemoryRow, 'PUBLIC')" :disabled="row.privacyLevel === 'PUBLIC'">
-            🌐
+            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
           </button>
           <button class="button-icon" type="button" :title="t('admin.memoriesMgmt.actions.makePrivate')" @click="onPatchPrivacy(row as AdminMemoryRow, 'PRIVATE')" :disabled="row.privacyLevel === 'PRIVATE'">
-            🔐
+            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
           </button>
-          <button class="button-icon button-icon--danger" type="button" :title="t('admin.memoriesMgmt.actions.delete')" @click="onDelete(row as AdminMemoryRow)">🗑</button>
+          <button class="button-icon button-icon--danger" type="button" :title="t('admin.memoriesMgmt.actions.delete')" @click="onDelete(row as AdminMemoryRow)">
+            <svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/></svg>
+          </button>
         </template>
       </AdminDataTable>
     </div>
@@ -269,13 +278,19 @@ function uiState() {
 .mem-mgmt__search--narrow { flex: 0 0 180px; min-width: 140px; font-family: var(--font-mono, monospace); font-size: 0.78rem; }
 .mem-mgmt__select {
   appearance: none;
-  background: rgba(255,255,255,0.04);
+  background: rgba(255, 255, 255, 0.04) url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%238b95a1' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E") no-repeat right 12px center;
+  background-size: 14px;
+  padding: 8px 32px 8px 12px;
   border: 1px solid var(--border);
   color: var(--text);
   border-radius: var(--radius-sm);
-  padding: 8px 12px;
   font-size: 0.84rem;
   cursor: pointer;
+  transition: border-color 150ms ease, background-color 150ms ease;
+}
+.mem-mgmt__select:hover {
+  border-color: rgba(255, 255, 255, 0.15);
+  background-color: rgba(255, 255, 255, 0.06);
 }
 .mem-mgmt__batch-bar {
   display: inline-flex;
@@ -290,7 +305,13 @@ function uiState() {
   color: var(--text);
 }
 
-.mem-title { display: block; }
+.mem-title {
+  display: block;
+  max-width: 320px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
 .mem-desc {
   display: block;
   margin-top: 2px;
@@ -305,6 +326,15 @@ function uiState() {
 
 .mono { font-family: var(--font-mono, monospace); font-size: 0.78rem; color: var(--text-muted); }
 .datestamp { font-family: var(--font-mono, monospace); font-size: 0.78rem; color: var(--text-muted); }
+
+.lock-cell {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--primary);
+  vertical-align: middle;
+}
+.lock-cell svg { opacity: 0.85; }
 
 .privacy-pill {
   display: inline-block;
@@ -327,6 +357,9 @@ function uiState() {
   border-radius: var(--radius-sm);
   cursor: pointer;
   margin-left: 4px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
 }
 .button-icon:disabled { opacity: 0.3; cursor: not-allowed; }
 .button-icon:hover:not(:disabled) { background: rgba(255, 255, 255, 0.08); }

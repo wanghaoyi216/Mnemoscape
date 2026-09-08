@@ -54,6 +54,9 @@ public class AdminCacheConfig {
     /** Cache name for the resonance-top edges endpoint (R12.2). */
     public static final String CACHE_RESONANCE_TOP = "admin.resonance-top";
 
+    /** Cache name for the user resonance search matching. */
+    public static final String CACHE_RESONANCE_SEARCH = "user.resonance-search";
+
     @Bean
     public RedisCacheManager adminRedisCacheManager(RedisConnectionFactory connectionFactory) {
         RedisCacheConfiguration base = RedisCacheConfiguration.defaultCacheConfig()
@@ -66,8 +69,10 @@ public class AdminCacheConfig {
         Map<String, RedisCacheConfiguration> perCache = new HashMap<>();
         perCache.put(CACHE_RESONANCE_OVERVIEW, base.entryTtl(Duration.ofSeconds(120)));
         perCache.put(CACHE_RESONANCE_TOP, base.entryTtl(Duration.ofSeconds(120)));
+        perCache.put(CACHE_RESONANCE_SEARCH, base.entryTtl(Duration.ofMinutes(10)));
 
         return RedisCacheManager.builder(connectionFactory)
+
                 .cacheDefaults(base.entryTtl(Duration.ofSeconds(120)))
                 .withInitialCacheConfigurations(perCache)
                 .disableCreateOnMissingCache()

@@ -1,5 +1,8 @@
 package com.mnemoscape.memory.service;
 
+import com.mnemoscape.common.event.AchievementUnlockedEvent;
+import com.mnemoscape.common.lock.DistributedLockStore;
+import com.mnemoscape.memory.messaging.EventPublisher;
 import com.mnemoscape.memory.model.entity.Achievement;
 import com.mnemoscape.memory.model.entity.Memory;
 import com.mnemoscape.memory.repository.AchievementRepository;
@@ -19,20 +22,36 @@ public class AchievementService {
     private final AchievementRepository achievementRepo;
     private final MemoryRepository memoryRepo;
     private final MemoryFragmentRepository fragmentRepo;
+    private final EventPublisher eventPublisher;
+    private final DistributedLockStore lock;
 
     public AchievementService(AchievementRepository achievementRepo,
                               MemoryRepository memoryRepo,
-                              MemoryFragmentRepository fragmentRepo) {
+                              MemoryFragmentRepository fragmentRepo,
+                              EventPublisher eventPublisher,
+                              DistributedLockStore lock) {
         this.achievementRepo = achievementRepo;
         this.memoryRepo = memoryRepo;
         this.fragmentRepo = fragmentRepo;
+        this.eventPublisher = eventPublisher;
+        this.lock = lock;
     }
 
     public List<Achievement> getUserAchievements(String userId) {
         return achievementRepo.findByUserIdOrderByUnlockedAtDesc(userId);
     }
 
+    /**
+     * 检查并解锁成就。加分布式锁防止同一用户并发触发重复解锁
+     * (如两条记忆同时创建都触发 checkAndUnlock)。
+     * 拿不到锁时返回空列表,下次记忆创建会再次触发,最终一致。
+     */
     public List<Achievement> checkAndUnlock(String userId) {
+        List<Achievement> result = lock.execute("achievement:" + userId, 0, 30, () -> doCheckAndUnlock(userId));
+        return result != null ? result : List.of();
+    }
+
+    private List<Achievement> doCheckAndUnlock(String userId) {
         List<Achievement> newlyUnlocked = new ArrayList<>();
 
         List<Memory> memories = memoryRepo.findByUserIdOrderByCreatedAtDesc(userId);
@@ -108,6 +127,9 @@ public class AchievementService {
         Achievement a = new Achievement(userId, key, title, desc, icon);
         achievementRepo.save(a);
         log.info("Achievement unlocked: userId={}, key={}", userId, key);
+        // MQ 扇出：resonance-service 写系统通知 + 失效 top-contributors 缓存
+        eventPublisher.publishAchievementUnlocked(AchievementUnlockedEvent.of(
+                userId, key, title, null));
         return List.of(a);
     }
 }

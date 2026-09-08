@@ -1,9 +1,19 @@
 package com.mnemoscape.asset.config;
 
 import org.springframework.boot.context.properties.ConfigurationProperties;
+import org.springframework.cloud.context.config.annotation.RefreshScope;
+import org.springframework.context.annotation.Configuration;
 
 import java.util.Set;
 
+/**
+ * MinIO / 资产存储配置。
+ *
+ * <p>{@link RefreshScope} 让 Nacos config 推送时此 bean 被销毁重建，切换 endpoint /
+ * accessKey / bucket 不需要重启 asset-service。
+ */
+@Configuration
+@RefreshScope
 @ConfigurationProperties(prefix = "minio")
 public class StorageProperties {
     private String endpoint = "http://localhost:9000";
@@ -21,9 +31,19 @@ public class StorageProperties {
      *
      * <p>注：此字段不持久化到 {@code application.yml}——它属于产品安全策略而非部署配置，
      * 保持编译期常量便于审计与代码检索。
+     *
+     * <p><b>v8 扩展</b>：新增 5 个分类以匹配 4 类新资源：
+     * <ul>
+     *   <li>{@code sticker} — 贴纸 / 表情包大图（≥200×200 PNG）</li>
+     *   <li>{@code kaomoji} — 颜文字 art（SVG 矢量）</li>
+     *   <li>{@code emoji} — Unicode 表情字符（JSON 元数据 + glyph 字形）</li>
+     *   <li>{@code avatar} — 默认头像池（用户未上传头像时的兜底）</li>
+     *   <li>{@code theme} — 主题背景图（用于 AppHeader 背景轮询）</li>
+     * </ul>
      */
     public static final Set<String> PUBLIC_TOP_LEVEL_DIRS =
-            Set.of("photo", "video", "audio", "gif", "music", "icon", "icons");
+            Set.of("photo", "video", "audio", "gif", "music", "icon", "icons",
+                    "sticker", "kaomoji", "emoji", "avatar", "theme");
 
     /**
      * 判定一个 MinIO object key 是否属于"公共预置素材"。

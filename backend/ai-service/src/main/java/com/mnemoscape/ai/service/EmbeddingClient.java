@@ -7,6 +7,7 @@ import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.mnemoscape.ai.config.AiUpstreamProperties;
 import com.mnemoscape.ai.config.VectorStoreProperties;
 import com.mnemoscape.ai.exception.AiUpstreamException;
+import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.ObjectProvider;
@@ -71,17 +72,28 @@ public class EmbeddingClient {
      * 返回 null，回调直接跳过，绝不阻塞主流程。
      */
     private final ObjectProvider<VectorIndexService> vectorIndexServiceProvider;
+    /**
+     * 性能加速层（C 系列改造）：
+     * <ul>
+     *   <li>缓存命中 → 跳过 NVIDIA HTTP 调用，毫秒级返回</li>
+     *   <li>未命中 → 先过限流，再调 NVIDIA，成功后回写缓存</li>
+     * </ul>
+     * 同样用 {@link ObjectProvider}：单测 / Redis 不可用时静默走"无缓存无限流"老路径。
+     */
+    private final ObjectProvider<AiCacheService> aiCacheProvider;
 
     public EmbeddingClient(AiUpstreamProperties aiProps,
                            VectorStoreProperties vecProps,
                            org.springframework.core.env.Environment env,
                            ObjectProvider<VectorIndexService> vectorIndexServiceProvider,
+                           ObjectProvider<AiCacheService> aiCacheProvider,
                            @Value("${spring.ai.openai.base-url:https://integrate.api.nvidia.com}")
                            String baseUrl) {
         this.aiProps = aiProps;
         this.vecProps = vecProps;
         this.configuredApiKey = env.getProperty("spring.ai.openai.api-key", "");
         this.vectorIndexServiceProvider = vectorIndexServiceProvider;
+        this.aiCacheProvider = aiCacheProvider;
         this.baseUrl = baseUrl;
         this.httpClient = HttpClient.newBuilder()
                 .connectTimeout(Duration.ofSeconds(6))
@@ -114,6 +126,7 @@ public class EmbeddingClient {
      * @return 稠密向量；维度应等于 {@link VectorStoreProperties#getEmbeddingDimension()}
      * @throws AiUpstreamException 缺 key / 上游 4xx-5xx / 超时 / 解析失败
      */
+    @CircuitBreaker(name = "deepseek", fallbackMethod = "embedFallback")
     public float[] embed(String text, String inputType) {
         ensureRealKeyOrThrow();
         if (text == null || text.isBlank()) {
@@ -121,6 +134,20 @@ public class EmbeddingClient {
                     "Cannot embed empty text");
         }
         String clipped = text.length() > 4000 ? text.substring(0, 4000) : text;
+
+        // ---------- C-1: Redis embedding 缓存 (model, type, text) → vector ----------
+        // 命中即返回，跳过 NVIDIA 调用 (~200ms → <1ms) 并节省 Token 配额。
+        AiCacheService cache = aiCacheProvider.getIfAvailable();
+        if (cache != null) {
+            float[] hit = cache.getCachedEmbedding(vecProps.getEmbeddingModel(), inputType, clipped);
+            if (hit != null) {
+                log.debug("[EmbeddingClient] cache HIT model={} type={} dim={}",
+                        vecProps.getEmbeddingModel(), inputType, hit.length);
+                return hit;
+            }
+            // ---------- C-3: 本地令牌桶限流，避免 NVIDIA 429 ----------
+            cache.acquireOrThrow(AiCacheService.BUCKET_EMBED);
+        }
 
         try {
             ObjectNode body = json.createObjectNode();
@@ -137,7 +164,7 @@ public class EmbeddingClient {
             long t0 = System.currentTimeMillis();
 
             HttpRequest req = HttpRequest.newBuilder()
-                    .uri(URI.create(baseUrl.replaceAll("/+$", "") + EMBEDDINGS_PATH))
+                    .uri(URI.create(resolveEmbeddingUrl()))
                     .timeout(Duration.ofMillis(Math.max(vecProps.getEmbeddingTimeoutMs(), 5_000)))
                     .header("Authorization", "Bearer " + configuredApiKey)
                     .header("Accept", "application/json")
@@ -151,7 +178,8 @@ public class EmbeddingClient {
 
             if (status >= 400) {
                 String snippet = responseJson.length() > 320 ? responseJson.substring(0, 320) + "..." : responseJson;
-                throw new RuntimeException("Embedding upstream error: HTTP " + status + " " + snippet);
+                throw new AiUpstreamException(AiUpstreamException.Reason.UPSTREAM_ERROR,
+                        "Embedding upstream error: HTTP " + status + " " + snippet);
             }
 
             float[] vec = extractVector(responseJson);
@@ -167,12 +195,21 @@ public class EmbeddingClient {
                     // dimension observation is best-effort; never break embedding on observation failure.
                 }
             }
+            // 回写缓存（C-1）。失败静默，不影响本次返回。
+            if (cache != null) {
+                cache.cacheEmbedding(vecProps.getEmbeddingModel(), inputType, clipped, vec);
+            }
             return vec;
         } catch (AiUpstreamException e) {
             throw e;
         } catch (Exception e) {
             throw classify(e);
         }
+    }
+
+    private float[] embedFallback(String text, String inputType, Throwable t) {
+        log.warn("[circuit-breaker] embed fallback: {}", t.toString());
+        return null;
     }
 
     /** 解析 OpenAI 兼容 embeddings 响应：{@code data[0].embedding}。 */
@@ -190,9 +227,31 @@ public class EmbeddingClient {
                     return out;
                 }
             }
-            throw new RuntimeException("Embedding response missing data[].embedding");
+            throw new AiUpstreamException(AiUpstreamException.Reason.UPSTREAM_ERROR,
+                    "Embedding response missing data[].embedding");
+        } catch (AiUpstreamException e) {
+            throw e;
         } catch (Exception e) {
-            throw new RuntimeException("Failed to parse embedding response: " + e.getMessage(), e);
+            throw new AiUpstreamException(AiUpstreamException.Reason.UPSTREAM_ERROR,
+                    "Failed to parse embedding response: " + e.getMessage(), e);
+        }
+    }
+
+    private String resolveEmbeddingUrl() {
+        String base = vecProps.getEmbeddingBaseUrl();
+        if (base == null || base.isBlank()) {
+            base = this.baseUrl;
+        }
+        base = base.replaceAll("/+$", "");
+        if (base.contains("ai.api.nvidia.com")) {
+            return base + "/embed";
+        } else if (base.contains("integrate.api.nvidia.com")) {
+            return base + "/v1/embeddings";
+        } else {
+            if (base.endsWith("/embeddings") || base.endsWith("/embed")) {
+                return base;
+            }
+            return base + "/v1/embeddings";
         }
     }
 

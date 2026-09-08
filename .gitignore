@@ -1,8 +1,13 @@
 # =============================================================================
 # Mnemoscape · Repository ignore rules
-# 用户已说明：仓库为 PRIVATE，不需要排除 .env / 凭证文件，密码等可保留。
-# 这里只排除「真正不该进 git 的东西」：构建产物 / 缓存 / IDE 临时 / OS 噪音。
+# 仓库可能转公开，凭证文件不再提交：含真实 NVIDIA API Key / 工位机连接密码
+# 的 .env.workpc 必须本地保留但不进 git 历史。密钥统一走环境变量注入。
 # =============================================================================
+# ---- 本地凭证文件（不进 git，文件留在硬盘供本地 dev 用）----
+backend/.env.workpc
+*.env.workpc
+**/.env
+**/.env.local
 
 # ---- Node / 前端 ----
 **/node_modules/
@@ -57,6 +62,51 @@ coverage/
 # ---- AI / 工具临时 ----
 .antigravitycli/
 backend/.antigravitycli/
+.pi/
+**/.pi/
+.cloud/
+**/.cloud/
+.codex/
+**/.codex/
+.agents/
+**/.agents/
+.claude/
+**/.claude/
+.cursor/
+**/.cursor/
+.trae/
+**/.trae/
+
+# ---- Python 本地缓存（保留可复用的 .py 源码）----
+**/__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# ---- 测试 / 浏览器生成物 ----
+playwright-report/
+test-results/
+**/playwright-report/
+**/test-results/
+*.har
+*.trace.zip
+
+# ---- 本地导出与临时文档 ----
+*.bak
+*.tmp
+*.swp
+*.swo
+*.local.md
+*_private.md
 
 # ---- jqwik 随机种子缓存（属性测试用）----
 **/.jqwik-database
+
+# ---- 备份 / 构建产物 / 大文件 ----
+.codex-backups/
+backend/maven.zip
+test_out.mp4
+scripts/remote/dist/
+scripts/remote/build/
+**/__pycache__/

@@ -1,6 +1,7 @@
 package com.mnemoscape.resonance.controller;
 
 import com.mnemoscape.common.dto.ApiResponse;
+import com.mnemoscape.common.exception.BizException;
 import com.mnemoscape.common.web.RequestContext;
 import com.mnemoscape.resonance.model.entity.ChatGroup;
 import com.mnemoscape.resonance.model.entity.ChatGroupMember;
@@ -45,6 +46,9 @@ public class ChatController {
         String userId = RequestContext.requireUserId(request);
         List<ChatMessage> history;
         if (groupId != null && !groupId.isBlank()) {
+            if (chatGroupMemberRepository.findByGroupIdAndUserId(groupId, userId).isEmpty()) {
+                throw BizException.forbidden("You are not a member of this chat group");
+            }
             history = chatMessageRepository.findByGroupIdOrderByCreatedAtAsc(groupId);
         } else if (receiverId != null && !receiverId.isBlank()) {
             history = chatMessageRepository.findPrivateMessages(userId, receiverId);
@@ -58,10 +62,16 @@ public class ChatController {
     public ResponseEntity<ApiResponse<List<ChatGroup>>> getMyGroups(HttpServletRequest request) {
         String userId = RequestContext.requireUserId(request);
         List<ChatGroupMember> memberships = chatGroupMemberRepository.findByUserId(userId);
-        List<ChatGroup> groups = new ArrayList<>();
-        for (ChatGroupMember m : memberships) {
-            chatGroupRepository.findById(m.getGroupId()).ifPresent(groups::add);
+        if (memberships.isEmpty()) {
+            return ResponseEntity.ok(ApiResponse.success(List.of()));
         }
+        // N+1 修复：原循环 chatGroupRepository.findById(...) 会被命中 N 次，
+        // 改用 findAllById 一次性 IN 查询 → 1 次 SQL。
+        List<String> groupIds = memberships.stream()
+                .map(ChatGroupMember::getGroupId)
+                .distinct()
+                .toList();
+        List<ChatGroup> groups = chatGroupRepository.findAllById(groupIds);
         return ResponseEntity.ok(ApiResponse.success(groups));
     }
 

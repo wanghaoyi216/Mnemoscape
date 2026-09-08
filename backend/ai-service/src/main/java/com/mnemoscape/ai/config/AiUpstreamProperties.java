@@ -1,6 +1,7 @@
 package com.mnemoscape.ai.config;
 
 import org.springframework.boot.context.properties.ConfigurationProperties;
+import org.springframework.cloud.context.config.annotation.RefreshScope;
 import org.springframework.context.annotation.Configuration;
 
 /**
@@ -10,8 +11,14 @@ import org.springframework.context.annotation.Configuration;
  *  - {@link #fallbackMessage}          错误回放给前端的友好文案。
  *
  * 通过 {@code @ConfigurationProperties("mnemoscape.ai.upstream")} 绑定。
+ *
+ * <p>{@link RefreshScope} 让 Nacos config 推送时，bean 实例被销毁重建，
+ * 所有引用此 Properties 的下游（{@code EmbeddingClient} / {@code VisionDescriber} /
+ * {@code ChatReasoner}）都会拿到最新值 —— 切模型、调超时、改 fallback 文案
+ * 都不用重启服务。
  */
 @Configuration
+@RefreshScope // 支持配置热更新
 @ConfigurationProperties(prefix = "mnemoscape.ai.upstream")
 public class AiUpstreamProperties {
 

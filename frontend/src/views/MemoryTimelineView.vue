@@ -14,12 +14,16 @@
 import { computed, onMounted } from 'vue'
 import { useI18n } from 'vue-i18n'
 import { useMemoryStore } from '../stores/memory'
-import { images } from '../assets/media-catalog'
+import { images, videos } from '../assets/media-catalog'
 import type { MemoryItem } from '../types'
 
 const store = useMemoryStore()
 const { t, locale } = useI18n()
 const heroBg = images.timeGeometry.src
+const heroVideo = videos.nebulaTide.src
+const heroPoster = videos.nebulaTide.poster
+const auroraVideo = videos.nasaAuroraSteve.src
+const auroraPoster = videos.nasaAuroraSteve.poster
 
 interface TimelineNode {
   memory: MemoryItem
@@ -129,6 +133,8 @@ onMounted(async () => {
       class="hero-card hero-card--split timeline-hero"
       :style="{ backgroundImage: `linear-gradient(120deg, rgba(8,10,14,0.82) 0%, rgba(8,10,14,0.42) 55%, rgba(8,10,14,0.92) 100%), url(${heroBg})` }"
     >
+      <video class="timeline-hero__video" :src="heroVideo" :poster="heroPoster" autoplay muted loop playsinline preload="metadata" aria-hidden="true"></video>
+      <span class="timeline-hero__scan" aria-hidden="true"></span>
       <div class="stack stack--lg">
         <p class="eyebrow">{{ t('memory.timeline.eyebrow') }}</p>
         <h1 class="display-title text-gradient">{{ t('memory.timeline.title') }}</h1>
@@ -152,6 +158,7 @@ onMounted(async () => {
     </section>
 
     <section class="section-card timeline-shell" style="margin-top: 24px;">
+      <video class="timeline-shell__aurora" :src="auroraVideo" :poster="auroraPoster" autoplay muted loop playsinline preload="metadata" aria-hidden="true"></video>
       <header class="page-shell__header" style="margin-bottom: 12px;">
         <div>
           <h2 class="section-title">{{ t('memory.timeline.shell.title') }}</h2>
@@ -226,14 +233,67 @@ onMounted(async () => {
 
 <style scoped>
 .timeline-hero {
+  position: relative;
+  min-height: 360px;
   background-size: cover;
   background-position: center;
   background-repeat: no-repeat;
   border: 1px solid rgba(255, 255, 255, 0.06);
+  isolation: isolate;
+}
+
+.timeline-hero > :not(.timeline-hero__video):not(.timeline-hero__scan) {
+  position: relative;
+  z-index: 1;
+}
+
+.timeline-hero__video {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  opacity: 0.3;
+  filter: saturate(1.22) contrast(1.08) brightness(0.72);
+  pointer-events: none;
+}
+
+.timeline-hero__scan {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  opacity: 0.36;
+  background:
+    repeating-linear-gradient(180deg, rgba(255,255,255,0.055) 0 1px, transparent 1px 7px),
+    linear-gradient(105deg, rgba(54, 216, 180, 0.14), transparent 42%, rgba(242, 185, 92, 0.12));
+  mix-blend-mode: screen;
 }
 
 .timeline-shell {
+  position: relative;
+  overflow: hidden;
   padding: 24px;
+  isolation: isolate;
+}
+
+.timeline-shell > :not(.timeline-shell__aurora) {
+  position: relative;
+  z-index: 1;
+}
+
+.timeline-shell__aurora {
+  position: absolute;
+  inset: auto 0 0 auto;
+  z-index: 0;
+  width: min(620px, 70vw);
+  height: min(340px, 38vw);
+  object-fit: cover;
+  opacity: 0.12;
+  filter: blur(0.4px) saturate(1.35);
+  mask-image: radial-gradient(circle at 72% 64%, #000 0%, rgba(0,0,0,0.72) 42%, transparent 76%);
+  pointer-events: none;
 }
 
 .timeline-legend {

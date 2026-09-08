@@ -1,0 +1,37 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  ai-service logging configuration.
+
+  Pulls in:
+    * logback-base-config.xml — root console / JSON appender, library noise
+                                filters, com.mnemoscape namespace level.
+
+  Plus a dedicated rolling-file appender for AI tool call audit logs
+  (P0 R3, common/src/main/java/.../ToolAuditAspect.java). The
+  ai-tool-audit logger is wired here so audit records do NOT pollute
+  the main application console / JSON stream (additivity=false).
+-->
+<configuration scan="true" scanPeriod="30 seconds">
+
+  <include resource="logback-base-config.xml"/>
+
+  <!-- AI tool-call audit (P0 R3). One rolling file per day, Logstash JSON
+       encoding matches the admin-audit shape so downstream ELK indices can
+       reuse the same index pattern. -->
+  <appender name="AI_TOOL_AUDIT" class="ch.qos.logback.core.rolling.RollingFileAppender">
+    <file>logs/ai-tool-audit.log</file>
+    <encoder class="net.logstash.logback.encoder.LogstashEncoder"/>
+    <rollingPolicy class="ch.qos.logback.core.rolling.SizeAndTimeBasedRollingPolicy">
+      <fileNamePattern>logs/ai-tool-audit.%d{yyyy-MM-dd}.%i.log</fileNamePattern>
+      <maxFileSize>50MB</maxFileSize>
+      <maxHistory>30</maxHistory>
+    </rollingPolicy>
+  </appender>
+
+  <!-- additivity=false: tool-audit events go ONLY to the dedicated file,
+       never duplicated to root console / JSON appender. -->
+  <logger name="ai-tool-audit" level="INFO" additivity="false">
+    <appender-ref ref="AI_TOOL_AUDIT"/>
+  </logger>
+
+</configuration>

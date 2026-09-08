@@ -3,6 +3,9 @@ package com.mnemoscape.resonance.model.entity;
 import jakarta.persistence.*;
 import java.time.LocalDateTime;
 import java.util.UUID;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
 
 @Entity
 @Table(name = "chat_messages", indexes = {
@@ -11,6 +14,9 @@ import java.util.UUID;
         @Index(name = "idx_chat_msg_group", columnList = "group_id"),
         @Index(name = "idx_chat_msg_created", columnList = "created_at")
 })
+@Getter
+@Setter
+@NoArgsConstructor
 public class ChatMessage {
     @Id
     @Column(length = 36)
@@ -40,8 +46,6 @@ public class ChatMessage {
     @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;
 
-    public ChatMessage() {}
-
     public ChatMessage(String id, String senderId, String receiverId, String groupId, String content, String messageType, String fileName, Long fileSize, LocalDateTime createdAt) {
         this.id = id;
         this.senderId = senderId;
@@ -53,25 +57,6 @@ public class ChatMessage {
         this.fileSize = fileSize;
         this.createdAt = createdAt;
     }
-
-    public String getId() { return id; }
-    public void setId(String id) { this.id = id; }
-    public String getSenderId() { return senderId; }
-    public void setSenderId(String senderId) { this.senderId = senderId; }
-    public String getReceiverId() { return receiverId; }
-    public void setReceiverId(String receiverId) { this.receiverId = receiverId; }
-    public String getGroupId() { return groupId; }
-    public void setGroupId(String groupId) { this.groupId = groupId; }
-    public String getContent() { return content; }
-    public void setContent(String content) { this.content = content; }
-    public String getMessageType() { return messageType; }
-    public void setMessageType(String messageType) { this.messageType = messageType; }
-    public String getFileName() { return fileName; }
-    public void setFileName(String fileName) { this.fileName = fileName; }
-    public Long getFileSize() { return fileSize; }
-    public void setFileSize(Long fileSize) { this.fileSize = fileSize; }
-    public LocalDateTime getCreatedAt() { return createdAt; }
-    public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
 
     @PrePersist
     protected void onCreate() {

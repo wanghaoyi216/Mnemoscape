@@ -1,6 +1,7 @@
 package com.mnemoscape.common.exception;
 
 import com.mnemoscape.common.dto.ApiResponse;
+import com.mnemoscape.common.ratelimit.RateLimitExceededException;
 import com.mnemoscape.common.web.MdcContextFilter;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.ConstraintViolationException;
@@ -43,6 +44,27 @@ public class GlobalExceptionHandler {
                 ex.getCode(), requestId, request.getRequestURI(), ex.getMessage());
         return ResponseEntity.status(ex.getCode())
                 .body(ApiResponse.error(ex.getCode(), ex.getMessage(), requestId));
+    }
+
+    /**
+     * Specialised 429 handler — keeps the standard {@code ApiResponse} envelope
+     * (so clients can still parse the body uniformly) and additionally sets the
+     * standard {@code Retry-After} header so RFC-6585 compliant clients (curl,
+     * okhttp, axios with adapter) can back off automatically.
+     *
+     * <p>Must run <i>before</i> {@link #handleBizException} so the more specific
+     * match wins — Spring's exception resolver uses the nearest type match.
+     */
+    @ExceptionHandler(RateLimitExceededException.class)
+    public ResponseEntity<ApiResponse<Void>> handleRateLimit(RateLimitExceededException ex,
+                                                              HttpServletRequest request) {
+        String requestId = resolveRequestId(request);
+        log.info("Rate-limited requestId={} path={} bucket={} retryAfter={}s",
+                requestId, request.getRequestURI(), ex.getBucket(), ex.getRetryAfterSeconds());
+        return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS)
+                .header("Retry-After", String.valueOf(ex.getRetryAfterSeconds()))
+                .header("X-RateLimit-Bucket", ex.getBucket())
+                .body(ex.toApiResponse(requestId));
     }
 
     /**

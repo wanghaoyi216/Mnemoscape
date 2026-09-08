@@ -6,6 +6,7 @@ import com.fasterxml.jackson.databind.node.ArrayNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.mnemoscape.ai.config.AiUpstreamProperties;
 import com.mnemoscape.ai.exception.AiUpstreamException;
+import io.github.resilience4j.circuitbreaker.annotation.CircuitBreaker;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Value;
@@ -64,13 +65,17 @@ public class VisionDescriber {
      *  非典型 Content-Type；无需 message converter 配合。 */
     private final HttpClient httpClient;
     private final ObjectMapper json = new ObjectMapper();
+    /** 限流层 (C-3)；缺 bean / Redis 不可用时静默放行。 */
+    private final org.springframework.beans.factory.ObjectProvider<AiCacheService> aiCacheProvider;
 
     public VisionDescriber(AiUpstreamProperties props,
                            org.springframework.core.env.Environment env,
+                           org.springframework.beans.factory.ObjectProvider<AiCacheService> aiCacheProvider,
                            @Value("${spring.ai.openai.base-url:https://integrate.api.nvidia.com}")
                            String baseUrl) {
         this.props = props;
         this.configuredApiKey = env.getProperty("spring.ai.openai.api-key", "");
+        this.aiCacheProvider = aiCacheProvider;
         this.baseUrl = baseUrl;
         this.httpClient = HttpClient.newBuilder()
                 .connectTimeout(Duration.ofSeconds(8))
@@ -86,11 +91,18 @@ public class VisionDescriber {
      * @return 视觉模型给出的纯文本描述（不含 markdown / 列表）
      * @throws AiUpstreamException 主备模型均失败 / 缺 key / 超时
      */
+    @CircuitBreaker(name = "deepseek", fallbackMethod = "describeFallback")
     public String describe(List<String> imageUrls, boolean zh) {
         if (imageUrls == null || imageUrls.isEmpty()) {
             return "";
         }
         ensureRealKeyOrThrow();
+        // C-3: 视觉模型限流。Vision 调用是最贵的 (~5-50s + 大 Token 消耗)，
+        // 默认 RPM 桶最小 (20)；超额抛 RATE_LIMITED 比让 NVIDIA 返 429 更友好。
+        AiCacheService cache = aiCacheProvider.getIfAvailable();
+        if (cache != null) {
+            cache.acquireOrThrow(AiCacheService.BUCKET_VISION);
+        }
 
         // 限流：超出上限只取前 N 张，避免 prompt 失控 + 费用爆炸
         List<String> capped = imageUrls.stream()
@@ -124,6 +136,11 @@ public class VisionDescriber {
                 throw classify(fallbackErr);
             }
         }
+    }
+
+    private String describeFallback(List<String> imageUrls, boolean zh, Throwable t) {
+        log.warn("[circuit-breaker] describe fallback: {}", t.toString());
+        return "";
     }
 
     /**
@@ -230,7 +247,8 @@ public class VisionDescriber {
             String snippet = responseJson.length() > 320
                     ? responseJson.substring(0, 320) + "..."
                     : responseJson;
-            throw new RuntimeException("Vision upstream error: HTTP " + status + " " + snippet);
+            throw new AiUpstreamException(AiUpstreamException.Reason.UPSTREAM_ERROR,
+                    "Vision upstream error: HTTP " + status + " " + snippet);
         }
 
         String content = extractContent(responseJson);

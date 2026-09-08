@@ -1,5 +1,7 @@
 package com.mnemoscape.memory.service;
 
+import com.mnemoscape.common.event.DriftBottleEvent;
+import com.mnemoscape.memory.messaging.EventPublisher;
 import com.mnemoscape.memory.model.entity.DriftBottle;
 import com.mnemoscape.memory.model.entity.Memory;
 import com.mnemoscape.memory.repository.DriftBottleRepository;
@@ -17,10 +19,14 @@ public class DriftBottleService {
 
     private final DriftBottleRepository bottleRepo;
     private final MemoryRepository memoryRepo;
+    private final EventPublisher eventPublisher;
 
-    public DriftBottleService(DriftBottleRepository bottleRepo, MemoryRepository memoryRepo) {
+    public DriftBottleService(DriftBottleRepository bottleRepo,
+                              MemoryRepository memoryRepo,
+                              EventPublisher eventPublisher) {
         this.bottleRepo = bottleRepo;
         this.memoryRepo = memoryRepo;
+        this.eventPublisher = eventPublisher;
     }
 
     /**
@@ -40,7 +46,11 @@ public class DriftBottleService {
         bottle.setLocation(memory.getMemoryLocation());
         bottle.setYear(memory.getMemoryYear());
 
-        return bottleRepo.save(bottle);
+        DriftBottle saved = bottleRepo.save(bottle);
+        // MQ 扇出：resonance-service 消费后写 feed 缓存 + 失效 admin 概览
+        eventPublisher.publishDriftBottle(DriftBottleEvent.thrown(
+                String.valueOf(saved.getId()), userId, snippet, memoryId));
+        return saved;
     }
 
     /**
@@ -60,10 +70,14 @@ public class DriftBottleService {
             b.setPickedByUserId(userId);
             b.setPickedAt(LocalDateTime.now());
             b.setIsActive(false);
-            bottleRepo.save(b);
+            DriftBottle saved = bottleRepo.save(b);
+            // MQ 扇出：通知原投放者 + 双方互动 feed
+            eventPublisher.publishDriftBottle(DriftBottleEvent.picked(
+                    String.valueOf(saved.getId()), saved.getUserId(), userId,
+                    saved.getSnippet(), saved.getMemoryId()));
+            return Optional.of(saved);
         }
-
-        return bottle;
+        return Optional.empty();
     }
 
     /**

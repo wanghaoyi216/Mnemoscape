@@ -8,6 +8,11 @@ public class BizException extends RuntimeException {
         this.code = code;
     }
 
+    public BizException(int code, String message, Throwable cause) {
+        super(message, cause);
+        this.code = code;
+    }
+
     public BizException(String message) {
         this(400, message);
     }
@@ -28,6 +33,10 @@ public class BizException extends RuntimeException {
         return new BizException(403, "Access denied");
     }
 
+    public static BizException forbidden(String message) {
+        return new BizException(403, message);
+    }
+
     public static BizException badRequest(String message) {
         return new BizException(400, message);
     }
@@ -38,5 +47,9 @@ public class BizException extends RuntimeException {
 
     public static BizException internalError(String message) {
         return new BizException(500, message);
+    }
+
+    public static BizException internalError(String message, Throwable cause) {
+        return new BizException(500, message, cause);
     }
 }

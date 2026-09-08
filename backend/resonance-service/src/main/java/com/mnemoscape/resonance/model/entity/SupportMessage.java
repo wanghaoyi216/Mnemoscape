@@ -3,6 +3,9 @@ package com.mnemoscape.resonance.model.entity;
 import jakarta.persistence.*;
 import java.time.LocalDateTime;
 import java.util.UUID;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
 
 /**
  * 客服工单内的对话消息。
@@ -19,6 +22,9 @@ import java.util.UUID;
         @Index(name = "idx_support_msg_sender", columnList = "sender_id"),
         @Index(name = "idx_support_msg_created", columnList = "created_at")
 })
+@Getter
+@Setter
+@NoArgsConstructor
 public class SupportMessage {
     @Id
     @Column(length = 36)
@@ -53,29 +59,6 @@ public class SupportMessage {
 
     @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;
-
-    public SupportMessage() {}
-
-    public String getId() { return id; }
-    public void setId(String id) { this.id = id; }
-    public String getTicketId() { return ticketId; }
-    public void setTicketId(String ticketId) { this.ticketId = ticketId; }
-    public String getSenderId() { return senderId; }
-    public void setSenderId(String senderId) { this.senderId = senderId; }
-    public String getSenderRole() { return senderRole; }
-    public void setSenderRole(String senderRole) { this.senderRole = senderRole; }
-    public String getContent() { return content; }
-    public void setContent(String content) { this.content = content; }
-    public String getMessageType() { return messageType; }
-    public void setMessageType(String messageType) { this.messageType = messageType; }
-    public String getFileName() { return fileName; }
-    public void setFileName(String fileName) { this.fileName = fileName; }
-    public Long getFileSize() { return fileSize; }
-    public void setFileSize(Long fileSize) { this.fileSize = fileSize; }
-    public LocalDateTime getReadAt() { return readAt; }
-    public void setReadAt(LocalDateTime readAt) { this.readAt = readAt; }
-    public LocalDateTime getCreatedAt() { return createdAt; }
-    public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
 
     @PrePersist
     protected void onCreate() {

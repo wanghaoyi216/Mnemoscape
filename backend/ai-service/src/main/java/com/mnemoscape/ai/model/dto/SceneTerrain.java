@@ -1,30 +1,15 @@
 package com.mnemoscape.ai.model.dto;
 
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Data;
+import lombok.NoArgsConstructor;
+
+@Data
+@NoArgsConstructor
+@AllArgsConstructor
+@Builder
 public class SceneTerrain {
     private String type;
     private String color;
-
-    public SceneTerrain() {
-    }
-
-    public SceneTerrain(String type, String color) {
-        this.type = type;
-        this.color = color;
-    }
-
-    public String getType() {
-        return type;
-    }
-
-    public void setType(String type) {
-        this.type = type;
-    }
-
-    public String getColor() {
-        return color;
-    }
-
-    public void setColor(String color) {
-        this.color = color;
-    }
 }

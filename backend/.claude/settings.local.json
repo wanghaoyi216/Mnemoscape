@@ -1,9 +1,0 @@
-{
-  "permissions": {
-    "allow": [
-      "Read(//m/Study/ProjectTest/**)",
-      "Read(//m/Study/**)",
-      "Bash(curl *)"
-    ]
-  }
-}

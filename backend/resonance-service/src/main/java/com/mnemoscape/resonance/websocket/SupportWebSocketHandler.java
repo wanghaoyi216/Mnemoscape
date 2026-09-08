@@ -45,7 +45,9 @@ public class SupportWebSocketHandler extends TextWebSocketHandler {
         String role = queryParam(session, "role");
         if (userId == null || userId.isBlank()) {
             log.warn("Support WS connected without userId");
-            try { session.close(CloseStatus.BAD_DATA); } catch (IOException ignored) {}
+            try { session.close(CloseStatus.BAD_DATA); } catch (IOException e) {
+                log.debug("[ws] support session io error: {}", e.toString());
+            }
             return;
         }
         boolean isAdmin = "ADMIN".equalsIgnoreCase(role);
@@ -58,7 +60,9 @@ public class SupportWebSocketHandler extends TextWebSocketHandler {
         // 客户端可以直接发 ping / mark 读等指令；目前不需要双向逻辑，留作扩展点
         try {
             sendJson(session, Map.of("type", "CONNECTED", "role", isAdmin ? "ADMIN" : "USER"));
-        } catch (Exception ignored) {}
+        } catch (Exception e) {
+            log.debug("[ws] support session send connected error: {}", e.toString());
+        }
     }
 
     @Override
@@ -70,7 +74,9 @@ public class SupportWebSocketHandler extends TextWebSocketHandler {
     public void handleTransportError(WebSocketSession session, Throwable exception) {
         log.warn("Support WS transport error session={} reason={}", session.getId(), exception.toString());
         removeSession(session);
-        try { if (session.isOpen()) session.close(CloseStatus.SERVER_ERROR); } catch (IOException ignored) {}
+        try { if (session.isOpen()) session.close(CloseStatus.SERVER_ERROR); } catch (IOException e) {
+            log.debug("[ws] support session close error: {}", e.toString());
+        }
     }
 
     private void removeSession(WebSocketSession session) {

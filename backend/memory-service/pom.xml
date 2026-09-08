@@ -50,6 +50,11 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-actuator</artifactId>
         </dependency>
+        <!-- MinIO SDK for ChatMemory tiered cold storage archive -->
+        <dependency>
+            <groupId>io.minio</groupId>
+            <artifactId>minio</artifactId>
+        </dependency>
         <dependency>
             <groupId>com.mysql</groupId>
             <artifactId>mysql-connector-j</artifactId>
@@ -58,6 +63,15 @@
         <dependency>
             <groupId>com.alibaba.cloud</groupId>
             <artifactId>spring-cloud-starter-alibaba-nacos-discovery</artifactId>
+        </dependency>
+        <!-- Nacos Config + bootstrap starter (Spring Cloud 2023.x 需显式启用 bootstrap.yml) -->
+        <dependency>
+            <groupId>com.alibaba.cloud</groupId>
+            <artifactId>spring-cloud-starter-alibaba-nacos-config</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>org.springframework.cloud</groupId>
+            <artifactId>spring-cloud-starter-bootstrap</artifactId>
         </dependency>
         <dependency>
             <groupId>org.springframework.cloud</groupId>
@@ -84,6 +98,19 @@
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-data-redis</artifactId>
+        </dependency>
+
+        <!-- Resilience4j — circuit breaker for the Feign call to ai-service.
+             memory-service drives AI enrichment asynchronously
+             (runEnrichmentAsync / runGraphProjectionAsync /
+             runVectorIndexingAsync) but a hung LLM call (10+ s) or a flapping
+             Milvus upsert can still pile up threads in the @Async pool. The
+             circuit breaker lets us trip → fast-fail → resume quickly once
+             ai-service recovers, and gives us a metrics endpoint at
+             /actuator/prometheus via Micrometer integration. -->
+        <dependency>
+            <groupId>io.github.resilience4j</groupId>
+            <artifactId>resilience4j-spring-boot3</artifactId>
         </dependency>
 
         <!-- Test scope: pure JUnit5 — first test in the repo, validates the

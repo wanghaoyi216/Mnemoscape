@@ -3,6 +3,9 @@ package com.mnemoscape.resonance.service;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.mnemoscape.common.exception.BizException;
 import com.mnemoscape.common.dto.ApiResponse;
+import org.springframework.cache.annotation.Cacheable;
+import com.mnemoscape.resonance.admin.config.AdminCacheConfig;
+
 import com.mnemoscape.resonance.client.MemoryServiceClient;
 import com.mnemoscape.resonance.model.entity.MemoryNote;
 import com.mnemoscape.resonance.model.entity.ResonanceSpace;
@@ -71,8 +74,10 @@ public class ResonanceService {
      *   <li>低于 {@value #SCORE_FLOOR} 的丢弃；最终最少返回 {@value #MIN_TOP_K} 条（即使低分）</li>
      * </ol>
      */
+    @Cacheable(value = AdminCacheConfig.CACHE_RESONANCE_SEARCH, key = "#memoryId + '-' + #userId", sync = true)
     public List<Map<String, Object>> searchResonances(String memoryId, String userId) {
         if (userId == null || userId.isBlank()) {
+
             throw new BizException(401, "未通过身份认证，无法执行共鸣检索");
         }
         log.info("Searching resonances seedMemoryId={} userId={}", memoryId, userId);
@@ -135,6 +140,8 @@ public class ResonanceService {
             Map<String, Object> match = new LinkedHashMap<>();
             match.put("memoryId", otherId);
             match.put("title", stringField(row, "title"));
+            String desc = stringField(row, "description");
+            match.put("description", desc.length() > 160 ? desc.substring(0, 160) + "…" : desc);
             match.put("similarityScore", round(score));
             match.put("emotionSimilarity", emotion);
             match.put("sceneSimilarity", scene);
@@ -142,6 +149,7 @@ public class ResonanceService {
             // 用 ownerId 哈希成稳定虚名占位；前端 UI 会显示为"回忆者-xxxx"
             match.put("ownerUsername", virtualOwnerName(stringField(row, "userId")));
             scored.add(match);
+
         }
 
         scored.sort((a, b) -> Double.compare(
@@ -184,7 +192,9 @@ public class ResonanceService {
                 Object v = seed.getData().get("sceneDataUrl");
                 if (v != null && !String.valueOf(v).isBlank()) chosenSceneUrl = String.valueOf(v);
             }
-        } catch (Exception ignore) { /* fall through */ }
+        } catch (Exception e) {
+            log.warn("[resonance] failed to fetch seed sceneDataUrl for space, using placeholder: {}", e.toString());
+        }
 
         ResonanceSpace space = ResonanceSpace.builder()
                 .memoryId1(memoryId1)
@@ -331,12 +341,14 @@ public class ResonanceService {
                 Map<String, Object> match = new LinkedHashMap<>();
                 match.put("memoryId", otherId);
                 match.put("title", m.get("title") == null ? "" : String.valueOf(m.get("title")));
+                match.put("description", m.get("snippet") == null ? "" : String.valueOf(m.get("snippet")));
                 match.put("similarityScore", round(score));
                 match.put("emotionSimilarity", round(Math.min(0.99, score * 1.05)));
                 match.put("sceneSimilarity", round(Math.min(0.99, score * 0.92)));
                 match.put("ownerUsername", virtualOwnerName(
                         m.get("userId") == null ? null : String.valueOf(m.get("userId"))));
                 out.add(match);
+
             }
             log.info("Resonance via vector recall: {} hits for seed {}", out.size(), memoryId);
             return out;

@@ -1,0 +1,67 @@
+{
+  "name": "Mnemoscape — Memory Museum",
+  "short_name": "Mnemoscape",
+  "description": "AI-driven personal memory museum — reconstruct written memories into explorable 3D scenes.",
+  "lang": "zh-CN",
+  "dir": "ltr",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "display_override": ["window-controls-overlay", "standalone", "browser"],
+  "orientation": "any",
+  "background_color": "#0a0c10",
+  "theme_color": "#0a0c10",
+  "categories": ["productivity", "lifestyle", "art"],
+  "icons": [
+    {
+      "src": "/favicon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any"
+    },
+    {
+      "src": "/favicon.ico",
+      "sizes": "64x64",
+      "type": "image/x-icon",
+      "purpose": "any"
+    },
+    {
+      "src": "/icons/icon-192.png",
+      "sizes": "192x192",
+      "type": "image/png",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any maskable"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "My memories",
+      "short_name": "Memories",
+      "description": "Open your memory list",
+      "url": "/memories",
+      "icons": [{ "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml" }]
+    },
+    {
+      "name": "New memory",
+      "short_name": "Create",
+      "description": "Capture a new memory",
+      "url": "/memories/new",
+      "icons": [{ "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml" }]
+    },
+    {
+      "name": "Atlas",
+      "short_name": "Atlas",
+      "description": "Memory map of the world",
+      "url": "/memories/atlas",
+      "icons": [{ "src": "/favicon.svg", "sizes": "any", "type": "image/svg+xml" }]
+    }
+  ],
+  "screenshots": [],
+  "prefer_related_applications": false,
+  "edge_side_panel": { "preferred_width": 480 }
+}

@@ -2,6 +2,7 @@ package com.mnemoscape.memory.controller;
 
 import com.mnemoscape.common.dto.ApiResponse;
 import com.mnemoscape.common.dto.PageResult;
+import com.mnemoscape.common.idempotency.IdempotencyGuard;
 import com.mnemoscape.common.web.RequestContext;
 import com.mnemoscape.memory.model.dto.CreateMemoryRequest;
 import com.mnemoscape.memory.model.dto.MemoryFragmentResponse;
@@ -25,18 +26,30 @@ import java.util.stream.Collectors;
 @RequestMapping("/api/v1/memories")
 public class MemoryController {
     private final MemoryService memoryService;
-    private final com.mnemoscape.memory.repository.MemoryRepository memoryRepository;
+    private final IdempotencyGuard idempotencyGuard;
 
     public MemoryController(MemoryService memoryService,
-                            com.mnemoscape.memory.repository.MemoryRepository memoryRepository) {
+                            IdempotencyGuard idempotencyGuard) {
         this.memoryService = memoryService;
-        this.memoryRepository = memoryRepository;
+        this.idempotencyGuard = idempotencyGuard;
     }
 
     @PostMapping
-    public ResponseEntity<ApiResponse<MemoryResponse>> create(@Valid @RequestBody CreateMemoryRequest request,
-                                                       HttpServletRequest httpReq) {
+    public ResponseEntity<ApiResponse<MemoryResponse>> create(
+            @Valid @RequestBody CreateMemoryRequest request,
+            @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey,
+            HttpServletRequest httpReq) {
         String userId = RequestContext.requireUserId(httpReq);
+        // 幂等键 = userId + 客户端 key，避免不同用户串扰
+        String effectiveKey = idempotencyKey == null || idempotencyKey.isBlank()
+                ? null
+                : ("memory-create:" + userId + ":" + idempotencyKey);
+        if (effectiveKey != null) {
+            MemoryResponse cached = idempotencyGuard.executeOnce(
+                    effectiveKey, MemoryResponse.class,
+                    () -> MemoryResponse.fromEntity(memoryService.createMemory(request, userId)));
+            return ResponseEntity.status(HttpStatus.CREATED).body(ApiResponse.created(cached));
+        }
         Memory memory = memoryService.createMemory(request, userId);
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(ApiResponse.created(MemoryResponse.fromEntity(memory)));
@@ -48,8 +61,10 @@ public class MemoryController {
             @RequestParam(defaultValue = "20") int size,
             @RequestParam(required = false) String privacyLevel,
             HttpServletRequest httpReq) {
+        int safePage = Math.max(0, page);
+        int safeSize = Math.max(1, Math.min(size, 100));
         String userId = RequestContext.requireUserId(httpReq);
-        Page<Memory> result = memoryService.listMemories(userId, page, size, privacyLevel);
+        Page<Memory> result = memoryService.listMemories(userId, safePage, safeSize, privacyLevel);
         List<MemoryResponse> items = result.getContent().stream()
                 .map(MemoryResponse::fromEntity)
                 .collect(Collectors.toList());
@@ -156,10 +171,10 @@ public class MemoryController {
     public ResponseEntity<ApiResponse<List<MemoryResponse>>> publicPool(
             @RequestParam(defaultValue = "200") int limit,
             HttpServletRequest httpReq) {
-        String userId = RequestContext.requireUserId(httpReq);
         int safeLimit = Math.max(10, Math.min(limit, 500));
-        List<Memory> rows = memoryRepository.findPublicPoolExcludingUser(
-                userId, org.springframework.data.domain.PageRequest.of(0, safeLimit));
+        String userId = RequestContext.requireUserId(httpReq);
+        // 走 service 层的 Caffeine 缓存（60s），避免每次共鸣搜索都全表扫描公共池。
+        List<Memory> rows = memoryService.getPublicPool(userId, safeLimit);
         List<MemoryResponse> items = rows.stream()
                 .map(MemoryResponse::fromEntity)
                 .collect(Collectors.toList());
@@ -173,4 +188,11 @@ public class MemoryController {
         return ResponseEntity.ok(ApiResponse.success(MemoryFragmentResponse.fromEntity(
                 memoryService.discoverFragment(fragmentId, userId))));
     }
+
+    @GetMapping("/{id}/graph")
+    public ResponseEntity<ApiResponse<Map<String, Object>>> getGraph(@PathVariable String id, HttpServletRequest httpReq) {
+        String userId = RequestContext.requireUserId(httpReq);
+        return ResponseEntity.ok(ApiResponse.success(memoryService.getMemoryGraphData(id, userId)));
+    }
 }
+

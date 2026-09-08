@@ -12,6 +12,7 @@ import com.mnemoscape.memory.admin.dto.FragmentDiscoveryOverall;
 import com.mnemoscape.memory.admin.dto.HeatmapPoint;
 import com.mnemoscape.memory.admin.dto.MemoryTrendBucket;
 import com.mnemoscape.memory.admin.dto.TopContributorsResponse;
+import com.mnemoscape.common.ratelimit.RateLimit;
 import jakarta.servlet.http.HttpServletRequest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -102,6 +103,9 @@ public class AdminStatsController {
      * range. Defaults to the dimension's standard window when both range
      * parameters are absent (R6.5).
      */
+    @RateLimit(key = "admin:stats:active-user-counts", limit = 30, windowSeconds = 60,
+            dimension = RateLimit.Dimension.USER_OR_IP,
+            message = "Admin 统计拉取过于频繁，请稍后再试")
     @GetMapping("/active-user-counts")
     public ResponseEntity<ApiResponse<List<ActiveUserBucket>>> activeUserCounts(
             @RequestParam(value = "dimension", required = false) String dimension,
@@ -124,7 +128,7 @@ public class AdminStatsController {
             throw rex;
         } catch (Exception e) {
             responseStatus = 500;
-            throw new RuntimeException(e);
+            throw BizException.internalError("Admin stats aggregation failed", e);
         } finally {
             writeAudit(req, ENDPOINT_PATH_ACTIVE_USERS, queryHash, responseStatus, startNs);
         }
@@ -138,6 +142,9 @@ public class AdminStatsController {
      * {@link ActiveUserBucket} to {@link MemoryTrendBucket} (carrying both
      * created and modified counts).
      */
+    @RateLimit(key = "admin:stats:memory-trends", limit = 30, windowSeconds = 60,
+            dimension = RateLimit.Dimension.USER_OR_IP,
+            message = "Admin 统计拉取过于频繁，请稍后再试")
     @GetMapping("/memory-trends")
     public ResponseEntity<ApiResponse<List<MemoryTrendBucket>>> memoryTrends(
             @RequestParam(value = "dimension", required = false) String dimension,
@@ -160,7 +167,7 @@ public class AdminStatsController {
             throw rex;
         } catch (Exception e) {
             responseStatus = 500;
-            throw new RuntimeException(e);
+            throw BizException.internalError("Admin stats aggregation failed", e);
         } finally {
             writeAudit(req, ENDPOINT_PATH_MEMORY_TRENDS, queryHash, responseStatus, startNs);
         }
@@ -200,6 +207,9 @@ public class AdminStatsController {
      * {@code [from, to]}. Defaults to the past 365 days when both range
      * parameters are absent.
      */
+    @RateLimit(key = "admin:stats:emotion-distribution", limit = 20, windowSeconds = 60,
+            dimension = RateLimit.Dimension.USER_OR_IP,
+            message = "Admin 统计拉取过于频繁，请稍后再试")
     @GetMapping("/emotion-distribution")
     public ResponseEntity<ApiResponse<EmotionDistribution>> emotionDistribution(
             @RequestParam(value = "from", required = false) String from,
@@ -224,7 +234,7 @@ public class AdminStatsController {
             throw rex;
         } catch (Exception e) {
             responseStatus = 500;
-            throw new RuntimeException(e);
+            throw BizException.internalError("Admin stats aggregation failed", e);
         } finally {
             writeAudit(req, ENDPOINT_PATH_EMOTION, queryHash, responseStatus, startNs);
         }
@@ -239,6 +249,9 @@ public class AdminStatsController {
      * {@code LOW} (5°), {@code MEDIUM} (1°), {@code HIGH} (0.25°). Defaults to
      * {@code MEDIUM} when omitted (R9.1).
      */
+    @RateLimit(key = "admin:stats:heatmap", limit = 10, windowSeconds = 60,
+            dimension = RateLimit.Dimension.USER_OR_IP,
+            message = "Admin 统计拉取过于频繁，请稍后再试")
     @GetMapping("/heatmap")
     public ResponseEntity<ApiResponse<List<HeatmapPoint>>> heatmap(
             @RequestParam(value = "gridResolution", required = false) String gridResolution,
@@ -261,7 +274,7 @@ public class AdminStatsController {
             throw rex;
         } catch (Exception e) {
             responseStatus = 500;
-            throw new RuntimeException(e);
+            throw BizException.internalError("Admin stats aggregation failed", e);
         } finally {
             writeAudit(req, ENDPOINT_PATH_HEATMAP, queryHash, responseStatus, startNs);
         }
@@ -277,6 +290,9 @@ public class AdminStatsController {
      * username lookup failure the response is degraded with usernames
      * falling back to {@code userId.substring(0,8)}.
      */
+    @RateLimit(key = "admin:stats:top-contributors", limit = 30, windowSeconds = 60,
+            dimension = RateLimit.Dimension.USER_OR_IP,
+            message = "Admin 统计拉取过于频繁，请稍后再试")
     @GetMapping("/top-contributors")
     public ResponseEntity<ApiResponse<TopContributorsResponse>> topContributors(
             @RequestParam(value = "limit", required = false) String limit,
@@ -303,7 +319,7 @@ public class AdminStatsController {
             throw rex;
         } catch (Exception e) {
             responseStatus = 500;
-            throw new RuntimeException(e);
+            throw BizException.internalError("Admin stats aggregation failed", e);
         } finally {
             writeAudit(req, ENDPOINT_PATH_TOP_CONTRIBUTORS, queryHash, responseStatus, startNs);
         }
@@ -320,6 +336,9 @@ public class AdminStatsController {
      * <p>The two response shapes share the same envelope code path and the
      * same {@code admin.fragment-discovery} cache (different keys).
      */
+    @RateLimit(key = "admin:stats:fragment-discovery", limit = 20, windowSeconds = 60,
+            dimension = RateLimit.Dimension.USER_OR_IP,
+            message = "Admin 统计拉取过于频繁，请稍后再试")
     @GetMapping("/fragment-discovery")
     public ResponseEntity<ApiResponse<Object>> fragmentDiscovery(
             @RequestParam(value = "groupBy", required = false) String groupBy,
@@ -348,7 +367,7 @@ public class AdminStatsController {
             throw rex;
         } catch (Exception e) {
             responseStatus = 500;
-            throw new RuntimeException(e);
+            throw BizException.internalError("Admin stats aggregation failed", e);
         } finally {
             writeAudit(req, ENDPOINT_PATH_FRAGMENTS, queryHash, responseStatus, startNs);
         }

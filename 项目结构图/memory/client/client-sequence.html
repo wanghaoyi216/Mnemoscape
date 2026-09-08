@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8"><title>client 模块时序图</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+<style>
+body{background:#1a1a2e;color:#e0e0e0;font-family:"Microsoft YaHei",sans-serif;display:flex;justify-content:center;padding:40px 20px}
+.container{max-width:1100px;width:100%}
+h1{text-align:center;color:#81C784;font-size:1.6em;margin-bottom:30px}
+.mermaid{background:#16213e;border-radius:8px;padding:20px}
+</style>
+</head>
+<body>
+<div class="container">
+<h1>client 模块时序图</h1>
+<div class="mermaid">
+sequenceDiagram
+    participant MS as MemoryService
+    participant GW as AiServiceGateway
+    participant CB as 熔断器
+    participant FC as AiServiceClient
+    participant AI as ai-service
+
+    Note over MS,AI: 场景1 —— 正常调用
+    MS->>GW: extractEntities(payload)
+    GW->>CB: 熔断状态 = CLOSED 放行
+    CB-->>GW: 通过
+    GW->>FC: extractEntities(payload)
+    FC->>AI: POST /api/v1/extract
+    AI-->>FC: 200 + 实体列表
+    FC-->>GW: ApiResponse
+    GW-->>MS: 实体列表
+    Note over MS: 增强成功，继续流程
+
+    Note over MS,AI: 场景2 —— AI 连续失败，熔断器 OPEN
+    MS->>GW: indexVector(payload)
+    GW->>CB: 熔断状态 = OPEN 阻!
+    CB-->>GW: 不走网络，直接 fallback
+    GW->>GW: indexVectorFallback()
+    GW-->>MS: ApiResponse.error(503)
+    MS->>MS: 503 → 写 outbox 落库
+    Note over MS: 等 OutboxRetryScheduler 30s 后重试
+</div>
+</div>
+<script>mermaid.initialize({startOnLoad:true,theme:'dark'});</script>
+</body>
+</html>

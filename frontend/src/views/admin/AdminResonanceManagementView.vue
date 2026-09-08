@@ -1,8 +1,9 @@
 <script setup lang="ts">
-import { onMounted, ref, watch } from 'vue'
+import { onMounted, onUnmounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import AdminPanel from '../../components/admin/AdminPanel.vue'
 import AdminDataTable from '../../components/admin/AdminDataTable.vue'
+import AdminIconBtn from '../../components/admin/AdminIconBtn.vue'
 import {
   listResonancesAdmin,
   patchResonance,
@@ -58,12 +59,15 @@ async function load() {
 }
 
 onMounted(load)
-watch([page, size, statusFilter], () => {
-  if (page.value !== 0 && statusFilter.value) {
-    page.value = 0
-    return
-  }
-  void load()
+let filterTimer: ReturnType<typeof setTimeout> | undefined
+onUnmounted(() => clearTimeout(filterTimer))
+watch([page], () => void load())
+watch([size, statusFilter], () => {
+  clearTimeout(filterTimer)
+  filterTimer = setTimeout(() => {
+    if (page.value !== 0) page.value = 0
+    else void load()
+  }, 300)
 })
 
 function toastFail(e: unknown) {
@@ -198,13 +202,19 @@ function uiState() {
 .res-mgmt__toolbar { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
 .res-mgmt__select {
   appearance: none;
-  background: rgba(255,255,255,0.04);
+  background: rgba(255, 255, 255, 0.04) url("data:image/svg+xml;charset=utf-8,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%238b95a1' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpolyline points='6 9 12 15 18 9'/%3E%3C/svg%3E") no-repeat right 12px center;
+  background-size: 14px;
+  padding: 8px 32px 8px 12px;
   border: 1px solid var(--border);
   color: var(--text);
   border-radius: var(--radius-sm);
-  padding: 8px 12px;
   font-size: 0.86rem;
   cursor: pointer;
+  transition: border-color 150ms ease, background-color 150ms ease;
+}
+.res-mgmt__select:hover {
+  border-color: rgba(255, 255, 255, 0.15);
+  background-color: rgba(255, 255, 255, 0.06);
 }
 .res-mgmt__batch-bar {
   display: inline-flex;

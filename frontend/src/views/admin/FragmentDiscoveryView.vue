@@ -66,18 +66,35 @@ const gaugeOption = computed(() => {
     series: [
       {
         type: 'gauge',
-        radius: '90%',
-        center: ['50%', '60%'],
-        startAngle: 200,
-        endAngle: -20,
+        radius: '95%',
+        center: ['50%', '55%'],
+        startAngle: 220,
+        endAngle: -40,
         min: 0,
         max: 1,
-        progress: { show: true, width: 18 },
+        progress: { 
+          show: true, 
+          width: 14,
+          roundCap: true,
+          itemStyle: {
+            color: {
+              type: 'linear',
+              x: 0, y: 0, x2: 1, y2: 0,
+              colorStops: [
+                { offset: 0, color: '#8b5cf6' },
+                { offset: 0.5, color: '#3b82f6' },
+                { offset: 1, color: '#06b6d4' }
+              ]
+            },
+            shadowBlur: 8,
+            shadowColor: 'rgba(59, 130, 246, 0.4)'
+          }
+        },
         pointer: { show: false },
         axisLine: {
           lineStyle: {
-            width: 18,
-            color: [[1, 'rgba(255,255,255,0.08)']],
+            width: 14,
+            color: [[1, 'rgba(255, 255, 255, 0.05)']],
           },
         },
         axisTick: { show: false },
@@ -88,20 +105,11 @@ const gaugeOption = computed(() => {
         detail: {
           valueAnimation: true,
           formatter: (v: number) => `${(v * 100).toFixed(1)}%`,
-          color: '#36d8b4',
-          fontSize: 30,
-          fontWeight: 600,
-          offsetCenter: [0, '0%'],
-        },
-        itemStyle: {
-          color: {
-            type: 'linear',
-            x: 0, y: 0, x2: 1, y2: 0,
-            colorStops: [
-              { offset: 0, color: '#36d8b4' },
-              { offset: 1, color: '#6cc6ff' },
-            ],
-          },
+          color: '#ffffff',
+          fontSize: 32,
+          fontWeight: 'bold',
+          fontFamily: 'Outfit, var(--font-sans), sans-serif',
+          offsetCenter: [0, '10%'],
         },
         data: [{ value: rate }],
       },
@@ -117,13 +125,24 @@ const byTypeOption = computed(() => {
     tooltip: {
       trigger: 'axis',
       axisPointer: { type: 'shadow' },
+      backgroundColor: 'rgba(15, 23, 42, 0.85)',
+      borderColor: 'rgba(255, 255, 255, 0.1)',
+      borderWidth: 1,
+      textStyle: { color: '#ffffff' },
       formatter: (params: { dataIndex: number }[]) => {
         const idx = params[0].dataIndex
         const row = ordered[idx]
         if (!row) return ''
         return `
-          <strong>${t(`admin.fragments.types.${row.fragmentType}`, row.fragmentType)}</strong>
-          <br/>${(row.discoveryRate * 100).toFixed(1)}% (${row.discoveredFragments} / ${row.totalFragments})
+          <div style="font-family: var(--font-sans), sans-serif; padding: 4px 8px;">
+            <strong style="color: #6cc6ff; font-size: 13px;">${t(`admin.fragments.types.${row.fragmentType}`, row.fragmentType)}</strong>
+            <div style="margin-top: 4px; font-size: 12px; color: #cdd5dd;">
+              探索率: <span style="color: #36d8b4; font-weight: bold;">${(row.discoveryRate * 100).toFixed(1)}%</span>
+            </div>
+            <div style="font-size: 11px; color: #8b95a1; margin-top: 2px;">
+              已发现碎片: ${row.discoveredFragments} / 共 ${row.totalFragments} 个
+            </div>
+          </div>
         `
       },
     },
@@ -136,7 +155,7 @@ const byTypeOption = computed(() => {
         color: '#8b95a1',
         formatter: (v: number) => `${Math.round(v * 100)}%`,
       },
-      splitLine: { lineStyle: { color: 'rgba(255,255,255,0.06)' } },
+      splitLine: { lineStyle: { color: 'rgba(255,255,255,0.04)' } },
     },
     yAxis: {
       type: 'category',
@@ -144,7 +163,7 @@ const byTypeOption = computed(() => {
         t(`admin.fragments.types.${r.fragmentType}`, r.fragmentType),
       ),
       axisLabel: { color: '#cdd5dd', fontSize: 12 },
-      axisLine: { lineStyle: { color: '#3a4250' } },
+      axisLine: { lineStyle: { color: 'rgba(255, 255, 255, 0.1)' } },
       axisTick: { show: false },
     },
     series: [
@@ -152,14 +171,24 @@ const byTypeOption = computed(() => {
         type: 'bar',
         data: ordered.map((r) => r.discoveryRate),
         itemStyle: {
-          color: '#f2b95c',
-          borderRadius: [0, 6, 6, 0],
+          color: {
+            type: 'linear',
+            x: 0, y: 0, x2: 1, y2: 0,
+            colorStops: [
+              { offset: 0, color: 'rgba(139, 92, 246, 0.4)' },
+              { offset: 1, color: '#3b82f6' }
+            ]
+          },
+          borderRadius: [0, 8, 8, 0],
+          borderColor: '#60a5fa',
+          borderWidth: 1,
         },
         label: {
           show: true,
           position: 'right',
-          color: '#cdd5dd',
-          formatter: (p: { value: number }) => `${(p.value * 100).toFixed(1)}%`,
+          color: '#36d8b4',
+          fontWeight: 'bold',
+          formatter: (p: { value: number }) => ` ${(p.value * 100).toFixed(1)}%`,
         },
       },
     ],

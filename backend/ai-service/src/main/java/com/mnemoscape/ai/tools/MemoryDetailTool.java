@@ -1,6 +1,7 @@
 package com.mnemoscape.ai.tools;
 
 import com.mnemoscape.ai.client.MemoryServiceClient;
+import com.mnemoscape.ai.tools.audit.Tool;
 import com.mnemoscape.common.dto.ApiResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -84,6 +85,7 @@ public class MemoryDetailTool {
                 .build();
     }
 
+    @Tool("memoryDetailTool")
     public Response lookup(Request req) {
         Response resp = new Response();
         if (req == null || req.memoryId == null || req.memoryId.isBlank()) {

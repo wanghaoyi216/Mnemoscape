@@ -16,6 +16,14 @@ export default defineConfig({
     environment: 'happy-dom',
     globals: true,
     include: ['tests/**/*.spec.ts'],
+    // The .playwright.spec.ts companion files use `@playwright/test`
+    // and are run via `npx playwright test` (separate harness). They
+    // require a real headless Chromium so they are NOT run by vitest.
+    exclude: [
+      'node_modules',
+      'dist',
+      'tests/**/*.playwright.spec.ts',
+    ],
     css: false,
   },
 })

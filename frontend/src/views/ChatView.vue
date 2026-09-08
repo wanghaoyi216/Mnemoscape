@@ -4,8 +4,18 @@ import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '../stores/auth'
 import client from '../api/client'
 import { images } from '../assets/media-catalog'
+import { useReconnectingWebSocket } from '../composables/useReconnectingWebSocket'
+// v8：从 16 个硬编码 emoji 升级到 200+ 分类 catalog。
+// 保留 EMOJI_LIST_FLAT 作为兜底（兼容万一 catalog 加载失败），正常路径用 catalog。
+import {
+  KAOMOJI_CATEGORIES,
+  kaomojiByCategory,
+  searchKaomoji,
+  EMOJI_LIST_FLAT,
+  type KaomojiCategory,
+} from '../assets/kaomoji-catalog'
 
-const { t } = useI18n()
+const { t, locale } = useI18n()
 const auth = useAuthStore()
 
 // State
@@ -22,7 +32,11 @@ const messages = ref<any[]>([])
 const uploadLoading = ref(false)
 const showEmojiPicker = ref(false)
 const showStickerPicker = ref(false)
-const EMOJI_LIST = ['😀', '😂', '🥹', '😍', '😎', '🤔', '😭', '😡', '👍', '👏', '🙏', '✨', '🌙', '🔥', '💫', '💚']
+// v8：分类 / 搜索状态
+const emojiActiveCategory = ref<KaomojiCategory>('happy')
+const emojiSearchQuery = ref('')
+// v8 兜底：若 catalog 加载异常，仍可退化到老 16 个；运行时基本不会触发。
+const EMOJI_LIST = EMOJI_LIST_FLAT.slice(0, 16)
 const STICKER_PACK = [
   { label: '记住了', glyph: '💾', text: '记住这一刻' },
   { label: '拥抱', glyph: '🫶', text: '给你一个记忆拥抱' },
@@ -43,12 +57,23 @@ const AI_USER_ID = 'ai-echo-envoy'
 const icebreakerLoading = ref(false)
 const icebreakerSuggestion = ref('')
 
-// WebSocket reference
-let ws: WebSocket | null = null
 const messageStreamEnd = ref<HTMLElement | null>(null)
 
 // Computed
 const currentUserId = computed(() => auth.user?.id || 'unknown')
+const chatSocket = useReconnectingWebSocket(
+  () => {
+    if (!currentUserId.value || currentUserId.value === 'unknown') return null
+    const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws'
+    const wsUrl = `${protocol}://${window.location.host}/ws/chat?userId=${currentUserId.value}`
+    logMessage('Connecting Chat WebSocket to: ' + wsUrl)
+    return wsUrl
+  },
+  {
+    onMessage: handleChatSocketMessage,
+    onClose: () => logMessage('Chat WS disconnected. Reconnecting with exponential backoff...'),
+  }
+)
 const activeWallpaper = computed(() => {
   if (activeContact.value && activeContact.value.backgroundImageUrl) {
     return activeContact.value.backgroundImageUrl
@@ -64,55 +89,34 @@ onMounted(() => {
 })
 
 onUnmounted(() => {
-  if (ws) {
-    ws.close()
-  }
+  chatSocket.close()
 })
 
 // WebSocket setup
 function connectWebSocket() {
-  if (!currentUserId.value || currentUserId.value === 'unknown') return
+  chatSocket.connect()
+}
 
-  const protocol = window.location.protocol === 'https:' ? 'wss' : 'ws'
-  // Route through the local Vite proxy or Nginx reverse proxy dynamically
-  const wsUrl = `${protocol}://${window.location.host}/ws/chat?userId=${currentUserId.value}`
+function handleChatSocketMessage(data: any) {
+  if (data.type === 'MSG_RECEIVE') {
+    // Append to messages if active conversation matches
+    const isCurrentPrivate = activeContact.value && !activeContact.value.isGroup &&
+      ((data.senderId === activeContact.value.id && data.receiverId === currentUserId.value) ||
+        (data.senderId === currentUserId.value && data.receiverId === activeContact.value.id))
 
-  logMessage('Connecting Chat WebSocket to: ' + wsUrl)
-  ws = new WebSocket(wsUrl)
+    const isCurrentGroup = activeContact.value && activeContact.value.isGroup &&
+      data.groupId === activeContact.value.id
 
-  ws.onmessage = (event) => {
-    try {
-      const data = JSON.parse(event.data)
-      if (data.type === 'MSG_RECEIVE') {
-        // Append to messages if active conversation matches
-        const isCurrentPrivate = activeContact.value && !activeContact.value.isGroup &&
-          ((data.senderId === activeContact.value.id && data.receiverId === currentUserId.value) ||
-           (data.senderId === currentUserId.value && data.receiverId === activeContact.value.id))
-        
-        const isCurrentGroup = activeContact.value && activeContact.value.isGroup &&
-          data.groupId === activeContact.value.id
-
-        if (isCurrentPrivate || isCurrentGroup) {
-          messages.value.push(data)
-          scrollToBottom()
-        }
-      } else if (data.type === 'GROUP_CREATED') {
-        fetchGroups()
-      } else if (data.type === 'SYSTEM') {
-        logMessage('System WS: ' + data.message)
-      }
-    } catch (e) {
-      console.error('Error parsing WS message', e)
+    if (isCurrentPrivate || isCurrentGroup) {
+      messages.value.push(data)
+      // 上限 500 条，超出丢弃最旧的，避免长会话 DOM 无限增长导致渲染退化
+      if (messages.value.length > 500) messages.value.splice(0, messages.value.length - 500)
+      scrollToBottom()
     }
-  }
-
-  ws.onerror = (err) => {
-    console.error('Chat WS error', err)
-  }
-
-  ws.onclose = () => {
-    logMessage('Chat WS disconnected. Reconnecting in 5s...')
-    setTimeout(connectWebSocket, 5000)
+  } else if (data.type === 'GROUP_CREATED') {
+    fetchGroups()
+  } else if (data.type === 'SYSTEM') {
+    logMessage('System WS: ' + data.message)
   }
 }
 
@@ -184,7 +188,7 @@ async function sendMessage(type: 'TEXT' | 'IMAGE' | 'FILE' | 'EMOJI' = 'TEXT', c
   const finalContent = contentText || messageText.value.trim()
   if (!finalContent || !activeContact.value) return
 
-  if (ws && ws.readyState === WebSocket.OPEN) {
+  if (chatSocket.connected.value) {
     const payload: any = {
       type: 'SEND_MSG',
       content: finalContent,
@@ -201,7 +205,7 @@ async function sendMessage(type: 'TEXT' | 'IMAGE' | 'FILE' | 'EMOJI' = 'TEXT', c
       payload.fileSize = fileInfo.fileSize
     }
 
-    ws.send(JSON.stringify(payload))
+    chatSocket.send(payload)
     messageText.value = ''
     showEmojiPicker.value = false
     showStickerPicker.value = false
@@ -217,6 +221,15 @@ function pickEmoji(emoji: string) {
 function pickSticker(sticker: { glyph: string; text: string }) {
   sendMessage('EMOJI', `${sticker.glyph} ${sticker.text}`)
 }
+
+// v8：当前分类下要展示的 emoji（搜索关键字 > 分类）
+const filteredEmojis = computed(() => {
+  const q = emojiSearchQuery.value.trim()
+  if (q) {
+    return searchKaomoji(q, 60)
+  }
+  return kaomojiByCategory(emojiActiveCategory.value)
+})
 
 // 私聊"求助星空使者破冰"：调后端 /chat/icebreaker，把 AI 建议填进输入框（不自动发送）
 async function requestIcebreaker() {
@@ -263,7 +276,7 @@ async function handleFileUpload(event: Event) {
 
   try {
     // Post to asset uploading service
-    const { data } = await client.post('/assets/upload', formData, {
+    const { data } = await client.post('/assets/upload?purpose=chat', formData, {
       headers: {
         'Content-Type': 'multipart/form-data'
       }
@@ -360,7 +373,7 @@ function formatBytes(bytes: number) {
     <div class="chat-outer-shell">
       
       <!-- LEFT SIDEBAR -->
-      <aside class="chat-sidebar">
+      <aside :class="['chat-sidebar', activeContact ? 'mobile-hidden' : '']">
         <header class="chat-sidebar__header">
           <div class="user-chip" style="padding:0; border:none; background:none;">
             <div class="user-chip__avatar" style="width:38px; height:38px;">
@@ -574,12 +587,20 @@ function formatBytes(bytes: number) {
       </aside>
  
       <!-- RIGHT CHAT AREA -->
-      <section class="chat-body" :style="{ background: activeWallpaper.startsWith('http') ? `linear-gradient(180deg, rgba(8,10,14,0.65) 0%, rgba(8,10,14,0.9) 100%), url(${activeWallpaper}) center/cover no-repeat` : activeWallpaper }">
+      <section :class="['chat-body', !activeContact ? 'mobile-hidden' : '']" :style="{ background: activeWallpaper.startsWith('http') ? `linear-gradient(180deg, rgba(8,10,14,0.65) 0%, rgba(8,10,14,0.9) 100%), url(${activeWallpaper}) center/cover no-repeat` : activeWallpaper }">
         
         <template v-if="activeContact">
           <!-- Chat Header -->
           <header class="chat-body__header">
             <div class="chat-header-info">
+              <button
+                type="button"
+                class="chat-back-btn"
+                @click="activeContact = null"
+                title="返回"
+              >
+                ←
+              </button>
               <span class="chat-header-avatar">
                 <span v-if="activeContact.isGroup">👥</span>
                 <span v-else>{{ activeContact.username.charAt(0).toUpperCase() }}</span>
@@ -696,14 +717,49 @@ function formatBytes(bytes: number) {
                 >
                   ☺
                 </button>
-                <div v-if="showEmojiPicker" class="emoji-popover">
-                  <button
-                    v-for="emoji in EMOJI_LIST"
-                    :key="emoji"
-                    type="button"
-                    class="emoji-option"
-                    @click="pickEmoji(emoji)"
-                  >{{ emoji }}</button>
+                <div v-if="showEmojiPicker" class="emoji-popover v8">
+                  <!-- v8：分类切换 + 搜索框 -->
+                  <div class="emoji-popover__bar">
+                    <input
+                      v-model="emojiSearchQuery"
+                      type="text"
+                      :placeholder="locale === 'zh-CN' ? '搜索表情…' : 'Search emoji…'"
+                      class="emoji-popover__search"
+                    />
+                  </div>
+                  <!-- 分类标签（无搜索时显示） -->
+                  <div v-if="!emojiSearchQuery.trim()" class="emoji-popover__tabs">
+                    <button
+                      v-for="cat in KAOMOJI_CATEGORIES"
+                      :key="cat.key"
+                      type="button"
+                      class="emoji-popover__tab"
+                      :class="{ 'is-active': emojiActiveCategory === cat.key }"
+                      :title="locale === 'zh-CN' ? cat.labelZh : cat.labelEn"
+                      @click="emojiActiveCategory = cat.key"
+                    >{{ cat.icon }}</button>
+                  </div>
+                  <!-- 表情网格 -->
+                  <div class="emoji-popover__grid">
+                    <button
+                      v-for="e in filteredEmojis"
+                      :key="e.glyph + '-' + e.name"
+                      type="button"
+                      class="emoji-option"
+                      :title="locale === 'zh-CN' ? e.name : e.nameEn"
+                      @click="pickEmoji(e.glyph)"
+                    >{{ e.glyph }}</button>
+                  </div>
+                  <!-- 兜底：catalog 为空时退回到老 16 个 -->
+                  <div v-if="!filteredEmojis.length" class="emoji-popover__fallback">
+                    <button
+                      v-for="emoji in EMOJI_LIST"
+                      :key="'fb-' + emoji"
+                      type="button"
+                      class="emoji-option"
+                      @click="pickEmoji(emoji)"
+                    >{{ emoji }}</button>
+                  </div>
                 </div>
               </div>
 
@@ -758,7 +814,7 @@ function formatBytes(bytes: number) {
         <!-- No Conversation Selected Overlay -->
         <div v-else class="chat-no-selection">
           <div class="no-selection-content stack">
-            <span class="empty-bubble-icon">💬</span>
+            <img :src="images.resonanceBridge.src" class="empty-state__art" :alt="images.resonanceBridge.origin" loading="lazy" />
             <h2>{{ t('chat.body.noSelectionTitle') }}</h2>
             <p class="subtitle" style="max-width: 42ch; margin: 0 auto;">
               {{ t('chat.body.noSelectionSubtitle') }}
@@ -1145,6 +1201,73 @@ function formatBytes(bytes: number) {
   gap: 6px;
 }
 
+/* v8：catalog picker — 搜索 + 分类 tab + 大网格（最多 12 列） */
+.emoji-popover.v8 {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  width: 320px;
+  max-width: 90vw;
+  max-height: 320px;
+  overflow: hidden;
+  padding: 10px;
+  grid-template-columns: none;
+}
+.emoji-popover__bar { display: flex; align-items: center; gap: 6px; }
+.emoji-popover__search {
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 6px 10px;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  background: rgba(255, 255, 255, 0.04);
+  color: var(--text);
+  font-size: 0.85rem;
+  outline: none;
+}
+.emoji-popover__search:focus { border-color: var(--border-accent); background: rgba(54, 216, 180, 0.08); }
+.emoji-popover__tabs {
+  display: flex;
+  gap: 4px;
+  overflow-x: auto;
+  scrollbar-width: thin;
+  padding-bottom: 2px;
+}
+.emoji-popover__tab {
+  flex: 0 0 auto;
+  width: 32px;
+  height: 32px;
+  border-radius: var(--radius-sm);
+  border: 1px solid transparent;
+  background: rgba(255, 255, 255, 0.03);
+  cursor: pointer;
+  font-size: 1.1rem;
+  display: flex; align-items: center; justify-content: center;
+  filter: grayscale(0.4);
+  transition: filter 0.15s, border-color 0.15s, background 0.15s;
+}
+.emoji-popover__tab.is-active {
+  border-color: var(--border-accent);
+  background: rgba(54, 216, 180, 0.1);
+  filter: none;
+}
+.emoji-popover__tab:hover { filter: none; }
+.emoji-popover__grid {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  gap: 4px;
+  overflow-y: auto;
+  max-height: 220px;
+  padding: 2px;
+  scrollbar-width: thin;
+}
+.emoji-popover__fallback {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  gap: 4px;
+  padding: 2px;
+}
+
 .emoji-option,
 .sticker-option {
   border: 1px solid transparent;
@@ -1418,5 +1541,59 @@ function formatBytes(bytes: number) {
 @keyframes sticker-bounce {
   0%, 100% { transform: translateY(0) scale(1); }
   50% { transform: translateY(-7px) scale(1.04); }
+}
+
+.chat-back-btn {
+  display: none;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: var(--radius-sm);
+  width: 32px;
+  height: 32px;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 1.1rem;
+  transition: all 0.2s ease;
+}
+
+.chat-back-btn:hover {
+  background: rgba(255, 255, 255, 0.16);
+  border-color: var(--primary);
+}
+
+@media (max-width: 768px) {
+  .chat-outer-shell {
+    flex-direction: column;
+    min-height: calc(100vh - 120px);
+  }
+  .chat-sidebar {
+    width: 100%;
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+  }
+  .chat-sidebar.mobile-hidden {
+    display: none;
+  }
+  .chat-body.mobile-hidden {
+    display: none;
+  }
+  .chat-body {
+    width: 100%;
+    min-height: 480px;
+  }
+  .chat-back-btn {
+    display: inline-flex;
+  }
+  .message-bubble-wrapper {
+    max-width: 90%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .message-bubble__sticker .sticker-glyph {
+    animation: none;
+  }
 }
 </style>

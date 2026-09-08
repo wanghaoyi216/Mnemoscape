@@ -14,7 +14,7 @@ cd ..
 
 echo ""
 echo "=== Starting Mnemoscape Platform ==="
-docker compose -f docker/docker-compose.all.yml up -d --build
+docker compose -f deploy/docker-compose.all.yml up -d --build
 
 echo ""
 echo "Waiting for services to start..."

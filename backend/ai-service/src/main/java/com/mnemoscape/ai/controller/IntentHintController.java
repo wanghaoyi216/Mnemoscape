@@ -1,14 +1,13 @@
 package com.mnemoscape.ai.controller;
 
+import com.mnemoscape.ai.model.dto.HintResponse;
 import com.mnemoscape.ai.service.IntentHintService;
 import com.mnemoscape.common.dto.ApiResponse;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 
 import java.util.ArrayList;
-import java.util.LinkedHashMap;
 import java.util.List;
-import java.util.Map;
 
 /**
  * 动态推荐问题端点 — 给 AI 浮窗（AiMascotDock）提供个性化快捷短语，
@@ -41,7 +40,7 @@ public class IntentHintController {
     }
 
     @PostMapping("/hints")
-    public ResponseEntity<ApiResponse<Map<String, Object>>> hints(@RequestBody(required = false) HintRequest req) {
+    public ResponseEntity<ApiResponse<HintResponse>> hints(@RequestBody(required = false) HintRequest req) {
         boolean zh = req == null || req.locale == null || !req.locale.toLowerCase().startsWith("en");
         List<IntentHintService.MemoryDigest> digests = new ArrayList<>();
         if (req != null && req.context != null) {
@@ -51,8 +50,6 @@ public class IntentHintController {
             }
         }
         List<String> hints = hintService.generate(digests, zh);
-        Map<String, Object> data = new LinkedHashMap<>();
-        data.put("hints", hints);
-        return ResponseEntity.ok(ApiResponse.success(data));
+        return ResponseEntity.ok(ApiResponse.success(HintResponse.builder().hints(hints).build()));
     }
 }

@@ -21,6 +21,13 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-data-redis</artifactId>
         </dependency>
+        <!-- AMQP / RabbitMQ consumer for vector-index / vector-evict queues
+             driven by memory-service domain events.  See
+             com.mnemoscape.ai.messaging.RabbitConsumerConfig. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-amqp</artifactId>
+        </dependency>
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-web</artifactId>
@@ -42,9 +49,35 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-actuator</artifactId>
         </dependency>
+
+        <!-- 分布式追踪试点：Micrometer Tracing 桥接 OpenTelemetry，
+             经 OTLP HTTP 上报 Jaeger。版本由父工程导入的 spring-boot-dependencies(3.2.5)
+             BOM 统一管理（micrometer-tracing 1.2.x）；exporter-otlp-common 是
+             management.otlp.tracing.* 自动配置的必需依赖。actuator 已在上方引入。 -->
+        <dependency>
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-tracing-bridge-otel</artifactId>
+        </dependency>
+        <dependency>
+            <groupId>io.opentelemetry</groupId>
+            <artifactId>opentelemetry-exporter-otlp-common</artifactId>
+        </dependency>
         <dependency>
             <groupId>com.alibaba.cloud</groupId>
             <artifactId>spring-cloud-starter-alibaba-nacos-discovery</artifactId>
+        </dependency>
+        <!-- Nacos Config — 业务调参（缓存 TTL / 限流 RPM / 视觉模型 ID / Embedding
+             模型 / Milvus 集合名 等）走 Nacos 后即可热更新，配合
+             {@code @RefreshScope} 注解无需重启服务。 -->
+        <dependency>
+            <groupId>com.alibaba.cloud</groupId>
+            <artifactId>spring-cloud-starter-alibaba-nacos-config</artifactId>
+        </dependency>
+        <!-- Spring Cloud 2023.x 默认禁用 bootstrap.yml；显式引入 starter 启用，
+             这样 Nacos config / Spring Cloud Config 等"启动期"配置源能加载。 -->
+        <dependency>
+            <groupId>org.springframework.cloud</groupId>
+            <artifactId>spring-cloud-starter-bootstrap</artifactId>
         </dependency>
         <!-- Spring AI OpenAI-compatible starter (NVIDIA Integrate API speaks
              the OpenAI wire protocol; we override base-url/api-key in
@@ -106,6 +139,11 @@
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+        <dependency>
+            <groupId>io.projectreactor</groupId>
+            <artifactId>reactor-test</artifactId>
             <scope>test</scope>
         </dependency>
         <dependency>

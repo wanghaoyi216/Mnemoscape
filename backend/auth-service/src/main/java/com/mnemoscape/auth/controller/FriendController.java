@@ -112,11 +112,17 @@ public class FriendController {
     public ResponseEntity<ApiResponse<List<User>>> listFriends(HttpServletRequest request) {
         String userId = RequestContext.requireUserId(request);
         List<Friendship> friendships = friendshipRepository.findAcceptedFriendships(userId);
-        List<User> friends = new ArrayList<>();
-        for (Friendship f : friendships) {
-            String friendId = f.getUserId1().equals(userId) ? f.getUserId2() : f.getUserId1();
-            userRepository.findById(friendId).ifPresent(friends::add);
+        if (friendships.isEmpty()) {
+            return ResponseEntity.ok(ApiResponse.success(List.of()));
         }
+        // N+1 修复：原循环 userRepository.findById(friendId) 命中 N 次，
+        // 改用 findAllById 一次性 IN 查询 → 1 次 SQL。
+        // 同时去重（双向 friend relation 一条 row 对面 userId 不同）。
+        List<String> friendIds = friendships.stream()
+                .map(f -> f.getUserId1().equals(userId) ? f.getUserId2() : f.getUserId1())
+                .distinct()
+                .toList();
+        List<User> friends = userRepository.findAllById(friendIds);
         return ResponseEntity.ok(ApiResponse.success(friends));
     }
 

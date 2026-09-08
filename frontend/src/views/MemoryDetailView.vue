@@ -3,20 +3,23 @@ import { computed, onMounted, ref } from 'vue'
 import { useRoute, useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useMemoryStore } from '../stores/memory'
-import { images } from '../assets/media-catalog'
-
-const versionsBg = images.historicalRubbing.src
+import { fallbackSceneCover } from '../assets/media-catalog'
 
 const route = useRoute()
 const router = useRouter()
 const store = useMemoryStore()
 const { t, tm } = useI18n()
 const id = route.params.id as string
-const restoring = ref<number | null>(null)
 const loadError = ref('')
 
 const fragments = computed(() => store.currentFragments)
-const versions = computed(() => store.currentVersions)
+
+/* Hero 底图：优先后端 sceneDataUrl，否则按记忆 id 稳定哈希到本地 图/记忆封面，避免纯色断裂 */
+const heroBg = computed(() => {
+  const url = store.current?.sceneDataUrl
+  if (url && (/^https?:\/\//.test(url) || url.startsWith('/'))) return url
+  return fallbackSceneCover(store.current?.id ?? id).src
+})
 
 /**
  * 把英文历史 fragment 内容映射为中文。
@@ -45,7 +48,6 @@ onMounted(async () => {
     await Promise.all([
       store.fetchDrift(id),
       store.fetchFragments(id),
-      store.fetchVersions(id),
     ])
   } catch (e: any) {
     // 后端 404 已经走 BizException → ApiResponse.message；其余情况落到 errors.notFound 兜底
@@ -61,19 +63,6 @@ async function handleLock() {
   await store.fetchDrift(id)
 }
 
-async function handleRestore(versionNumber: number) {
-  restoring.value = versionNumber
-  try {
-    await store.restoreVersion(id, versionNumber)
-    await store.fetchOne(id)
-    await store.fetchDrift(id)
-    await store.fetchFragments(id)
-    await store.fetchVersions(id)
-  } finally {
-    restoring.value = null
-  }
-}
-
 const regenerating = ref(false)
 const regenError = ref('')
 async function handleRegenerate() {
@@ -83,7 +72,6 @@ async function handleRegenerate() {
   try {
     await store.regenerateScene(id)
     await store.fetchFragments(id)
-    await store.fetchVersions(id)
   } catch (e: any) {
     regenError.value = e.response?.data?.message || t('memory.detail.regenError')
   } finally {
@@ -122,7 +110,7 @@ function viewScene() {
     <div v-else-if="store.current" class="detail-grid">
       <section 
         class="hero-card hero-card--split"
-        :style="store.current.sceneDataUrl && (store.current.sceneDataUrl.startsWith('http') || store.current.sceneDataUrl.startsWith('/')) ? { backgroundImage: `linear-gradient(120deg, rgba(8,10,14,0.85) 0%, rgba(8,10,14,0.55) 60%, rgba(8,10,14,0.92) 100%), url(${store.current.sceneDataUrl})`, backgroundSize: 'cover', backgroundPosition: 'center', backgroundRepeat: 'no-repeat' } : {}"
+        :style="{ backgroundImage: `linear-gradient(120deg, rgba(10,7,22,0.88) 0%, rgba(10,7,22,0.55) 58%, rgba(10,7,22,0.92) 100%), url(${heroBg})`, backgroundSize: 'cover', backgroundPosition: 'center', backgroundRepeat: 'no-repeat' }"
       >
         <div class="stack stack--lg">
           <p class="eyebrow">{{ t('memory.detail.eyebrow') }}</p>
@@ -149,10 +137,6 @@ function viewScene() {
               <span class="metric-card__label">{{ t('memory.detail.fragments') }}</span>
               <strong class="metric-card__value">{{ fragments.length }}</strong>
             </div>
-            <div class="metric-card">
-              <span class="metric-card__label">{{ t('memory.detail.versions') }}</span>
-              <strong class="metric-card__value">{{ versions.length }}</strong>
-            </div>
           </div>
 
           <div class="stack">
@@ -164,7 +148,7 @@ function viewScene() {
         </div>
       </section>
 
-      <section class="detail-columns">
+      <section class="detail-columns" style="grid-template-columns: 1fr;">
         <div class="stack">
           <div v-if="store.currentDrift" class="drift-panel section-card">
             <div class="page-shell__header" style="margin-bottom: 16px;">
@@ -247,38 +231,6 @@ function viewScene() {
             </div>
           </div>
         </div>
-
-        <aside
-          class="section-card stack versions-aside"
-          :style="{ backgroundImage: `linear-gradient(180deg, rgba(8,10,14,0.92) 0%, rgba(8,10,14,0.78) 50%, rgba(8,10,14,0.95) 100%), url(${versionsBg})` }"
-        >
-          <div>
-            <h2 class="section-title">{{ t('memory.detail.versionsPanel.title') }}</h2>
-            <p class="subtitle">{{ t('memory.detail.versionsPanel.subtitle') }}</p>
-          </div>
-
-          <div v-if="versions.length > 0" class="stack">
-            <article v-for="version in versions" :key="version.id" class="version-card">
-              <div class="version-card__head">
-                <span class="chip">v{{ version.versionNumber }}</span>
-                <span class="status-pill status-pill--accent">{{ t(`memory.detail.versionsPanel.versionTypes.${version.changeType}`, version.changeType) }}</span>
-              </div>
-              <p class="help-text">{{ t(`memory.detail.versionsPanel.versionMessages.${version.changeDescription}`, version.changeDescription) }}</p>
-              <button
-                type="button"
-                class="button button--secondary"
-                :disabled="restoring === version.versionNumber"
-                @click="handleRestore(version.versionNumber)"
-              >
-                {{ restoring === version.versionNumber ? t('memory.detail.versionsPanel.restoring') : t('memory.detail.versionsPanel.restore') }}
-              </button>
-            </article>
-          </div>
-
-          <div v-else class="empty-state" style="padding: 32px 10px;">
-            <h3 class="empty-state__title">{{ t('memory.detail.versionsPanel.empty') }}</h3>
-          </div>
-        </aside>
       </section>
     </div>
   </div>

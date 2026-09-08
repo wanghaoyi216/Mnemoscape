@@ -376,7 +376,7 @@ class AdminStatsServiceTest {
     private static ContributorRow stubContributorRow(String userId, long count) {
         return new ContributorRow() {
             @Override public String getUserId() { return userId; }
-            @Override public long getMemoryCount() { return count; }
+            @Override public Long getMemoryCount() { return count; }
         };
     }
 

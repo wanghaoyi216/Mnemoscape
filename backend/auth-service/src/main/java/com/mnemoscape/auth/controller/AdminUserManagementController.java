@@ -2,23 +2,18 @@ package com.mnemoscape.auth.controller;
 
 import com.fasterxml.jackson.annotation.JsonInclude;
 import com.mnemoscape.auth.model.entity.User;
-import com.mnemoscape.auth.repository.UserRepository;
+import com.mnemoscape.auth.service.AdminUserManagementService;
 import com.mnemoscape.common.dto.ApiResponse;
 import com.mnemoscape.common.dto.PageResult;
 import com.mnemoscape.common.exception.BizException;
 import jakarta.servlet.http.HttpServletRequest;
+import lombok.extern.slf4j.Slf4j;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.data.domain.Page;
-import org.springframework.data.domain.PageRequest;
-import org.springframework.data.domain.Sort;
-import org.springframework.data.jpa.domain.Specification;
 import org.springframework.http.ResponseEntity;
-import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.bind.annotation.*;
 
-import java.time.LocalDateTime;
-import java.util.ArrayList;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
@@ -37,20 +32,20 @@ import java.util.Map;
  *
  * <p>响应严格白名单 —— 不返回 passwordHash；email 作为管理员身份核验需要展示但仅给 ADMIN 看。
  */
+@Slf4j
 @RestController
 @RequestMapping("/api/v1/admin/users-management")
 public class AdminUserManagementController {
 
-    private static final Logger log = LoggerFactory.getLogger(AdminUserManagementController.class);
     private static final Logger audit = LoggerFactory.getLogger("admin-audit");
 
     private static final int MAX_PAGE_SIZE = 100;
     private static final int MAX_BATCH_SIZE = 200;
 
-    private final UserRepository userRepository;
+    private final AdminUserManagementService adminService;
 
-    public AdminUserManagementController(UserRepository userRepository) {
-        this.userRepository = userRepository;
+    public AdminUserManagementController(AdminUserManagementService adminService) {
+        this.adminService = adminService;
     }
 
     @JsonInclude(JsonInclude.Include.NON_NULL)
@@ -90,28 +85,8 @@ public class AdminUserManagementController {
             HttpServletRequest req) {
         int safeSize = Math.max(1, Math.min(size, MAX_PAGE_SIZE));
         int safePage = Math.max(0, page);
-        Sort sort = "asc".equalsIgnoreCase(sortDir) ? Sort.by(sortBy).ascending() : Sort.by(sortBy).descending();
 
-        Specification<User> spec = (root, q, cb) -> cb.conjunction();
-        if (search != null && !search.isBlank()) {
-            String pattern = "%" + search.trim().toLowerCase() + "%";
-            spec = spec.and((root, q, cb) -> cb.or(
-                    cb.like(cb.lower(root.get("username")), pattern),
-                    cb.like(cb.lower(root.get("email")), pattern)
-            ));
-        }
-        if (role != null && !role.isBlank()) {
-            String r = role.trim().toUpperCase();
-            if (!r.equals("USER") && !r.equals("ADMIN")) {
-                throw new BizException(400, "INVALID_ROLE_FILTER");
-            }
-            spec = spec.and((root, q, cb) -> cb.equal(root.get("role"), r));
-        }
-        if (verified != null) {
-            spec = spec.and((root, q, cb) -> cb.equal(root.get("verified"), verified));
-        }
-
-        Page<User> result = userRepository.findAll(spec, PageRequest.of(safePage, safeSize, sort));
+        Page<User> result = adminService.listUsers(safePage, safeSize, search, role, verified, sortBy, sortDir);
         List<AdminUserRow> rows = result.getContent().stream()
                 .map(AdminUserManagementController::toRow)
                 .toList();
@@ -122,7 +97,6 @@ public class AdminUserManagementController {
 
     /** 修改单用户角色。body: {role: "USER"|"ADMIN"} */
     @PatchMapping("/{userId}/role")
-    @Transactional
     public ResponseEntity<ApiResponse<AdminUserRow>> changeRole(
             @PathVariable String userId,
             @RequestBody Map<String, Object> body,
@@ -131,31 +105,14 @@ public class AdminUserManagementController {
         if (role == null || role.isBlank()) {
             throw new BizException(400, "ROLE_REQUIRED");
         }
-        String r = role.trim().toUpperCase();
-        if (!r.equals("USER") && !r.equals("ADMIN")) {
-            throw new BizException(400, "INVALID_ROLE");
-        }
-        User u = userRepository.findById(userId)
-                .orElseThrow(() -> new BizException(404, "USER_NOT_FOUND"));
-        // 防止把最后一个 ADMIN 降级
-        if (r.equals("USER") && "ADMIN".equals(u.getRole())) {
-            long adminCount = userRepository.findAll(
-                    (root, q, cb) -> cb.equal(root.get("role"), "ADMIN")
-            ).size();
-            if (adminCount <= 1) {
-                throw new BizException(400, "CANNOT_DEMOTE_LAST_ADMIN");
-            }
-        }
-        u.setRole(r);
-        u.setUpdatedAt(LocalDateTime.now());
-        userRepository.save(u);
-        logAccess(req, "/api/v1/admin/users-management/" + userId + "/role", "role=" + r, 200);
+        User u = adminService.changeRole(userId, role);
+        logAccess(req, "/api/v1/admin/users-management/" + userId + "/role",
+                "role=" + u.getRole(), 200);
         return ResponseEntity.ok(ApiResponse.success(toRow(u)));
     }
 
     /** 修改 verified 状态（管理员可手动验证 / 冻结用户）。body: {verified: true|false} */
     @PatchMapping("/{userId}/verified")
-    @Transactional
     public ResponseEntity<ApiResponse<AdminUserRow>> changeVerified(
             @PathVariable String userId,
             @RequestBody Map<String, Object> body,
@@ -164,11 +121,7 @@ public class AdminUserManagementController {
         if (!(v instanceof Boolean b)) {
             throw new BizException(400, "VERIFIED_FLAG_REQUIRED");
         }
-        User u = userRepository.findById(userId)
-                .orElseThrow(() -> new BizException(404, "USER_NOT_FOUND"));
-        u.setVerified(b);
-        u.setUpdatedAt(LocalDateTime.now());
-        userRepository.save(u);
+        User u = adminService.changeVerified(userId, b);
         logAccess(req, "/api/v1/admin/users-management/" + userId + "/verified",
                 "verified=" + b, 200);
         return ResponseEntity.ok(ApiResponse.success(toRow(u)));
@@ -176,34 +129,20 @@ public class AdminUserManagementController {
 
     /** 删除单个用户（hard delete）。需要管理员明确确认。 */
     @DeleteMapping("/{userId}")
-    @Transactional
     public ResponseEntity<ApiResponse<Void>> deleteOne(
             @PathVariable String userId,
             HttpServletRequest req) {
-        User u = userRepository.findById(userId)
-                .orElseThrow(() -> new BizException(404, "USER_NOT_FOUND"));
-        // 防止删除最后一个 ADMIN
-        if ("ADMIN".equals(u.getRole())) {
-            long adminCount = userRepository.findAll(
-                    (root, q, cb) -> cb.equal(root.get("role"), "ADMIN")
-            ).size();
-            if (adminCount <= 1) {
-                throw new BizException(400, "CANNOT_DELETE_LAST_ADMIN");
-            }
-        }
-        // 防止管理员删除自己
         String callerId = req.getHeader("X-User-Id");
-        if (callerId != null && callerId.equals(userId)) {
-            throw new BizException(400, "CANNOT_DELETE_SELF");
+        if (callerId == null || callerId.isBlank()) {
+            throw BizException.unauthorized();
         }
-        userRepository.delete(u);
+        adminService.deleteUser(userId, callerId);
         logAccess(req, "/api/v1/admin/users-management/" + userId, "deleted", 200);
         return ResponseEntity.ok(ApiResponse.success("Deleted", null));
     }
 
     /** 批量删除。body: {ids: [...]} */
     @PostMapping("/batch-delete")
-    @Transactional
     public ResponseEntity<ApiResponse<Map<String, Object>>> batchDelete(
             @RequestBody Map<String, Object> body,
             HttpServletRequest req) {
@@ -216,42 +155,16 @@ public class AdminUserManagementController {
             throw new BizException(400, "BATCH_TOO_LARGE");
         }
         String callerId = req.getHeader("X-User-Id");
-        long adminCount = userRepository.findAll(
-                (root, q, cb) -> cb.equal(root.get("role"), "ADMIN")
-        ).size();
-
-        int deleted = 0;
-        List<String> failed = new ArrayList<>();
-        for (String id : ids) {
-            if (id == null || id.isBlank() || id.equals(callerId)) {
-                failed.add(id);
-                continue;
-            }
-            try {
-                var opt = userRepository.findById(id);
-                if (opt.isPresent()) {
-                    User u = opt.get();
-                    if ("ADMIN".equals(u.getRole()) && adminCount <= 1) {
-                        failed.add(id);
-                        continue;
-                    }
-                    if ("ADMIN".equals(u.getRole())) adminCount--;
-                    userRepository.delete(u);
-                    deleted++;
-                } else {
-                    failed.add(id);
-                }
-            } catch (Exception e) {
-                log.warn("[admin] batch-delete user failed for {}: {}", id, e.toString());
-                failed.add(id);
-            }
+        if (callerId == null || callerId.isBlank()) {
+            throw BizException.unauthorized();
         }
-        Map<String, Object> result = new LinkedHashMap<>();
-        result.put("deleted", deleted);
-        result.put("failed", failed);
+        AdminUserManagementService.BatchDeleteResult result = adminService.batchDelete(ids, callerId);
+        Map<String, Object> out = new LinkedHashMap<>();
+        out.put("deleted", result.deleted());
+        out.put("failed", result.failed());
         logAccess(req, "/api/v1/admin/users-management/batch-delete",
-                "deleted=" + deleted, 200);
-        return ResponseEntity.ok(ApiResponse.success(result));
+                "deleted=" + result.deleted(), 200);
+        return ResponseEntity.ok(ApiResponse.success(out));
     }
 
     /** 单条详情（包含 createdAt 等管理员用得到的字段）。 */
@@ -259,8 +172,7 @@ public class AdminUserManagementController {
     public ResponseEntity<ApiResponse<AdminUserRow>> getOne(
             @PathVariable String userId,
             HttpServletRequest req) {
-        User u = userRepository.findById(userId)
-                .orElseThrow(() -> new BizException(404, "USER_NOT_FOUND"));
+        User u = adminService.getUser(userId);
         logAccess(req, "/api/v1/admin/users-management/" + userId, "get", 200);
         return ResponseEntity.ok(ApiResponse.success(toRow(u)));
     }

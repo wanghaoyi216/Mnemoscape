@@ -7,6 +7,7 @@ import com.mnemoscape.common.dto.ApiResponse;
 import com.mnemoscape.common.exception.BizException;
 import com.mnemoscape.resonance.admin.dto.ResonanceOverview;
 import com.mnemoscape.resonance.admin.dto.ResonanceTopEdge;
+import com.mnemoscape.common.ratelimit.RateLimit;
 import jakarta.servlet.http.HttpServletRequest;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -78,6 +79,9 @@ public class AdminResonanceController {
      * carrying total edge count, weighted average score, and a status
      * breakdown map.
      */
+    @RateLimit(key = "admin:stats:resonance-overview", limit = 30, windowSeconds = 60,
+            dimension = RateLimit.Dimension.USER_OR_IP,
+            message = "Admin overview 拉取过于频繁，请稍后再试")
     @GetMapping("/resonance-overview")
     public ResponseEntity<ApiResponse<ResonanceOverview>> overview(HttpServletRequest req) {
         long startNs = System.nanoTime();
@@ -97,7 +101,7 @@ public class AdminResonanceController {
             throw rex;
         } catch (Exception e) {
             responseStatus = 500;
-            throw new RuntimeException(e);
+            throw BizException.internalError("Admin resonance aggregation failed", e);
         } finally {
             writeAudit(req, ENDPOINT_PATH_OVERVIEW, queryHash, responseStatus, startNs);
         }
@@ -110,6 +114,9 @@ public class AdminResonanceController {
      * score descending. {@code limit} defaults to 20 and is hard-capped at
      * 100 inside the service layer.
      */
+    @RateLimit(key = "admin:stats:resonance-top", limit = 30, windowSeconds = 60,
+            dimension = RateLimit.Dimension.USER_OR_IP,
+            message = "Admin top 拉取过于频繁，请稍后再试")
     @GetMapping("/resonance-top")
     public ResponseEntity<ApiResponse<List<ResonanceTopEdge>>> topEdges(
             @RequestParam(value = "limit", required = false) String limit,
@@ -130,7 +137,7 @@ public class AdminResonanceController {
             throw rex;
         } catch (Exception e) {
             responseStatus = 500;
-            throw new RuntimeException(e);
+            throw BizException.internalError("Admin resonance aggregation failed", e);
         } finally {
             writeAudit(req, ENDPOINT_PATH_TOP, queryHash, responseStatus, startNs);
         }

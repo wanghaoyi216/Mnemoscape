@@ -1,0 +1,45 @@
+# =============================================================================
+# ai-service bootstrap config
+#
+# 职责：拉取"启动期"必须先于 application.yml 解析的外部配置（Nacos Config）。
+# Spring Cloud 2023.x 默认禁用 bootstrap.yml；本工程通过显式引入
+# `spring-cloud-starter-bootstrap` 重新启用。
+#
+# 关键设计：
+#   1. dev / default profile 默认 Nacos config 关闭——因为 workpc 拉起 8848
+#      端口后 ai-service 才能拿到 config.enabled=true 的语义；Nacos 不可达
+#      时开启会卡启动（Nacos client 默认每 5s 重试一次直到放弃，启动时间
+#      > 30s）。所以默认走 application.yml 内置配置。
+#   2. profile=nacos 开启拉取，此时必须保证 Nacos 服务可用。
+#
+# 用法：
+#   开发期：  mvnw spring-boot:run   （无 --spring.profiles.active，Nacos config 不开）
+#   生产期：  SPRING_PROFILES_ACTIVE=nacos mvnw spring-boot:run
+# =============================================================================
+spring:
+  application:
+    name: ai-service
+  profiles:
+    active: dev
+  cloud:
+    nacos:
+      config:
+        # 关键：默认 false，profile=nacos 时通过 application-nacos.yml 覆盖为 true
+        enabled: false
+        server-addr: ${NACOS_HOST:100.66.166.46}:${NACOS_PORT:8848}
+        # 默认从 nacos 拉取 ai-service.yaml + ai-service-{profile}.yaml
+        file-extension: yaml
+        # 配置变更后自动刷新 @RefreshScope Bean
+        refresh-enabled: true
+        # 启动期连接 Nacos 失败时不抛错（dev 期 Nacos 不可用时也允许启动）
+        failure-tolerance-enabled: true
+        # 等待 Nacos 拉取的最长窗口，dev 调小防卡启动
+        timeout: 3000
+      inetutils:
+        preferred-networks:
+          - 172.
+          - 100.
+      discovery:
+        server-addr: ${NACOS_HOST:100.66.166.46}:8848
+        ip: ${SPRING_CLOUD_NACOS_DISCOVERY_IP:}
+        enabled: true

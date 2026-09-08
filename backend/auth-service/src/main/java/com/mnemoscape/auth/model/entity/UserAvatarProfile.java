@@ -2,6 +2,9 @@ package com.mnemoscape.auth.model.entity;
 
 import jakarta.persistence.*;
 import java.time.LocalDateTime;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
 
 /**
  * 用户 3D 刻画档案。
@@ -21,6 +24,9 @@ import java.time.LocalDateTime;
 @Table(name = "user_avatar_profiles", indexes = {
         @Index(name = "idx_uap_user_id", columnList = "user_id", unique = true)
 })
+@Getter
+@Setter
+@NoArgsConstructor
 public class UserAvatarProfile {
 
     @Id
@@ -105,8 +111,6 @@ public class UserAvatarProfile {
     @Column(name = "updated_at")
     private LocalDateTime updatedAt;
 
-    public UserAvatarProfile() {}
-
     @PrePersist
     protected void onCreate() {
         createdAt = LocalDateTime.now();
@@ -118,39 +122,4 @@ public class UserAvatarProfile {
     protected void onUpdate() {
         updatedAt = LocalDateTime.now();
     }
-
-    // ── Getters & Setters ──────────────────────────────────────────────────
-
-    public String getId() { return id; }
-    public void setId(String id) { this.id = id; }
-
-    public String getUserId() { return userId; }
-    public void setUserId(String userId) { this.userId = userId; }
-
-    public String getSelfDescription() { return selfDescription; }
-    public void setSelfDescription(String selfDescription) { this.selfDescription = selfDescription; }
-
-    public String getAvatarTraits() { return avatarTraits; }
-    public void setAvatarTraits(String avatarTraits) { this.avatarTraits = avatarTraits; }
-
-    public String getEmotionTone() { return emotionTone; }
-    public void setEmotionTone(String emotionTone) { this.emotionTone = emotionTone; }
-
-    public String getPersonalityTags() { return personalityTags; }
-    public void setPersonalityTags(String personalityTags) { this.personalityTags = personalityTags; }
-
-    public String getAvatarTitle() { return avatarTitle; }
-    public void setAvatarTitle(String avatarTitle) { this.avatarTitle = avatarTitle; }
-
-    public String getAvatarStory() { return avatarStory; }
-    public void setAvatarStory(String avatarStory) { this.avatarStory = avatarStory; }
-
-    public Boolean getIsPublic() { return isPublic; }
-    public void setIsPublic(Boolean isPublic) { this.isPublic = isPublic; }
-
-    public LocalDateTime getCreatedAt() { return createdAt; }
-    public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
-
-    public LocalDateTime getUpdatedAt() { return updatedAt; }
-    public void setUpdatedAt(LocalDateTime updatedAt) { this.updatedAt = updatedAt; }
 }

@@ -13,6 +13,7 @@ import com.github.benmanes.caffeine.cache.CaffeineSpec;
 import com.mnemoscape.common.admin.cache.BypassOnFailureCacheManager;
 
 import org.springframework.cache.CacheManager;
+import org.springframework.cache.annotation.EnableCaching;
 import org.springframework.cache.caffeine.CaffeineCacheManager;
 import org.springframework.cache.support.CompositeCacheManager;
 import org.springframework.context.annotation.Bean;
@@ -65,6 +66,7 @@ import java.util.Map;
  * Redis-specific exception types, wrapping the Caffeine cache is harmless.
  */
 @Configuration
+@EnableCaching
 public class AdminCacheConfig {
 
     /** Cache name for the active-users aggregation endpoint (R6, R14.2). */
@@ -93,6 +95,9 @@ public class AdminCacheConfig {
 
     /** Legacy cache name used by drift-state caching. */
     private static final String LEGACY_CACHE_DRIFT_STATES = "driftStates";
+
+    /** Cache name used for public pool caching. */
+    public static final String CACHE_PUBLIC_POOL = "publicPool";
 
     /**
      * Redis cache manager configured with per-cache TTLs for the six admin
@@ -129,13 +134,13 @@ public class AdminCacheConfig {
 
     /**
      * Replacement for the auto-configured Caffeine cache manager that keeps
-     * the pre-admin {@code memories} / {@code driftStates} caches working.
+     * the pre-admin {@code memories} / {@code driftStates} / {@code publicPool} caches working.
      * Mirrors the Caffeine spec previously set in {@code application.yml}.
      */
     @Bean
     public CaffeineCacheManager legacyCaffeineCacheManager() {
         CaffeineCacheManager mgr = new CaffeineCacheManager(
-                LEGACY_CACHE_MEMORIES, LEGACY_CACHE_DRIFT_STATES);
+                LEGACY_CACHE_MEMORIES, LEGACY_CACHE_DRIFT_STATES, CACHE_PUBLIC_POOL);
         mgr.setCaffeine(Caffeine.from(CaffeineSpec.parse(LEGACY_CAFFEINE_SPEC)));
         // Keep a closed cache-name set so admin cache names cannot accidentally
         // be served from the in-process Caffeine manager.

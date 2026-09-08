@@ -59,7 +59,11 @@ const chartOption = computed(() => {
   return {
     tooltip: {
       trigger: 'axis',
-      axisPointer: { type: 'line' },
+      axisPointer: { type: 'line', lineStyle: { color: 'rgba(255, 255, 255, 0.12)' } },
+      backgroundColor: 'rgba(15, 23, 42, 0.85)',
+      borderColor: 'rgba(255, 255, 255, 0.1)',
+      borderWidth: 1,
+      textStyle: { color: '#ffffff' },
     },
     legend: {
       data: [t('admin.activeUsers.legend.activeUsers')],
@@ -77,14 +81,14 @@ const chartOption = computed(() => {
       type: 'category',
       data: buckets.map((b) => b.bucket),
       axisLabel: { color: '#8b95a1' },
-      axisLine: { lineStyle: { color: '#3a4250' } },
+      axisLine: { lineStyle: { color: 'rgba(255, 255, 255, 0.1)' } },
     },
     yAxis: {
       type: 'value',
       minInterval: 1,
       axisLabel: { color: '#8b95a1' },
       axisLine: { show: false },
-      splitLine: { lineStyle: { color: 'rgba(255,255,255,0.06)' } },
+      splitLine: { lineStyle: { color: 'rgba(255, 255, 255, 0.04)' } },
     },
     series: [
       {
@@ -93,15 +97,21 @@ const chartOption = computed(() => {
         smooth: true,
         symbol: 'circle',
         symbolSize: 6,
-        lineStyle: { width: 2.4, color: '#36d8b4' },
-        itemStyle: { color: '#36d8b4' },
+        lineStyle: { 
+          width: 2.6, 
+          color: '#22d3ee',
+          shadowColor: 'rgba(34, 211, 238, 0.3)',
+          shadowBlur: 8,
+          shadowOffsetY: 4
+        },
+        itemStyle: { color: '#22d3ee' },
         areaStyle: {
           color: {
             type: 'linear',
             x: 0, y: 0, x2: 0, y2: 1,
             colorStops: [
-              { offset: 0, color: 'rgba(54, 216, 180, 0.32)' },
-              { offset: 1, color: 'rgba(54, 216, 180, 0)' },
+              { offset: 0, color: 'rgba(34, 211, 238, 0.22)' },
+              { offset: 1, color: 'rgba(34, 211, 238, 0)' },
             ],
           },
         },

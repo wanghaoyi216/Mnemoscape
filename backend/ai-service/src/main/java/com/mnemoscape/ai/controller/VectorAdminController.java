@@ -1,6 +1,7 @@
 package com.mnemoscape.ai.controller;
 
 import com.mnemoscape.ai.config.VectorStoreProperties;
+import com.mnemoscape.ai.model.dto.VectorStatusResponse;
 import com.mnemoscape.ai.service.MilvusVectorStore;
 import com.mnemoscape.ai.service.VectorIndexService;
 import com.mnemoscape.common.dto.ApiResponse;
@@ -10,7 +11,6 @@ import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RestController;
 
 import java.time.Instant;
-import java.util.LinkedHashMap;
 import java.util.Map;
 
 /**
@@ -61,32 +61,35 @@ public class VectorAdminController {
     }
 
     @GetMapping("/status")
-    public ResponseEntity<ApiResponse<Map<String, Object>>> status() {
-        Map<String, Object> root = new LinkedHashMap<>();
-        root.put("enabled", props.isEnabled());
-        root.put("available", indexService.isReady());
-        root.put("model", props.getEmbeddingModel());
-        root.put("dim", props.getEmbeddingDimension());
-        root.put("observedDim", indexService.getLastObservedDimension());
-
-        Map<String, Object> milvus = new LinkedHashMap<>();
+    public ResponseEntity<ApiResponse<VectorStatusResponse>> status() {
         Map<String, Object> storeStatus = vectorStore.status();
-        milvus.put("collection", storeStatus.getOrDefault("collection", props.getCollectionName()));
-        milvus.put("ready", Boolean.TRUE.equals(storeStatus.get("collectionReady")));
-        milvus.put("indexType", storeStatus.getOrDefault("indexType", "UNKNOWN"));
-        milvus.put("metricType", storeStatus.getOrDefault("metricType", "UNKNOWN"));
-        // 真实 entityCount / userCount（来自 Milvus query，60s TTL 缓存）。
-        // 截断时 entityCount 读为 "≥N"，UI 可显示 "≥3,200" 之类。
-        milvus.put("entityCount", storeStatus.getOrDefault("entityCount", 0L));
-        milvus.put("userCount", storeStatus.getOrDefault("userCount", 0L));
-        milvus.put("entityCountTruncated", storeStatus.getOrDefault("entityCountTruncated", false));
-        milvus.put("entityCountAsOf", formatEpoch((Long) storeStatus.getOrDefault("entityCountAsOf", 0L)));
-        milvus.put("lastUpsertOkAt", formatEpoch((Long) storeStatus.getOrDefault("lastUpsertOkAt", 0L)));
-        milvus.put("lastUpsertFailAt", formatEpoch((Long) storeStatus.getOrDefault("lastUpsertFailAt", 0L)));
-        milvus.put("lastError", storeStatus.get("lastError"));
-        root.put("milvus", milvus);
 
-        return ResponseEntity.ok(ApiResponse.success(root));
+        VectorStatusResponse.MilvusStatus milvus = VectorStatusResponse.MilvusStatus.builder()
+                .collection((String) storeStatus.getOrDefault("collection", props.getCollectionName()))
+                .ready(Boolean.TRUE.equals(storeStatus.get("collectionReady")))
+                .indexType((String) storeStatus.getOrDefault("indexType", "UNKNOWN"))
+                .metricType((String) storeStatus.getOrDefault("metricType", "UNKNOWN"))
+                // 真实 entityCount / userCount（来自 Milvus query，60s TTL 缓存）。
+                // 截断时 entityCount 读为 "≥N"，UI 可显示 "≥3,200" 之类。
+                .entityCount(((Number) storeStatus.getOrDefault("entityCount", 0L)).longValue())
+                .userCount(((Number) storeStatus.getOrDefault("userCount", 0L)).longValue())
+                .entityCountTruncated(Boolean.TRUE.equals(storeStatus.get("entityCountTruncated")))
+                .entityCountAsOf(formatEpoch((Long) storeStatus.getOrDefault("entityCountAsOf", 0L)))
+                .lastUpsertOkAt(formatEpoch((Long) storeStatus.getOrDefault("lastUpsertOkAt", 0L)))
+                .lastUpsertFailAt(formatEpoch((Long) storeStatus.getOrDefault("lastUpsertFailAt", 0L)))
+                .lastError((String) storeStatus.get("lastError"))
+                .build();
+
+        VectorStatusResponse resp = VectorStatusResponse.builder()
+                .enabled(props.isEnabled())
+                .available(indexService.isReady())
+                .model(props.getEmbeddingModel())
+                .dim(props.getEmbeddingDimension())
+                .observedDim(indexService.getLastObservedDimension())
+                .milvus(milvus)
+                .build();
+
+        return ResponseEntity.ok(ApiResponse.success(resp));
     }
 
     /** epoch ms → ISO-8601 UTC；0L / null 视为"未发生" → 返回 null。 */

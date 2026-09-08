@@ -252,12 +252,16 @@ public class SupportService {
         var msgs = messageRepository.findByTicketIdOrderByCreatedAtAsc(t.getId());
         int updated = 0;
         LocalDateTime now = LocalDateTime.now();
+        java.util.List<SupportMessage> toUpdate = new java.util.ArrayList<>();
         for (SupportMessage m : msgs) {
             if (otherRole.equals(m.getSenderRole()) && m.getReadAt() == null) {
                 m.setReadAt(now);
-                messageRepository.save(m);
+                toUpdate.add(m);
                 updated++;
             }
+        }
+        if (!toUpdate.isEmpty()) {
+            messageRepository.saveAll(toUpdate);
         }
         return updated;
     }

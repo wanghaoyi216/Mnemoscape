@@ -13,11 +13,15 @@ spring:
     password: ${MYSQL_PASSWORD:root123}
     driver-class-name: com.mysql.cj.jdbc.Driver
     hikari:
-      maximum-pool-size: 20
-      minimum-idle: 5
-      idle-timeout: 300000
-      connection-timeout: 20000
-      max-lifetime: 1200000
+      # 高并发优化：连接池从 20→30
+      # 原因：Memory 服务是数据密集型，记忆 CRUD + 图谱查询 + 版本记录
+      maximum-pool-size: 30
+      minimum-idle: 10
+      connection-timeout: ${HIKARI_CONNECTION_TIMEOUT_MS:20000}
+      validation-timeout: ${HIKARI_VALIDATION_TIMEOUT_MS:5000}
+      idle-timeout: ${HIKARI_IDLE_TIMEOUT_MS:300000}
+      max-lifetime: ${HIKARI_MAX_LIFETIME_MS:1200000}
+      leak-detection-threshold: ${HIKARI_LEAK_DETECTION_THRESHOLD_MS:60000}
       pool-name: MnemoscapeMemoryPool
   jpa:
     hibernate:
@@ -55,15 +59,35 @@ spring:
       connect-timeout: 3s
       lettuce:
         pool:
-          max-active: 16
-          max-idle: 8
-          min-idle: 2
-          max-wait: 2s
+          # 高并发优化：Redis 连接池从 16→50，Admin 缓存/记忆查找/漂移计算
+          max-active: 50
+          max-idle: 20
+          min-idle: 5
+          max-wait: 3s
   cache:
     type: caffeine
     caffeine:
       spec: maximumSize=2000,expireAfterWrite=10m
-    cache-names: memories,driftStates
+    cache-names: memories,driftStates,publicPool
+  # @Async 线程池显式收口。Spring Boot 默认 applicationTaskExecutor 的队列是
+  # 无界的（Integer.MAX_VALUE），高并发写记忆时三路增强任务（重建/图谱/向量）
+  # 会无限堆积，把内存吃满且无法触发 max-pool 扩容。这里改成有界队列 +
+  # CALLER_RUNS 拒绝策略：队列打满后由提交线程自己跑，形成天然背压（流量削峰）。
+  task:
+    execution:
+      pool:
+        core-size: 8
+        max-size: 32
+        queue-capacity: 200
+        keep-alive: 60s
+      thread-name-prefix: mem-async-
+      shutdown:
+        await-termination: true
+        await-termination-period: 20s
+    scheduling:
+      pool:
+        size: 4
+      thread-name-prefix: mem-sched-
   cloud:
     inetutils:
       preferred-networks:
@@ -93,6 +117,15 @@ mnemoscape:
       # 开启 Nominatim 远程查询，让 ANCHORS 表未覆盖的地名也能解析坐标
       remote-enabled: true
       nominatim-base: https://nominatim.openstreetmap.org
+  # 历史数据清洗定时器（凌晨错峰）。MemoryCleanupScheduler 仅当
+  # mnemoscape.cleanup.enabled != false 时生效；调度源走 Spring Scheduling
+  # （@EnableScheduling 已在 MemoryApplication 启用）。
+  # 配成 "-" 可禁用单个 job；批量派发上限 500 跟 admin 面板默认值保持一致。
+  cleanup:
+    enabled: ${MNEMOSCAPE_CLEANUP_ENABLED:true}
+    zone: ${MNEMOSCAPE_CLEANUP_ZONE:Asia/Shanghai}
+    visual-data-cron: ${MNEMOSCAPE_CLEANUP_VISUAL_CRON:0 0 3 * * *}
+    fragments-cron:    ${MNEMOSCAPE_CLEANUP_FRAGMENTS_CRON:0 30 3 * * *}
 
 springdoc:
   api-docs:
@@ -108,7 +141,10 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,info,metrics,prometheus,caches,loggers
+        # R32: 必须显式暴露 health / info / prometheus / metrics。
+        # memory-service 还额外暴露 caches（管理员面板调缓存命中率）
+        # 和 loggers（动态调日志级别排查）。
+        include: health,info,prometheus,metrics,caches,loggers
   endpoint:
     health:
       show-details: when_authorized
@@ -132,6 +168,62 @@ logging:
 feign:
   client:
     config:
+      # default 收紧到 30s：非 @Async 路径（如 admin Feign）不应挂 2 分钟。
+      # ai-service 的重建/向量索引走 @Async，慢不阻塞主线程，单独给 ai-service 宽超时。
       default:
         connectTimeout: 5000
+        readTimeout: 30000
+      ai-service:
+        connectTimeout: 5000
         readTimeout: 120000
+      # auth-service 的 FRIENDS 权限探针在「读记忆」的同步校验路径上 —— auth 变慢
+      # 时绝不能让用户读记忆干等 2 分钟。收紧到 6s，超时即 fail-closed 拒绝（安全侧）。
+      auth-service:
+        connectTimeout: 3000
+        readTimeout: 6000
+
+# Resilience4j —— 给 ai-service 调用的熔断 + 重试。
+# 出 trigger 条件：连续 10 个调用中 ≥ 50% 失败 → 熔断 OPEN，30s 内所有
+# 调用走 fallback（不再打 ai-service）。30s 后允许 3 个 trial call，
+# 任一成功就 CLOSE，失败重新 OPEN 30s。
+# 重试只对瞬时错误生效（IOException / ConnectException / SocketException），
+# 业务错误（如 4xx）不重试避免放大。
+resilience4j:
+  circuitbreaker:
+    configs:
+      default:
+        registerHealthIndicator: true
+        slidingWindowType: COUNT_BASED
+        slidingWindowSize: 10
+        minimumNumberOfCalls: 5
+        failureRateThreshold: 50
+        waitDurationInOpenState: 30s
+        permittedNumberOfCallsInHalfOpenState: 3
+        automaticTransitionFromOpenToHalfOpenEnabled: true
+        recordExceptions:
+          - java.io.IOException
+          - java.util.concurrent.TimeoutException
+          - org.springframework.web.client.ResourceAccessException
+          - feign.FeignException.ServiceUnavailable
+          - feign.FeignException.BadGateway
+        ignoreExceptions:
+          - com.mnemoscape.common.exception.BizException
+    instances:
+      ai-service:
+        baseConfig: default
+  retry:
+    configs:
+      default:
+        maxAttempts: 3
+        waitDuration: 200ms
+        enableExponentialBackoff: true
+        exponentialBackoffMultiplier: 2
+        retryExceptions:
+          - java.io.IOException
+          - java.util.concurrent.TimeoutException
+          - org.springframework.web.client.ResourceAccessException
+          - feign.RetryableException
+          - feign.FeignException.ServiceUnavailable
+    instances:
+      ai-service:
+        baseConfig: default

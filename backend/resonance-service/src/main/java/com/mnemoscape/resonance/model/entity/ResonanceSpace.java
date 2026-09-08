@@ -3,11 +3,17 @@ package com.mnemoscape.resonance.model.entity;
 import jakarta.persistence.*;
 import java.time.LocalDateTime;
 import java.util.UUID;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
 
 @Entity
 @Table(name = "resonance_spaces", uniqueConstraints = {
     @UniqueConstraint(columnNames = {"memory_id_1", "memory_id_2"})
 })
+@Getter
+@Setter
+@NoArgsConstructor
 public class ResonanceSpace {
     @Id
     @Column(length = 36)
@@ -36,8 +42,6 @@ public class ResonanceSpace {
 
     @Column(name = "created_at", updatable = false)
     private LocalDateTime createdAt;
-
-    public ResonanceSpace() {}
 
     public ResonanceSpace(String id, String memoryId1, String memoryId2, Double similarityScore, Double emotionSimilarity, Double sceneSimilarity, String sceneDataUrl, String status, LocalDateTime createdAt) {
         this.id = id;
@@ -82,25 +86,6 @@ public class ResonanceSpace {
             return new ResonanceSpace(id, memoryId1, memoryId2, similarityScore, emotionSimilarity, sceneSimilarity, sceneDataUrl, status, createdAt);
         }
     }
-
-    public String getId() { return id; }
-    public void setId(String id) { this.id = id; }
-    public String getMemoryId1() { return memoryId1; }
-    public void setMemoryId1(String memoryId1) { this.memoryId1 = memoryId1; }
-    public String getMemoryId2() { return memoryId2; }
-    public void setMemoryId2(String memoryId2) { this.memoryId2 = memoryId2; }
-    public Double getSimilarityScore() { return similarityScore; }
-    public void setSimilarityScore(Double similarityScore) { this.similarityScore = similarityScore; }
-    public Double getEmotionSimilarity() { return emotionSimilarity; }
-    public void setEmotionSimilarity(Double emotionSimilarity) { this.emotionSimilarity = emotionSimilarity; }
-    public Double getSceneSimilarity() { return sceneSimilarity; }
-    public void setSceneSimilarity(Double sceneSimilarity) { this.sceneSimilarity = sceneSimilarity; }
-    public String getSceneDataUrl() { return sceneDataUrl; }
-    public void setSceneDataUrl(String sceneDataUrl) { this.sceneDataUrl = sceneDataUrl; }
-    public String getStatus() { return status; }
-    public void setStatus(String status) { this.status = status; }
-    public LocalDateTime getCreatedAt() { return createdAt; }
-    public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
 
     @PrePersist
     protected void onCreate() {

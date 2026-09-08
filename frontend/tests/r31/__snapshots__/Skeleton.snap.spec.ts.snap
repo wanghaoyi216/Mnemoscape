@@ -1,0 +1,41 @@
+// Vitest Snapshot v1, https://vitest.dev/guide/snapshot.html
+
+exports[`R31 SkeletonBox > matches the baseline snapshot 1`] = `"<span data-v-be19c78d="" class="skeleton-box" style="width: 120px; height: 18px; border-radius: 8px;" aria-hidden="true"></span>"`;
+
+exports[`R31 SkeletonCard > matches the baseline snapshot for each variant > chapter 1`] = `
+"<div data-v-620db87c="" class="skeleton-card skeleton-card--chapter" role="status" aria-label="加载中…">
+  <!-- ============ Memory card ============ -->
+  <!-- ============ Chapter / timeline row ============ -->
+  <div data-v-620db87c="" class="skeleton-card__chapter-rail" aria-hidden="true"><span data-v-be19c78d="" data-v-620db87c="" class="skeleton-box skeleton-box--block" style="width: 6px; height: 100%; border-radius: 999px;" aria-hidden="true"></span></div>
+  <div data-v-620db87c="" class="skeleton-card__chapter-body"><span data-v-be19c78d="" data-v-620db87c="" class="skeleton-box skeleton-box--block" style="width: 35%; height: 1.05rem; border-radius: 8px;" aria-hidden="true"></span><span data-v-be19c78d="" data-v-620db87c="" class="skeleton-box skeleton-box--block" style="width: 80%; height: 0.8rem; border-radius: 8px;" aria-hidden="true"></span><span data-v-be19c78d="" data-v-620db87c="" class="skeleton-box" style="width: 55%; height: 0.7rem; border-radius: 8px;" aria-hidden="true"></span></div>
+  <div data-v-620db87c="" class="skeleton-card__chapter-time"><span data-v-be19c78d="" data-v-620db87c="" class="skeleton-box" style="width: 64px; height: 0.75rem; border-radius: 8px;" aria-hidden="true"></span></div>
+</div>"
+`;
+
+exports[`R31 SkeletonCard > matches the baseline snapshot for each variant > chat-ai 1`] = `
+"<div data-v-620db87c="" class="skeleton-card skeleton-card--chat" role="status" aria-label="加载中…">
+  <!-- ============ Memory card ============ -->
+  <!-- ============ Chat message ============ --><span data-v-be19c78d="" data-v-620db87c="" class="skeleton-box" style="width: 34px; height: 34px; border-radius: 50%;" aria-hidden="true"></span>
+  <div data-v-620db87c="" class="skeleton-card__chat-bubble skeleton-card__chat-bubble--ai"><span data-v-be19c78d="" data-v-620db87c="" class="skeleton-box" style="width: 60px; height: 0.7rem; border-radius: 8px;" aria-hidden="true"></span><span data-v-be19c78d="" data-v-620db87c="" class="skeleton-box skeleton-box--block" style="width: 100%; height: 0.85rem; border-radius: 8px;" aria-hidden="true"></span><span data-v-be19c78d="" data-v-620db87c="" class="skeleton-box skeleton-box--block" style="width: 84%; height: 0.85rem; border-radius: 8px;" aria-hidden="true"></span><span data-v-be19c78d="" data-v-620db87c="" class="skeleton-box" style="width: 62%; height: 0.85rem; border-radius: 8px;" aria-hidden="true"></span><span data-v-620db87c="" class="skeleton-card__chat-ts">刚刚</span></div>
+</div>"
+`;
+
+exports[`R31 SkeletonCard > matches the baseline snapshot for each variant > chat-user 1`] = `
+"<div data-v-620db87c="" class="skeleton-card skeleton-card--chat" role="status" aria-label="加载中…">
+  <!-- ============ Memory card ============ -->
+  <!-- ============ Chat message ============ --><span data-v-be19c78d="" data-v-620db87c="" class="skeleton-box" style="width: 34px; height: 34px; border-radius: 50%;" aria-hidden="true"></span>
+  <div data-v-620db87c="" class="skeleton-card__chat-bubble skeleton-card__chat-bubble--user">
+    <!--v-if--><span data-v-be19c78d="" data-v-620db87c="" class="skeleton-box skeleton-box--block" style="width: 100%; height: 0.85rem; border-radius: 8px;" aria-hidden="true"></span><span data-v-be19c78d="" data-v-620db87c="" class="skeleton-box skeleton-box--block" style="width: 84%; height: 0.85rem; border-radius: 8px;" aria-hidden="true"></span><span data-v-be19c78d="" data-v-620db87c="" class="skeleton-box" style="width: 62%; height: 0.85rem; border-radius: 8px;" aria-hidden="true"></span><span data-v-620db87c="" class="skeleton-card__chat-ts">刚刚</span>
+  </div>
+</div>"
+`;
+
+exports[`R31 SkeletonCard > matches the baseline snapshot for each variant > memory 1`] = `
+"<div data-v-620db87c="" class="skeleton-card skeleton-card--memory" role="status" aria-label="加载中…">
+  <!-- ============ Memory card ============ -->
+  <div data-v-620db87c="" class="skeleton-card__cover"><span data-v-be19c78d="" data-v-620db87c="" class="skeleton-box skeleton-box--block" style="width: 100%; height: 100%; border-radius: 14px;" aria-hidden="true"></span></div>
+  <div data-v-620db87c="" class="skeleton-card__body"><span data-v-be19c78d="" data-v-620db87c="" class="skeleton-box" style="width: 60%; height: 1.15rem; border-radius: 8px;" aria-hidden="true"></span><span data-v-be19c78d="" data-v-620db87c="" class="skeleton-box" style="width: 40%; height: 0.85rem; border-radius: 8px;" aria-hidden="true"></span><span data-v-be19c78d="" data-v-620db87c="" class="skeleton-box skeleton-box--block" style="width: 100%; height: 0.8rem; border-radius: 8px;" aria-hidden="true"></span><span data-v-be19c78d="" data-v-620db87c="" class="skeleton-box skeleton-box--block" style="width: 100%; height: 0.8rem; border-radius: 8px;" aria-hidden="true"></span><span data-v-be19c78d="" data-v-620db87c="" class="skeleton-box skeleton-box--block" style="width: 72%; height: 0.8rem; border-radius: 8px;" aria-hidden="true"></span>
+    <div data-v-620db87c="" class="skeleton-card__tags"><span data-v-be19c78d="" data-v-620db87c="" class="skeleton-box" style="width: 46px; height: 22px; border-radius: 999px;" aria-hidden="true"></span><span data-v-be19c78d="" data-v-620db87c="" class="skeleton-box" style="width: 46px; height: 22px; border-radius: 999px;" aria-hidden="true"></span><span data-v-be19c78d="" data-v-620db87c="" class="skeleton-box" style="width: 46px; height: 22px; border-radius: 999px;" aria-hidden="true"></span></div>
+  </div>
+</div>"
+`;

@@ -11,7 +11,7 @@
  * so node labels render `memoryId.substring(0,8)` for readability without
  * leaking content.
  */
-import { computed, onMounted } from 'vue'
+import { computed, onMounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import VChart from 'vue-echarts'
 import { use as echartsUse } from 'echarts/core'
@@ -23,6 +23,7 @@ import {
   TitleComponent,
 } from 'echarts/components'
 import AdminPanel from '../../components/admin/AdminPanel.vue'
+import client from '../../api/client'
 import {
   useAdminResonanceOverview,
   useAdminResonanceTop,
@@ -40,7 +41,33 @@ const { t } = useI18n()
 const overview = useAdminResonanceOverview()
 const top = useAdminResonanceTop()
 
+const memoryDetails = ref<Record<string, { title: string; description: string }>>({})
+
+watch(
+  () => top.data.value,
+  async (newData) => {
+    if (!newData || newData.length === 0) return
+    const ids = new Set<string>()
+    for (const e of newData) {
+      ids.add(e.memoryAId)
+      ids.add(e.memoryBId)
+    }
+    const idList = [...ids]
+    if (idList.length === 0) return
+    try {
+      const resp = await client.post('/admin/memories/batch-details', { ids: idList })
+      if (resp.data?.success && resp.data?.data) {
+        memoryDetails.value = resp.data.data
+      }
+    } catch (err) {
+      console.warn('Failed to fetch memory details for resonance overview:', err)
+    }
+  },
+  { immediate: true }
+)
+
 const TOP_DEFAULT_LIMIT = 20
+
 
 const panelState = computed<'idle' | 'loading' | 'empty' | 'error' | 'ready'>(() => {
   if (overview.loading.value && !overview.data.value) return 'loading'
@@ -88,36 +115,106 @@ const graphOption = computed(() => {
     nodeIds.add(e.memoryAId)
     nodeIds.add(e.memoryBId)
   }
+
+  const getTruncatedTitle = (id: string) => {
+    const title = memoryDetails.value[id]?.title || id.substring(0, 8)
+    return title.length > 10 ? title.substring(0, 10) + '…' : title
+  }
+
   const nodes = [...nodeIds].map((id) => ({
     id,
-    name: id.substring(0, 8),
-    symbolSize: 18,
-    itemStyle: { color: '#36d8b4' },
-    label: { color: '#cdd5dd', fontSize: 11 },
+    name: getTruncatedTitle(id),
+    symbolSize: 24,
+    itemStyle: { 
+      color: {
+        type: 'radial',
+        x: 0.3, y: 0.3, r: 0.8,
+        colorStops: [
+          { offset: 0, color: '#a78bfa' },
+          { offset: 1, color: '#7c3aed' }
+        ]
+      },
+      shadowColor: 'rgba(124, 58, 237, 0.6)',
+      shadowBlur: 10,
+      borderColor: 'rgba(255, 255, 255, 0.25)',
+      borderWidth: 1.5
+    },
+    label: { 
+      show: true,
+      position: 'right',
+      color: '#e2e8f0', 
+      fontSize: 10.5,
+      fontWeight: 500,
+      fontFamily: 'Outfit, var(--font-sans), sans-serif'
+    },
   }))
   const links = edges.map((e) => ({
-    source: e.memoryAId,
-    target: e.memoryBId,
+    source: getTruncatedTitle(e.memoryAId),
+    target: getTruncatedTitle(e.memoryBId),
     value: e.resonanceScore,
     lineStyle: {
-      width: 1 + e.resonanceScore * 3,
-      color: 'rgba(108, 198, 255, 0.55)',
-      opacity: 0.7,
+      width: 1.5 + e.resonanceScore * 5.0,
+      color: {
+        type: 'linear',
+        x: 0, y: 0, x2: 1, y2: 1,
+        colorStops: [
+          { offset: 0, color: '#7c3aed' },
+          { offset: 1, color: '#06b6d4' }
+        ]
+      },
+      opacity: 0.65,
+      curveness: 0.2,
     },
   }))
 
   return {
     tooltip: {
       trigger: 'item',
-      formatter: (p: { dataType?: string; data?: { value?: number; source?: string; target?: string; name?: string } }) => {
+      backgroundColor: 'rgba(10, 14, 22, 0.9)',
+      borderColor: 'rgba(255, 255, 255, 0.08)',
+      borderWidth: 1,
+      textStyle: { color: '#e2e8f0' },
+      extraCssText: 'backdrop-filter: blur(12px); box-shadow: 0 10px 30px rgba(0,0,0,0.5); border-radius: 8px;',
+      formatter: (p: { dataType?: string; data?: { value?: number; source?: string; target?: string; name?: string; id?: string } }) => {
         if (p.dataType === 'edge' && p.data) {
+          // Find actual source/target ids matching names
+          const findIdByName = (name: string) => {
+            return [...nodeIds].find(id => getTruncatedTitle(id) === name) || name
+          }
+          const idA = findIdByName(p.data.source ?? '')
+          const idB = findIdByName(p.data.target ?? '')
+          const titleA = memoryDetails.value[idA]?.title || idA.substring(0, 8)
+          const titleB = memoryDetails.value[idB]?.title || idB.substring(0, 8)
           return `
-            ${(p.data.source ?? '').substring(0, 8)} ↔ ${(p.data.target ?? '').substring(0, 8)}<br/>
-            ${t('admin.resonance.top.scoreLabel')}: ${(p.data.value ?? 0).toFixed(3)}
+            <div style="font-family: var(--font-sans), sans-serif; padding: 4px 8px;">
+              <strong style="color: #6cc6ff; font-size: 12px; display: block; margin-bottom: 6px;">共鸣链接</strong>
+              <div style="font-size: 11px; color: #cdd5dd; margin-bottom: 2px;">
+                节点 A: <span style="color: #fff; font-weight: 500;">${titleA}</span>
+              </div>
+              <div style="font-size: 11px; color: #cdd5dd; margin-bottom: 6px;">
+                节点 B: <span style="color: #fff; font-weight: 500;">${titleB}</span>
+              </div>
+              <div style="font-size: 11px; color: #36d8b4; font-weight: bold; border-top: 1px solid rgba(255,255,255,0.08); padding-top: 4px;">
+                ${t('admin.resonance.top.scoreLabel')}: ${(p.data.value ?? 0).toFixed(3)}
+              </div>
+            </div>
           `
         }
         if (p.dataType === 'node' && p.data) {
-          return p.data.name ?? ''
+          const findIdByName = (name: string) => {
+            return [...nodeIds].find(id => getTruncatedTitle(id) === name) || name
+          }
+          const id = findIdByName(p.data.name ?? '')
+          const detail = memoryDetails.value[id]
+          const title = detail?.title || id.substring(0, 8)
+          const desc = detail?.description || '暂无描述'
+          return `
+            <div style="font-family: var(--font-sans), sans-serif; padding: 6px 10px; max-width: 280px; white-space: normal; word-break: break-all;">
+              <strong style="color: #a78bfa; font-size: 12px; display: block; margin-bottom: 4px;">记忆节点</strong>
+              <div style="font-weight: 600; color: #ffffff; font-size: 12px; margin-bottom: 4px;">${title}</div>
+              <div style="font-size: 11px; color: #94a3b8; line-height: 1.4;">${desc}</div>
+            </div>
+          `
         }
         return ''
       },
@@ -129,18 +226,18 @@ const graphOption = computed(() => {
         layout: 'force',
         roam: true,
         force: {
-          repulsion: 200,
-          edgeLength: [80, 160],
-          gravity: 0.06,
+          repulsion: 320,
+          edgeLength: [120, 200],
+          gravity: 0.04,
         },
-        emphasis: { focus: 'adjacency', lineStyle: { width: 4 } },
+        emphasis: { focus: 'adjacency', lineStyle: { width: 6 } },
         data: nodes,
         edges: links,
         edgeSymbol: ['none', 'none'],
-        lineStyle: { curveness: 0.18 },
       },
     ],
   }
+
 })
 
 function refresh(): void {

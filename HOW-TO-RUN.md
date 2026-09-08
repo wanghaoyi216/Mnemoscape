@@ -21,7 +21,7 @@
 
 它做三件事：
 1. `backend/` 下跑 `./mvnw clean package -DskipTests` 产出每个微服务的 fat jar
-2. `docker compose -f docker/docker-compose.all.yml up -d --build` 起所有容器
+2. `docker compose -f deploy/docker-compose.all.yml up -d --build` 起所有容器
 3. 等 30 秒后 curl 每个端口的 `/actuator/health`，输出健康状态
 
 如果你是手动起单个后端服务，优先用 `scripts/Start-LocalDevServices.ps1`。它会自动加载 `backend/.env.workpc`，并且现在会带 `-am` 重新构建依赖模块，避免 `common` 还停留在 `~/.m2` 里的旧 SNAPSHOT。
@@ -40,7 +40,7 @@
 
 ### 1) 起基础设施
 ```bash
-docker compose -f docker/docker-compose.yml up -d
+docker compose -f deploy/docker-compose.yml up -d
 ```
 等 ~30s。可通过 `docker compose ps` 看 nacos/mysql/rabbitmq/neo4j/minio 是否 healthy。
 
@@ -53,7 +53,7 @@ cd backend
 
 ### 3) 起微服务 + 前端
 ```bash
-docker compose -f docker/docker-compose.services.yml up -d --build
+docker compose -f deploy/docker-compose.services.yml up -d --build
 ```
 
 ## 仅前端开发模式
@@ -69,7 +69,7 @@ npm run dev   # 起 Vite dev server，默认 5173
 
 ```bash
 ./scripts/stop-all.sh                          # 停所有容器
-docker compose -f docker/docker-compose.all.yml down -v   # 连卷一起删（数据库会被清）
+docker compose -f deploy/docker-compose.all.yml down -v   # 连卷一起删（数据库会被清）
 ```
 
 > 只重启前端 / 后端不会清空记忆数据；数据写在工位机 MySQL 的持久化卷里。只有 `down -v` 或手动删卷才会把历史数据清掉。

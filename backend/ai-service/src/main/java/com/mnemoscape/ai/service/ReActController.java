@@ -46,15 +46,19 @@ public class ReActController {
 
     private static final Pattern THOUGHT_RE = Pattern.compile("<thought>([\\s\\S]*?)</thought>");
     private static final Pattern ACTION_RE = Pattern.compile(
-            "<action\\s+tool=\"([^\"]+)\"\\s*>([\\s\\S]*?)</action>");
+            "<action\\s*tool=\"([^\"]+)\"\\s*>([\\s\\S]+?)(?:</action>)?\\s*$");
 
     private final ChatReasoner reasoner;
     private final ToolRegistry toolRegistry;
+    private final reactor.core.scheduler.Scheduler aiBlockingScheduler;
     private final ObjectMapper json = new ObjectMapper();
 
-    public ReActController(ChatReasoner reasoner, ToolRegistry toolRegistry) {
+    public ReActController(ChatReasoner reasoner, ToolRegistry toolRegistry,
+                           @org.springframework.beans.factory.annotation.Qualifier("aiBlockingScheduler")
+                           reactor.core.scheduler.Scheduler aiBlockingScheduler) {
         this.reasoner = reasoner;
         this.toolRegistry = toolRegistry;
+        this.aiBlockingScheduler = aiBlockingScheduler;
     }
 
     /**
@@ -77,8 +81,13 @@ public class ReActController {
         }
         List<ChatReasoner.ReActTurn> history = new ArrayList<>();
         try {
-            history.add(new ChatReasoner.ReActTurn("user",
-                    req == null ? "" : (req.getQuestion() == null ? "" : req.getQuestion())));
+            String userQuestion = req == null ? "" : (req.getQuestion() == null ? "" : req.getQuestion());
+            String visionPrefix = "";
+            if (reasoner.hasImages(req)) {
+                // Run vision pre-pass to analyze the attached images
+                visionPrefix = reasoner.buildVisionPrefix(req, ChatReasoner.NO_OP_TOOLS);
+            }
+            history.add(new ChatReasoner.ReActTurn("user", visionPrefix + userQuestion));
 
             for (int turn = 0; turn < MAX_TURNS; turn++) {
                 String turnRaw = collectTurn(req, userId, history);
@@ -104,6 +113,9 @@ public class ReActController {
                 String toolName = action[0];
                 String argsJson = action[1];
 
+                Object input = safeParseArgs(argsJson);
+                emitActionStart(listener, requestId, toolName, input);
+
                 if ("final".equals(toolName)) {
                     // 解析 argsJson.answer
                     String answer = extractFinalAnswer(argsJson);
@@ -114,13 +126,13 @@ public class ReActController {
                     return;
                 }
 
-                // 普通工具：emit action_start → execute → emit observation
-                Object input = safeParseArgs(argsJson);
-                emitActionStart(listener, requestId, toolName, input);
+                // 普通工具：execute → emit observation
                 Object output;
                 try {
-                    output = toolRegistry.get(toolName)
-                            .execute(argsJson, new ToolRegistry.ReActContext(userId, requestId));
+                    // 走 ToolRegistry 统一执行口（自带 ai-tool-audit 结构化审计），
+                    // 不再用 get().execute() 裸调 —— 裸调会绕过注册表层的审计兜底。
+                    output = toolRegistry.execute(toolName, argsJson,
+                            new ToolRegistry.ReActContext(userId, requestId));
                 } catch (Exception e) {
                     output = java.util.Map.of("error", "tool execution failed",
                             "tool", toolName,
@@ -165,7 +177,7 @@ public class ReActController {
             // 在弹性线程上订阅（ChatReasoner 的 streamReActAnswer 内部已用
             // boundedElastic，但这里再保险一次，避免栈帧卡在调用线程）
             List<ChatReasoner.ReActEvent> events = flux
-                    .subscribeOn(reactor.core.scheduler.Schedulers.boundedElastic())
+                    .subscribeOn(aiBlockingScheduler)
                     .collectList()
                     .block(java.time.Duration.ofSeconds(45));
             if (events != null) {
@@ -179,7 +191,8 @@ public class ReActController {
                 }
             }
         } catch (Exception e) {
-            log.warn("[ReActController] streamReActAnswer failed: {}", e.toString());
+            log.error("[ReActController] streamReActAnswer failed: {}", e.toString());
+            throw new RuntimeException("ReAct stream failed: " + e.getMessage(), e);
         }
         // 软截断
         if (sb.length() > MAX_TAG_CONTENT) {

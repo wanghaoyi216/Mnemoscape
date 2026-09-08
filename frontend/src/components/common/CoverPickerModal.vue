@@ -18,7 +18,7 @@
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
 import { useI18n } from 'vue-i18n'
 import client from '../../api/client'
-import { images } from '../../assets/media-catalog'
+import { generatedGallery } from '../../assets/media-catalog'
 import { useDynamicMedia } from '../../composables/useDynamicMedia'
 
 const props = defineProps<{
@@ -91,11 +91,11 @@ function stripQuery(url: string): string {
 }
 
 const builtInItems = computed<CoverItem[]>(() =>
-  Object.entries(images).map(([k, v]) => ({
-    key: `local:${k}`,
+  generatedGallery.map((v) => ({
+    key: `local:${v.number ?? v.src}`,
     src: v.src,
     thumb: v.thumb || v.src,
-    origin: v.origin || k,
+    origin: v.origin,
     badge: 'builtIn' as const,
   })),
 )

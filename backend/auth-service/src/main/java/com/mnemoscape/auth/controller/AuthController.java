@@ -6,6 +6,7 @@ import com.mnemoscape.auth.model.dto.RegisterRequest;
 import com.mnemoscape.auth.model.dto.UserProfileResponse;
 import com.mnemoscape.auth.service.AuthService;
 import com.mnemoscape.common.dto.ApiResponse;
+import com.mnemoscape.common.ratelimit.RateLimit;
 import com.mnemoscape.common.web.RequestContext;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.validation.Valid;
@@ -22,17 +23,26 @@ public class AuthController {
         this.authService = authService;
     }
 
+    @RateLimit(key = "auth:register", limit = 5, windowSeconds = 60,
+            dimension = RateLimit.Dimension.IP,
+            message = "注册请求过于频繁，请 1 分钟后再试")
     @PostMapping("/register")
     public ResponseEntity<ApiResponse<AuthResponse>> register(@Valid @RequestBody RegisterRequest request) {
         return ResponseEntity.status(HttpStatus.CREATED)
                 .body(ApiResponse.created(authService.register(request)));
     }
 
+    @RateLimit(key = "auth:login", limit = 10, windowSeconds = 60,
+            dimension = RateLimit.Dimension.IP,
+            message = "登录失败次数过多，请 1 分钟后再试")
     @PostMapping("/login")
     public ResponseEntity<ApiResponse<AuthResponse>> login(@Valid @RequestBody LoginRequest request) {
         return ResponseEntity.ok(ApiResponse.success(authService.login(request)));
     }
 
+    @RateLimit(key = "auth:refresh", limit = 20, windowSeconds = 60,
+            dimension = RateLimit.Dimension.USER_OR_IP,
+            message = "Token 刷新过于频繁，请稍后再试")
     @PostMapping("/refresh")
     public ResponseEntity<ApiResponse<AuthResponse>> refresh(
             @RequestHeader(value = "Authorization", required = false) String bearer) {

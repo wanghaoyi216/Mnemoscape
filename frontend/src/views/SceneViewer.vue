@@ -1,179 +1,235 @@
 <script setup lang="ts">
-import { computed, onMounted, onUnmounted, ref, watch } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { useRoute } from 'vue-router'
 import { useI18n } from 'vue-i18n'
-import { useSceneStore } from '../stores/scene'
 import { useMemoryStore } from '../stores/memory'
-import { usePremiumThree } from '../composables/usePremiumThree'
-import { fallbackSceneCover, videos } from '../assets/media-catalog'
-import type { SceneData } from '../types'
+import { fallbackSceneCover } from '../assets/media-catalog'
+import client from '../api/client'
+import VChart from 'vue-echarts'
+import { use as echartsUse } from 'echarts/core'
+import { CanvasRenderer } from 'echarts/renderers'
+import { GraphChart } from 'echarts/charts'
+import { TooltipComponent } from 'echarts/components'
 
-const reconstructingVideo = videos.ebbingHourglass.src
+echartsUse([CanvasRenderer, GraphChart, TooltipComponent])
 
 const { t } = useI18n()
-
 const route = useRoute()
-const sceneStore = useSceneStore()
 const memoryStore = useMemoryStore()
-const containerRef = ref<HTMLElement | null>(null)
-const { init, loadScene, applyDrift, syncFragments, findNearestFragment, ready } = usePremiumThree(containerRef)
+const chartRef = ref<any>(null)
+
 const sceneError = ref('')
+const neo4jData = ref<{
+  entities: Array<{ type: string; name: string }>
+  sharedMemories: Array<{ id: string; title: string; sharedEntity: string; entityType: string }>
+}>({
+  entities: [],
+  sharedMemories: []
+})
+const graphDataReady = ref(false)
 
-const scene = computed(() => sceneStore.sceneData)
-const objectCount = computed(() => scene.value?.objects.length || 0)
-const fragmentCount = computed(() => scene.value?.fragments.length || 0)
-// 3D 场景未就绪时的占位封面 — 按 memoryId 稳定哈希到不同的视觉风格
 const fallbackCover = computed(() => fallbackSceneCover(memoryStore.current?.id).src)
+const objectCount = computed(() => neo4jData.value.entities.length)
+const fragmentCount = computed(() => memoryStore.currentFragments.length)
 
-const proximityHint = ref(false)
-const nearestFragment = ref<any | null>(null)
-let proximityTimer = 0
-
-const sceneKeyMap: Record<string, string> = {
-  snowy_landscape: 'winter',
-  night_courtyard: 'night',
-  rainy_street: 'rain',
-  flower_garden: 'spring',
-  autumn_path: 'autumn',
-  schoolyard: 'spring',
-  indoor_room: 'summer',
-  city_street: 'rain',
-  seaside: 'summer',
-  mountain_path: 'autumn',
-  kitchen: 'summer',
-}
-
-function getSceneKey(env?: string): string {
-  if (!env) return 'summer'
-  return sceneKeyMap[env] || 'summer'
-}
-
-function normalizeScene(payload: unknown): SceneData | null {
-  if (!payload || typeof payload !== 'object') return null
-  const candidate = payload as { sceneData?: SceneData }
-  if (candidate.sceneData) return candidate.sceneData
-  return payload as SceneData
+async function fetchGraphData(id: string) {
+  try {
+    const resp = await client.get(`/memories/${id}/graph`)
+    if (resp.data?.success && resp.data?.data) {
+      neo4jData.value = resp.data.data
+      graphDataReady.value = true
+    }
+  } catch (e) {
+    console.error('Failed to fetch Neo4j graph data:', e)
+    sceneError.value = t('scene.loadError')
+  }
 }
 
 onMounted(async () => {
   const id = route.params.id as string
   sceneError.value = ''
-  sceneStore.setScene(null)
+  graphDataReady.value = false
   try {
     await memoryStore.fetchOne(id)
     await memoryStore.fetchDrift(id)
-    await memoryStore.fetchFragments(id) // Fetch real database fragments
+    await memoryStore.fetchFragments(id)
+    await fetchGraphData(id)
   } catch (e: any) {
     sceneError.value = e.response?.data?.message || t('scene.loadError')
-    return
   }
-
-  // 优先用记忆创建期已经 freeze 的 visualData（完整的 SceneReconstructionResponse）
-  const visualData = memoryStore.current?.visualData
-  if (visualData && typeof visualData === 'string') {
-    try {
-      const parsed = JSON.parse(visualData)
-      const data = normalizeScene(parsed)
-      if (data) {
-        sceneStore.setScene(data)
-      }
-    } catch (e) {
-      console.warn('Failed to parse memory.visualData; will try /reconstruct fallback', e)
-    }
-  }
-
-  // sceneDataUrl 二级兜底（http/https 链接指向预先生成的场景资源）
-  if (!sceneStore.sceneData && memoryStore.current?.sceneDataUrl
-      && (memoryStore.current.sceneDataUrl.startsWith('http')
-          || memoryStore.current.sceneDataUrl.startsWith('/'))) {
-    try {
-      const response = await fetch(memoryStore.current.sceneDataUrl)
-      const data = normalizeScene(await response.json())
-      if (data) {
-        sceneStore.setScene(data)
-      }
-    } catch {
-      sceneError.value = ''
-    }
-  }
-
-  // 终极兜底：现场调一次 reconstruct（只在前两条都失败时）
-  if (!sceneStore.sceneData && memoryStore.current) {
-    try {
-      await sceneStore.reconstruct(memoryStore.current.description)
-    } catch (e: any) {
-      sceneError.value = e.response?.data?.message || t('scene.reconstructError')
-      return
-    }
-  }
-
-  await init()
-  if (sceneStore.sceneData) {
-    const key = getSceneKey(sceneStore.sceneData.environment)
-    loadScene(sceneStore.sceneData, key)
-    syncFragments(memoryStore.currentFragments)
-  }
-
-  // 500ms 频率碰撞/靠近碎片检测，呼出 HUD 气泡
-  proximityTimer = window.setInterval(() => {
-    const nearest = findNearestFragment(2.6)
-    nearestFragment.value = nearest
-    proximityHint.value = !!nearest
-  }, 500)
-
-  window.addEventListener('keydown', onKeyDown)
 })
 
-onUnmounted(() => {
-  if (proximityTimer) {
-    window.clearInterval(proximityTimer)
-  }
-  window.removeEventListener('keydown', onKeyDown)
-})
-
-async function onKeyDown(ev: KeyboardEvent) {
-  if (ev.key !== 'e' && ev.key !== 'E') return
-  const tag = (ev.target as HTMLElement | null)?.tagName
-  if (tag === 'INPUT' || tag === 'TEXTAREA') return
-  
-  if (nearestFragment.value) {
-    const fId = nearestFragment.value.id
-    try {
-      await memoryStore.discover(fId)
-      const id = route.params.id as string
-      await memoryStore.fetchFragments(id)
-      syncFragments(memoryStore.currentFragments)
-    } catch (err) {
-      console.error('Failed to discover fragment:', err)
-    }
-  }
+function highlightNode(name: string) {
+  const chartInstance = chartRef.value?.chart
+  if (!chartInstance) return
+  chartInstance.dispatchAction({
+    type: 'highlight',
+    seriesIndex: 0,
+    name: name
+  })
 }
 
-watch(
-  () => sceneStore.sceneData,
-  (data) => {
-    if (data) {
-      const key = getSceneKey(data.environment)
-      loadScene(data, key)
-      syncFragments(memoryStore.currentFragments)
+const graphOption = computed(() => {
+  if (!graphDataReady.value) return {}
+
+  const nodes: any[] = []
+  const links: any[] = []
+
+  // 1. Center node (the current memory)
+  const centerTitle = memoryStore.current?.title || '记忆核心'
+  nodes.push({
+    id: 'center',
+    name: centerTitle,
+    symbolSize: 38,
+    itemStyle: {
+      color: {
+        type: 'radial',
+        x: 0.3, y: 0.3, r: 0.8,
+        colorStops: [
+          { offset: 0, color: '#36d8b4' },
+          { offset: 1, color: '#115e59' }
+        ]
+      },
+      borderColor: '#5ee5d9',
+      borderWidth: 2.5,
+      shadowColor: 'rgba(54, 216, 180, 0.6)',
+      shadowBlur: 14,
+    },
+    label: {
+      show: true,
+      position: 'top',
+      color: '#fff',
+      fontWeight: 'bold',
+      fontSize: 12,
+      fontFamily: 'Outfit, var(--font-sans), sans-serif'
     }
-  },
-)
+  })
 
-watch(
-  () => memoryStore.currentFragments,
-  (list) => {
-    if (list) syncFragments(list)
-  },
-  { deep: true }
-)
+  // 2. Entity nodes
+  const entityColors: Record<string, string> = {
+    Person: '#c084fc',
+    Location: '#34d399',
+    Object: '#fb923c',
+    Emotion: '#f43f5e'
+  }
 
-watch(
-  () => memoryStore.currentDrift,
-  (drift) => {
-    if (drift) applyDrift(drift.fadeLevel)
-  },
-)
+  const addedEntities = new Set<string>()
+  for (const e of neo4jData.value.entities) {
+    if (addedEntities.has(e.name)) continue
+    addedEntities.add(e.name)
+
+    nodes.push({
+      id: `entity:${e.name}`,
+      name: e.name,
+      symbolSize: 22,
+      itemStyle: {
+        color: entityColors[e.type] || '#94a3b8',
+        borderColor: 'rgba(255,255,255,0.2)',
+        borderWidth: 1.5,
+        shadowColor: entityColors[e.type] || '#94a3b8',
+        shadowBlur: 8
+      },
+      label: {
+        show: true,
+        position: 'bottom',
+        color: '#cdd5dd',
+        fontSize: 10,
+        fontFamily: 'Outfit, var(--font-sans), sans-serif'
+      }
+    })
+
+    links.push({
+      source: centerTitle,
+      target: e.name,
+      lineStyle: {
+        color: 'rgba(255, 255, 255, 0.25)',
+        width: 1.5,
+        curveness: 0.1
+      }
+    })
+  }
+
+  // 3. Shared memories
+  const addedMemories = new Set<string>()
+  for (const m of neo4jData.value.sharedMemories) {
+    if (addedMemories.has(m.id)) continue
+    addedMemories.add(m.id)
+
+    nodes.push({
+      id: `memory:${m.id}`,
+      name: m.title,
+      symbolSize: 26,
+      itemStyle: {
+        color: '#3b82f6',
+        borderColor: 'rgba(255,255,255,0.3)',
+        borderWidth: 1.5,
+        shadowColor: 'rgba(59, 130, 246, 0.5)',
+        shadowBlur: 10
+      },
+      label: {
+        show: true,
+        position: 'right',
+        color: '#e2e8f0',
+        fontSize: 11,
+        fontFamily: 'Outfit, var(--font-sans), sans-serif'
+      }
+    })
+
+    links.push({
+      source: m.title,
+      target: m.sharedEntity,
+      lineStyle: {
+        color: 'rgba(59, 130, 246, 0.45)',
+        width: 1.2,
+        type: 'dashed',
+        curveness: 0.15
+      }
+    })
+  }
+
+  return {
+    tooltip: {
+      trigger: 'item',
+      backgroundColor: 'rgba(10, 14, 22, 0.92)',
+      borderColor: 'rgba(255,255,255,0.08)',
+      borderWidth: 1,
+      textStyle: { color: '#e2e8f0' },
+      extraCssText: 'backdrop-filter: blur(12px); border-radius: 8px; box-shadow: 0 10px 30px rgba(0,0,0,0.5);',
+      formatter: (p: any) => {
+        if (p.dataType === 'node') {
+          if (p.data.id === 'center') {
+            return `<div style="padding:4px 8px; font-family:var(--font-sans), sans-serif;"><strong style="color:#36d8b4;">记忆核心</strong><br/>${p.data.name}</div>`
+          }
+          if (p.data.id.startsWith('entity:')) {
+            return `<div style="padding:4px 8px; font-family:var(--font-sans), sans-serif;"><span style="color:#a78bfa;">提及实体</span><br/><strong>${p.data.name}</strong></div>`
+          }
+          if (p.data.id.startsWith('memory:')) {
+            return `<div style="padding:4px 8px; font-family:var(--font-sans), sans-serif;"><span style="color:#60a5fa;">关联记忆</span><br/><strong>${p.data.name}</strong></div>`
+          }
+        }
+        return ''
+      }
+    },
+    series: [
+      {
+        type: 'graph',
+        layout: 'force',
+        roam: true,
+        force: {
+          repulsion: 380,
+          edgeLength: [120, 220],
+          gravity: 0.05
+        },
+        emphasis: {
+          focus: 'adjacency',
+          lineStyle: { width: 5 }
+        },
+        data: nodes,
+        edges: links
+      }
+    ]
+  }
+})
 </script>
 
 <template>
@@ -214,89 +270,140 @@ watch(
       </div>
     </section>
 
-    <section class="section-card stack" style="margin-top: 24px; position: relative;">
-      <div v-if="scene" class="scene-hud">
-        <div>
-          <h2 class="section-title">
-            {{ t(`scene.environments.${scene.environment}`, scene.environment) }}
-          </h2>
-          <p class="subtitle">
-            {{ t(`scene.lighting.${scene.lighting?.type || 'ambient'}`, scene.lighting?.type || 'ambient') }}
-            {{ t('scene.hud.lightingSuffix') }} ·
-            {{ t(`scene.terrain.${scene.terrain?.type || 'terrain'}`, scene.terrain?.type || 'terrain') }}
-            {{ t('scene.hud.terrainSuffix') }}
-          </p>
-        </div>
-        <div class="chip-grid">
-          <span class="chip">{{ t('scene.hud.objects', { count: objectCount }) }}</span>
-          <span class="chip">{{ t('scene.hud.fragments', { count: fragmentCount }) }}</span>
-          <span v-if="memoryStore.currentDrift" class="chip">{{ t('scene.hud.saturation', { pct: Math.round((memoryStore.currentDrift.colorSaturation || 0) * 100) }) }}</span>
-        </div>
-      </div>
-      <div v-else class="scene-hud">
-        <div>
-          <h2 class="section-title">{{ t('scene.hud.reconstructing') }}</h2>
-          <p class="subtitle">{{ t('scene.lead') }}</p>
-        </div>
-      </div>
+    <div v-if="sceneError" class="scene-error empty-state" role="alert" style="margin-top: 24px;">
+      <h3 class="empty-state__title">{{ t('scene.errorTitle') }}</h3>
+      <p class="empty-state__text">{{ sceneError }}</p>
+    </div>
 
-      <div v-if="sceneError" class="scene-error empty-state" role="alert">
-        <h3 class="empty-state__title">{{ t('scene.errorTitle') }}</h3>
-        <p class="empty-state__text">{{ sceneError }}</p>
-      </div>
-
-      <div v-else style="position: relative; width: 100%; border-radius: var(--radius-lg); overflow: hidden;">
-        <!-- Loading Overlay — shown while 3D renderer acquires real dimensions -->
-        <transition name="fade">
-          <div v-if="!ready && !sceneStore.loading" class="reconstruct-veil" style="background: rgba(7, 7, 20, 0.95);">
-            <div class="reconstruct-veil__copy">
-              <p class="eyebrow" style="letter-spacing: 0.15em; color: var(--primary);">INITIALIZING 3D ENGINE</p>
-              <div class="reconstruct-veil__dots">
-                <span class="dot"></span>
-                <span class="dot"></span>
-                <span class="dot"></span>
+    <div v-else class="graph-layout">
+      <main class="graph-main">
+        <div class="scene-canvas graph-canvas-wrapper">
+          <VChart
+            v-if="graphDataReady"
+            class="knowledge-graph-chart"
+            :option="graphOption"
+            autoresize
+            ref="chartRef"
+          />
+          <div v-else class="reconstruct-veil" style="background: rgba(7, 7, 20, 0.95); position: absolute; inset: 0; display: flex; align-items: center; justify-content: center;">
+            <div class="reconstruct-veil__copy" style="text-align: center;">
+              <p class="eyebrow" style="letter-spacing: 0.15em; color: var(--primary);">正在分析 Neo4j 记忆关联网络...</p>
+              <div class="reconstruct-veil__dots" style="display: flex; gap: 8px; justify-content: center; margin-top: 12px;">
+                <span class="dot" style="width:8px; height:8px; border-radius:50%; background:var(--primary); animation: dotPulse 1.4s infinite ease-in-out;"></span>
+                <span class="dot" style="width:8px; height:8px; border-radius:50%; background:var(--gold); animation: dotPulse 1.4s infinite ease-in-out; animation-delay: 0.2s;"></span>
+                <span class="dot" style="width:8px; height:8px; border-radius:50%; background:var(--accent); animation: dotPulse 1.4s infinite ease-in-out; animation-delay: 0.4s;"></span>
               </div>
             </div>
           </div>
-        </transition>
-
-        <!-- Loading Overlay — shown during AI reconstruction -->
-        <transition name="fade">
-          <div v-if="sceneStore.loading" class="reconstruct-veil">
-            <video class="reconstruct-veil__video" autoplay muted loop playsinline preload="auto">
-              <source :src="reconstructingVideo" type="video/mp4" />
-            </video>
-            <div class="reconstruct-veil__mask"></div>
-            <div class="reconstruct-veil__copy">
-              <p class="eyebrow" style="letter-spacing: 0.15em; color: var(--gold);">✨ QUANTUM MEMORY RECONSTRUCTION ✨</p>
-              <h2 class="display-title text-aurora" style="font-family: var(--font-art), var(--font-display); font-size: clamp(1.6rem, 2.5vw, 2.6rem); font-weight: 800;">正在重构这片记忆星空...</h2>
-              <p class="lead" style="max-width: 52ch; font-family: var(--font-display); font-size: 0.94rem; color: var(--text-soft); line-height: 1.7; margin: 12px 0;">
-                "主理人，我们正在从时间长河的文字碎片中抽离出空间、光线、声音和温度。请稍候片刻，这片坍塌的记忆时空即将重回秩序。"
-              </p>
-              <div class="reconstruct-veil__dots">
-                <span class="dot"></span>
-                <span class="dot"></span>
-                <span class="dot"></span>
-              </div>
-            </div>
-          </div>
-        </transition>
-
-        <div ref="containerRef" class="scene-canvas"></div>
-      </div>
-
-      <!-- Proximity Hint overlay -->
-      <transition name="proximity">
-        <div
-          v-if="proximityHint && nearestFragment"
-          class="beacon-proximity"
-          role="status"
-        >
-          <kbd class="beacon-proximity__key">E</kbd>
-          <span>按 E 键打捞遗忘的记忆碎片</span>
         </div>
-      </transition>
-    </section>
+      </main>
+
+      <aside class="graph-sidebar">
+        <div class="sidebar-card glass-panel">
+          <h3 class="sidebar-title">记忆多维索引</h3>
+          <div class="accordion">
+            <!-- Time Category -->
+            <details class="accordion-item" open>
+              <summary class="accordion-header">
+                <span>📅 记忆时间</span>
+                <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+              </summary>
+              <div class="accordion-content">
+                <div class="meta-item"><strong>年份:</strong> <span>{{ memoryStore.current?.memoryYear || '未知' }} 年</span></div>
+                <div class="meta-item"><strong>季节:</strong> <span>{{ memoryStore.current?.memorySeason || '未知' }}</span></div>
+                <div class="meta-item"><strong>具体日期:</strong> <span>{{ memoryStore.current?.memoryDate || '未知' }}</span></div>
+                <div class="meta-item"><strong>时间段:</strong> <span>{{ memoryStore.current?.memoryTimeOfDay || '未知' }}</span></div>
+              </div>
+            </details>
+
+            <!-- Location Category -->
+            <details class="accordion-item" open>
+              <summary class="accordion-header">
+                <span>📍 记忆地点</span>
+                <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+              </summary>
+              <div class="accordion-content">
+                <div class="meta-item"><strong>地点名称:</strong> <span>{{ memoryStore.current?.memoryLocation || '未知' }}</span></div>
+                <div v-if="memoryStore.current?.coords" class="meta-item">
+                  <strong>坐标定位:</strong> <span>[{{ memoryStore.current.coords[0].toFixed(4) }}, {{ memoryStore.current.coords[1].toFixed(4) }}]</span>
+                </div>
+              </div>
+            </details>
+
+            <!-- Details Category -->
+            <details class="accordion-item">
+              <summary class="accordion-header">
+                <span>📝 详细情况</span>
+                <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+              </summary>
+              <div class="accordion-content">
+                <div class="meta-desc">{{ memoryStore.current?.description }}</div>
+              </div>
+            </details>
+
+            <!-- Process Category -->
+            <details class="accordion-item">
+              <summary class="accordion-header">
+                <span>⚡ 记忆流程 (碎片)</span>
+                <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+              </summary>
+              <div class="accordion-content fragment-list">
+                <div v-if="memoryStore.currentFragments.length === 0" class="meta-item empty">暂无记忆碎片流程</div>
+                <div
+                  v-for="f in memoryStore.currentFragments"
+                  :key="f.id"
+                  class="fragment-item"
+                  :class="{ 'fragment-item--discovered': f.isDiscovered }"
+                >
+                  <span class="fragment-badge">{{ f.fragmentType }}</span>
+                  <p class="fragment-text">{{ f.content }}</p>
+                </div>
+              </div>
+            </details>
+
+            <!-- Association Category -->
+            <details class="accordion-item">
+              <summary class="accordion-header">
+                <span>🔗 关联网络</span>
+                <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2"><path d="M6 9l6 6 6-6"/></svg>
+              </summary>
+              <div class="accordion-content entity-list">
+                <div v-if="neo4jData.entities.length === 0 && neo4jData.sharedMemories.length === 0" class="meta-item empty">暂无关联实体</div>
+                <div v-if="neo4jData.entities.length > 0" class="entity-section">
+                  <h4>已提及实体 (点击高亮图谱节点)</h4>
+                  <div class="entity-chips">
+                    <span 
+                      v-for="e in neo4jData.entities" 
+                      :key="e.name"
+                      class="entity-chip"
+                      :class="'entity-chip--' + e.type.toLowerCase()"
+                      @click="highlightNode(e.name)"
+                    >
+                      {{ e.name }}
+                    </span>
+                  </div>
+                </div>
+                <div v-if="neo4jData.sharedMemories.length > 0" class="entity-section" style="margin-top:12px;">
+                  <h4>关联的其他记忆</h4>
+                  <ul class="shared-memory-list">
+                    <li 
+                      v-for="m in neo4jData.sharedMemories" 
+                      :key="m.id"
+                      class="shared-memory-item"
+                    >
+                      <RouterLink :to="`/memories/${m.id}`" class="shared-mem-link">
+                        {{ m.title }}
+                      </RouterLink>
+                      <small class="shared-reason">通过 [{{ m.sharedEntity }}] 关联</small>
+                    </li>
+                  </ul>
+                </div>
+              </div>
+            </details>
+          </div>
+        </div>
+      </aside>
+    </div>
   </div>
 </template>
 
@@ -308,21 +415,281 @@ watch(
   border: 1px solid rgba(255, 255, 255, 0.06);
 }
 
-.scene-hud {
-  display: flex;
-  justify-content: space-between;
-  gap: 16px;
-  align-items: flex-start;
+.graph-layout {
+  display: grid;
+  grid-template-columns: 1fr 340px;
+  gap: 24px;
+  margin-top: 24px;
 }
 
-.scene-canvas {
-  min-height: min(74vh, 780px);
+.graph-main {
+  min-width: 0;
+}
+
+.graph-canvas-wrapper {
+  position: relative;
+  width: 100%;
+  height: 650px;
   border-radius: var(--radius-lg);
   overflow: hidden;
   border: 1px solid var(--border);
   background:
     radial-gradient(circle at top, rgba(34, 211, 238, 0.08), transparent 30%),
     rgba(2, 6, 23, 0.38);
+}
+
+.knowledge-graph-chart {
+  width: 100%;
+  height: 100%;
+}
+
+.graph-sidebar {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.glass-panel {
+  background: rgba(15, 23, 42, 0.45);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-lg);
+  padding: 24px;
+}
+
+.sidebar-title {
+  font-family: var(--font-display);
+  font-size: 1.1rem;
+  font-weight: 700;
+  margin-bottom: 18px;
+  color: var(--text);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  padding-bottom: 12px;
+}
+
+.accordion {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.accordion-item {
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  background: rgba(255, 255, 255, 0.01);
+  transition: all 0.2s ease;
+}
+
+.accordion-item[open] {
+  background: rgba(255, 255, 255, 0.03);
+  border-color: rgba(54, 216, 180, 0.2);
+}
+
+.accordion-header {
+  padding: 12px 16px;
+  font-weight: 600;
+  font-size: 0.9rem;
+  color: var(--text-soft);
+  cursor: pointer;
+  user-select: none;
+  list-style: none;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.accordion-header::-webkit-details-marker {
+  display: none;
+}
+
+.accordion-header svg {
+  transition: transform 0.2s ease;
+  opacity: 0.6;
+}
+
+.accordion-item[open] .accordion-header svg {
+  transform: rotate(180deg);
+  opacity: 1;
+}
+
+.accordion-content {
+  padding: 0 16px 16px;
+  font-size: 0.86rem;
+  color: var(--text-muted);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.meta-item {
+  display: flex;
+  justify-content: space-between;
+  border-bottom: 1px dashed rgba(255, 255, 255, 0.04);
+  padding-bottom: 6px;
+}
+
+.meta-item strong {
+  color: var(--text-soft);
+}
+
+.meta-item span {
+  color: var(--text-muted);
+}
+
+.meta-desc {
+  line-height: 1.6;
+  color: var(--text-soft);
+  white-space: pre-wrap;
+}
+
+.fragment-list {
+  max-height: 240px;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.fragment-item {
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  border-radius: var(--radius-sm);
+  padding: 10px;
+  background: rgba(255,255,255,0.01);
+  opacity: 0.6;
+}
+
+.fragment-item--discovered {
+  opacity: 1;
+  border-color: rgba(54, 216, 180, 0.15);
+  background: rgba(54, 216, 180, 0.03);
+}
+
+.fragment-badge {
+  display: inline-block;
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  padding: 2px 6px;
+  border-radius: var(--radius-xs);
+  background: rgba(255,255,255,0.08);
+  color: var(--text-muted);
+  margin-bottom: 6px;
+}
+
+.fragment-item--discovered .fragment-badge {
+  background: rgba(54, 216, 180, 0.15);
+  color: var(--primary);
+}
+
+.fragment-text {
+  margin: 0;
+  line-height: 1.4;
+  color: var(--text-soft);
+}
+
+.entity-section {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.entity-section h4 {
+  font-size: 0.8rem;
+  color: var(--text-soft);
+  margin: 6px 0 2px;
+  font-weight: 650;
+}
+
+.entity-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.entity-chip {
+  display: inline-block;
+  padding: 4px 8px;
+  border-radius: var(--radius-sm);
+  font-size: 0.76rem;
+  cursor: pointer;
+  border: 1px solid transparent;
+  transition: all 0.2s ease;
+}
+
+.entity-chip:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0,0,0,0.2);
+}
+
+.entity-chip--person {
+  background: rgba(192, 132, 252, 0.1);
+  color: #c084fc;
+  border-color: rgba(192, 132, 252, 0.2);
+}
+.entity-chip--person:hover {
+  background: rgba(192, 132, 252, 0.2);
+}
+
+.entity-chip--location {
+  background: rgba(52, 211, 153, 0.1);
+  color: #34d399;
+  border-color: rgba(52, 211, 153, 0.2);
+}
+.entity-chip--location:hover {
+  background: rgba(52, 211, 153, 0.2);
+}
+
+.entity-chip--object {
+  background: rgba(251, 146, 60, 0.1);
+  color: #fb923c;
+  border-color: rgba(251, 146, 60, 0.2);
+}
+.entity-chip--object:hover {
+  background: rgba(251, 146, 60, 0.2);
+}
+
+.entity-chip--emotion {
+  background: rgba(244, 63, 94, 0.1);
+  color: #f43f5e;
+  border-color: rgba(244, 63, 94, 0.2);
+}
+.entity-chip--emotion:hover {
+  background: rgba(244, 63, 94, 0.2);
+}
+
+.shared-memory-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.shared-memory-item {
+  display: flex;
+  flex-direction: column;
+  padding: 8px 10px;
+  border-radius: var(--radius-sm);
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.04);
+}
+
+.shared-mem-link {
+  color: #60a5fa;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.shared-mem-link:hover {
+  text-decoration: underline;
+}
+
+.shared-reason {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+  margin-top: 2px;
 }
 
 .scene-error {
@@ -334,83 +701,10 @@ watch(
   background: rgba(8, 9, 8, 0.36);
 }
 
-@media (max-width: 768px) {
-  .scene-hud {
-    flex-direction: column;
-  }
-}
-
-/* AI Reconstruction Loading Veil */
-.reconstruct-veil {
-  position: absolute;
-  inset: 0;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  z-index: 10;
-  overflow: hidden;
-  border-radius: var(--radius-lg);
-  background: rgba(5, 7, 11, 0.88);
-}
-
-.reconstruct-veil__video {
-  position: absolute;
-  inset: 0;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-  opacity: 0.38;
-  filter: saturate(110%) contrast(110%);
-}
-
-.reconstruct-veil__mask {
-  position: absolute;
-  inset: 0;
-  background: radial-gradient(circle at center, rgba(5,7,11,0.3) 0%, rgba(5,7,11,0.92) 85%);
-}
-
-.reconstruct-veil__copy {
-  position: relative;
-  z-index: 2;
+.empty {
   text-align: center;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 12px;
-  padding: 32px;
-  background: rgba(10, 14, 20, 0.42);
-  border-radius: var(--radius-lg);
-  backdrop-filter: blur(8px);
-  border: 1px solid rgba(255, 255, 255, 0.05);
-  box-shadow: var(--shadow-lg);
-}
-
-.reconstruct-veil__dots {
-  display: flex;
-  gap: 10px;
-  margin-top: 12px;
-}
-
-.reconstruct-veil__dots .dot {
-  width: 10px;
-  height: 10px;
-  border-radius: 50%;
-  background: var(--primary);
-  box-shadow: 0 0 12px var(--primary);
-  animation: dotPulse 1.4s infinite ease-in-out;
-}
-
-.reconstruct-veil__dots .dot:nth-child(2) {
-  animation-delay: 0.2s;
-  background: var(--gold);
-  box-shadow: 0 0 12px var(--gold);
-}
-
-.reconstruct-veil__dots .dot:nth-child(3) {
-  animation-delay: 0.4s;
-  background: var(--accent);
-  box-shadow: 0 0 12px var(--accent);
+  color: var(--text-muted);
+  padding: 12px 0;
 }
 
 @keyframes dotPulse {
@@ -418,59 +712,9 @@ watch(
   50% { transform: scale(1.25); opacity: 1; }
 }
 
-/* Fade Transition */
-.fade-enter-active,
-.fade-leave-active {
-  transition: opacity 0.5s ease-out;
-}
-
-.fade-enter-from,
-.fade-leave-to {
-  opacity: 0;
-}
-
-/* 「按 E 键打捞」提示 */
-.beacon-proximity {
-  position: absolute;
-  bottom: 24px;
-  left: 50%;
-  transform: translateX(-50%);
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  padding: 8px 14px 8px 10px;
-  border-radius: 999px;
-  background: rgba(10, 14, 22, 0.78);
-  backdrop-filter: blur(12px);
-  border: 1px solid rgba(255, 255, 255, 0.12);
-  color: var(--text);
-  font-size: 0.86rem;
-  z-index: 18;
-  pointer-events: none;
-  box-shadow: 0 16px 40px -20px rgba(0, 0, 0, 0.6);
-}
-.beacon-proximity__key {
-  display: inline-grid;
-  place-items: center;
-  min-width: 24px;
-  height: 24px;
-  padding: 0 6px;
-  border-radius: 6px;
-  background: linear-gradient(180deg, rgba(255,255,255,0.14), rgba(255,255,255,0.06));
-  border: 1px solid rgba(255, 255, 255, 0.18);
-  font-family: var(--font-mono, ui-monospace, SFMono-Regular, monospace);
-  font-size: 0.78rem;
-  color: var(--gold, #f2b95c);
-  letter-spacing: 0.02em;
-}
-
-.proximity-enter-active,
-.proximity-leave-active {
-  transition: opacity 220ms ease, transform 220ms ease;
-}
-.proximity-enter-from,
-.proximity-leave-to {
-  opacity: 0;
-  transform: translate(-50%, 8px);
+@media (max-width: 900px) {
+  .graph-layout {
+    grid-template-columns: 1fr;
+  }
 }
 </style>

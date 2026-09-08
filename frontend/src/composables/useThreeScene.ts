@@ -89,7 +89,16 @@ export function useThreeScene(containerRef: Ref<HTMLElement | null>) {
     }
 
     while (contentGroup.value.children.length > 0) {
-      contentGroup.value.remove(contentGroup.value.children[0])
+      const child = contentGroup.value.children[0]
+      contentGroup.value.remove(child)
+      // 释放 GPU 资源，避免反复 loadScene 导致 geometry/material 内存泄漏
+      child.traverse((obj: THREE.Object3D) => {
+        const mesh = obj as THREE.Mesh
+        if (mesh.geometry) mesh.geometry.dispose()
+        const mat = mesh.material as THREE.Material | THREE.Material[] | undefined
+        if (Array.isArray(mat)) mat.forEach((m) => m.dispose())
+        else if (mat) mat.dispose()
+      })
     }
 
     scene.value.background = new THREE.Color(data.atmosphere.backgroundColor)

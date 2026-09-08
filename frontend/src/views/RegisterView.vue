@@ -4,7 +4,7 @@ import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '../stores/auth'
 import LiquidMemoryBackground from '../components/auth/LiquidMemoryBackground.vue'
-import { videos } from '../assets/media-catalog'
+import { loginBackgrounds, videos } from '../assets/media-catalog'
 
 const router = useRouter()
 const auth = useAuthStore()
@@ -36,6 +36,7 @@ const passwordsMatch = computed(() =>
 // 注册页与登录页共用视频素材策略 — Chronos Flow 作时间长河氛围
 const envVideo = (import.meta.env.VITE_LOGIN_VIDEO_URL as string | undefined)
 const videoUrl = computed(() => envVideo === undefined ? videos.chronosFlow.src : envVideo)
+const registerBackground = loginBackgrounds[2]
 
 const canSubmit = computed(() => (
   username.value.trim().length >= 3
@@ -71,10 +72,13 @@ async function handleSubmit() {
   <div class="login-stage">
     <LiquidMemoryBackground />
 
+    <img class="login-stage__image" :src="registerBackground.src" :alt="registerBackground.origin" fetchpriority="high" />
+
     <video
       v-if="videoUrl"
       class="login-stage__video"
-      autoplay muted loop playsinline preload="auto"
+      autoplay muted loop playsinline preload="metadata"
+      :poster="registerBackground.src"
     >
       <source :src="videoUrl" type="video/mp4" />
     </video>
@@ -185,7 +189,10 @@ async function handleSubmit() {
 
           <div class="stack">
             <button type="submit" class="button button--primary auth-submit" :disabled="!canSubmit">
-              <span v-if="loading" class="auth-spinner" aria-hidden="true"></span>
+              <svg v-if="loading" class="auth-loading-svg" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
+                <circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="3" style="opacity: 0.25"></circle>
+                <path fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" style="opacity: 0.85"></path>
+              </svg>
               <span>{{ loading ? t('register.submitting') : t('register.submit') }}</span>
             </button>
             <p class="help-text auth-footnote">
@@ -214,6 +221,7 @@ async function handleSubmit() {
   justify-content: center;
 }
 
+.login-stage__image,
 .login-stage__video {
   position: absolute;
   inset: 0;
@@ -221,7 +229,12 @@ async function handleSubmit() {
   height: 100%;
   object-fit: cover;
   z-index: -3;
-  opacity: 0.7;
+}
+
+.login-stage__video {
+  z-index: -2;
+  opacity: 0.18;
+  mix-blend-mode: screen;
 }
 
 .login-stage__ink {
@@ -456,13 +469,15 @@ async function handleSubmit() {
   font-size: 0.98rem;
 }
 
-.auth-spinner {
-  width: 14px;
-  height: 14px;
-  border: 2px solid rgba(5, 32, 23, 0.32);
-  border-top-color: #052017;
-  border-radius: 50%;
-  animation: auth-spin 0.7s linear infinite;
+.auth-loading-svg {
+  animation: auth-spin 0.8s linear infinite;
+  width: 18px;
+  height: 18px;
+  color: currentColor;
+  display: inline-block;
+  vertical-align: middle;
+  margin-right: 8px;
+  flex-shrink: 0;
 }
 
 @keyframes auth-spin {

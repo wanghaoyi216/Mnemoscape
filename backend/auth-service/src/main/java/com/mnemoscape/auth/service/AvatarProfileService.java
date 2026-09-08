@@ -30,12 +30,15 @@ public class AvatarProfileService {
 
     private final UserAvatarProfileRepository repository;
     private final AvatarGeneratorService generatorService;
+    private final AvatarProfilePersistenceService persistenceService;
     private final ObjectMapper objectMapper = new ObjectMapper();
 
     public AvatarProfileService(UserAvatarProfileRepository repository,
-                                 AvatarGeneratorService generatorService) {
+                                 AvatarGeneratorService generatorService,
+                                 AvatarProfilePersistenceService persistenceService) {
         this.repository = repository;
         this.generatorService = generatorService;
+        this.persistenceService = persistenceService;
     }
 
     /**
@@ -45,7 +48,6 @@ public class AvatarProfileService {
      * @param request 包含自我描述和公开设置
      * @return 生成的角色档案响应
      */
-    @Transactional
     public AvatarProfileResponse createOrUpdate(String userId, AvatarProfileRequest request) {
         if (userId == null || userId.isBlank()) {
             throw BizException.unauthorized();
@@ -54,33 +56,17 @@ public class AvatarProfileService {
         log.info("[AvatarProfile] Generating avatar for userId={}, descLen={}",
                 userId, request.getSelfDescription() == null ? 0 : request.getSelfDescription().length());
 
-        // 调用 AI 生成角色特征
+        // 调 AI 生成角色特征（无事务：LLM 耗时 5-30s，持有 DB 连接会耗尽 Hikari 池）
         AvatarGeneratorService.AvatarGenerationResult result =
                 generatorService.generate(request.getSelfDescription());
 
-        // 序列化为 JSON 字符串
         String traitsJson = toJson(result.traits);
         String emotionToneJson = toJson(result.emotionTone);
         String tagsJson = toJson(result.personalityTags);
 
-        // Upsert：已有则更新，没有则创建
-        UserAvatarProfile profile = repository.findByUserId(userId)
-                .orElseGet(() -> {
-                    UserAvatarProfile p = new UserAvatarProfile();
-                    p.setUserId(userId);
-                    return p;
-                });
-
-        profile.setSelfDescription(request.getSelfDescription());
-        profile.setAvatarTraits(traitsJson);
-        profile.setEmotionTone(emotionToneJson);
-        profile.setPersonalityTags(tagsJson);
-        profile.setAvatarTitle(result.avatarTitle);
-        profile.setAvatarStory(result.avatarStory);
-        profile.setIsPublic(request.getIsPublic() != null ? request.getIsPublic() : false);
-
-        profile = repository.save(profile);
-        log.info("[AvatarProfile] Saved avatar profile id={} for userId={}", profile.getId(), userId);
+        // 事务保存委托给独立 bean，保证事务边界短
+        UserAvatarProfile profile = persistenceService.saveProfile(userId, request,
+                result.avatarTitle, result.avatarStory, traitsJson, emotionToneJson, tagsJson);
 
         return toResponse(profile);
     }

@@ -160,12 +160,12 @@ async function runSystemProbe() {
   
   probeResult.value = {
     time: new Date().toLocaleString(),
-    nacos: 'OK (Heartbeat active, latency 2.2ms)',
-    mysql: 'OK (Active connection pooled: 8/30)',
-    milvus: 'OK (Collection mnemoscape_memories loaded, size: 4096d)',
-    neo4j: 'OK (Active session instantiated, 128 nodes, 256 edges)',
-    minio: 'OK (Bucket mnemoscape-dynamic accessible, read/write OK)',
-    status: 'EXCELLENT',
+    nacos: '正常 (心跳活跃，延迟 2.2ms)',
+    mysql: '正常 (活跃连接池: 8/30)',
+    milvus: '正常 (已加载 mnemoscape_memories 集合，维度: 4096维)',
+    neo4j: '正常 (已实例化活跃会话，128 节点，256 关系)',
+    minio: '正常 (已连接桶 mnemoscape-dynamic，读写正常)',
+    status: '极佳',
     score: 98
   }
   
@@ -202,7 +202,7 @@ async function runDisasterRecoveryBackup() {
     archiveName: `mnemoscape_deidentified_dr_${new Date().toISOString().slice(0,10).replace(/-/g,'')}_v1.tar.gz`,
     mysqlBytes: '12.4 MB',
     neo4jBytes: '2.1 MB',
-    minioBytes: '842.6 MB (De-identified assets)',
+    minioBytes: '842.6 MB (已脱敏资产)',
     sha256: sha,
     fileHash: sha.substring(0, 16) + '...' + sha.substring(48)
   }
@@ -215,18 +215,18 @@ async function runDisasterRecoveryBackup() {
 <template>
   <AdminPanel title="admin.maintenance.title" state="ready">
     <div class="maintenance-outer">
-      <h2 class="observability-title">🛡️ System Maintenance & Disaster Recovery</h2>
-      <p class="admin-panel-subtitle">Manage large-scale data backfills, full system probing, and enterprise archive backups.</p>
+      <h2 class="observability-title">🛡️ 系统维护与容灾备份</h2>
+      <p class="admin-panel-subtitle">管理大规模数据回填、系统体检分析以及企业级去隐私容灾归档打包。</p>
 
       <div class="maintenance-grid">
         <!-- 一键全栈系统体检 -->
         <section class="maint-card maint-card--premium">
-          <h3 class="maint-card__title">🧬 One-Click Full System Probe</h3>
-          <p class="maint-card__desc">Deep-scan all backend components, Nacos discover status, Neo4j connection pool, and Milvus vector consistency.</p>
+          <h3 class="maint-card__title">🧬 一键全栈系统体检</h3>
+          <p class="maint-card__desc">深度扫描所有后端组件，包括 Nacos 发现状态、MySQL 连接池、Neo4j 关系图谱活跃会话以及 Milvus 向量库一致性。</p>
           <div class="maint-card__row align-center">
             <button class="button button--primary" :disabled="probeBusy" @click="runSystemProbe">
               <span v-if="probeBusy" class="auth-spinner"></span>
-              <span v-else>Run System Diagnostic</span>
+              <span v-else>运行系统体检</span>
             </button>
             <div v-if="probeBusy" class="premium-progress-container">
               <div class="premium-progress-bar" :style="{ width: `${probeProgress}%` }"></div>
@@ -235,32 +235,32 @@ async function runDisasterRecoveryBackup() {
           </div>
           <div v-if="probeResult" class="probe-report-card">
             <header class="report-header">
-              <span class="report-title">⚡ Diagnostic Report (Score: {{ probeResult.score }}/100)</span>
+              <span class="report-title">⚡ 深度诊断报告 (健康得分: {{ probeResult.score }}/100)</span>
               <span class="report-badge success">{{ probeResult.status }}</span>
             </header>
             <table class="report-table">
               <tr>
-                <th>Probed Time</th>
+                <th>体检时间</th>
                 <td>{{ probeResult.time }}</td>
               </tr>
               <tr>
-                <th>Nacos Discovery</th>
+                <th>Nacos 服务发现</th>
                 <td class="success-text">✓ {{ probeResult.nacos }}</td>
               </tr>
               <tr>
-                <th>MySQL Pooled</th>
+                <th>MySQL 数据库</th>
                 <td class="success-text">✓ {{ probeResult.mysql }}</td>
               </tr>
               <tr>
-                <th>Milvus Embeddings</th>
+                <th>Milvus 向量库</th>
                 <td class="success-text">✓ {{ probeResult.milvus }}</td>
               </tr>
               <tr>
-                <th>Neo4j Topology</th>
+                <th>Neo4j 图谱拓扑</th>
                 <td class="success-text">✓ {{ probeResult.neo4j }}</td>
               </tr>
               <tr>
-                <th>MinIO Store</th>
+                <th>MinIO 对象存储</th>
                 <td class="success-text">✓ {{ probeResult.minio }}</td>
               </tr>
             </table>
@@ -269,12 +269,12 @@ async function runDisasterRecoveryBackup() {
 
         <!-- 一键脱敏快照容灾归档 -->
         <section class="maint-card maint-card--premium">
-          <h3 class="maint-card__title">🗂️ One-Click Disaster Recovery Backup</h3>
-          <p class="maint-card__desc">Package and export whole SQL tables, graph relations, and media assets in memory stores as a secure, de-identified archive.</p>
+          <h3 class="maint-card__title">🗂️ 一键容灾归档备份</h3>
+          <p class="maint-card__desc">打包并导出当前系统的 SQL 数据库、Neo4j 拓扑关系链以及已上传的 MinIO 媒体资源包，自动生成经过安全去隐私处理的离线归档。</p>
           <div class="maint-card__row align-center">
             <button class="button button--primary" :disabled="backupBusy" @click="runDisasterRecoveryBackup">
               <span v-if="backupBusy" class="auth-spinner"></span>
-              <span v-else>Execute DR Backup</span>
+              <span v-else>执行容灾备份</span>
             </button>
             <div v-if="backupBusy" class="premium-progress-container">
               <div class="premium-progress-bar" :style="{ width: `${backupProgress}%` }"></div>
@@ -283,28 +283,28 @@ async function runDisasterRecoveryBackup() {
           </div>
           <div v-if="backupResult" class="probe-report-card backup-report">
             <header class="report-header">
-              <span class="report-title">📦 Disaster Recovery Archive Generated</span>
-              <span class="report-badge success">SECURE</span>
+              <span class="report-title">📦 离线脱敏备份归档生成完毕</span>
+              <span class="report-badge success">安全加密</span>
             </header>
             <table class="report-table">
               <tr>
-                <th>Archive Name</th>
+                <th>归档文件名</th>
                 <td class="code-font">{{ backupResult.archiveName }}</td>
               </tr>
               <tr>
-                <th>SQL Snapshot</th>
+                <th>SQL 数据体量</th>
                 <td>{{ backupResult.mysqlBytes }}</td>
               </tr>
               <tr>
-                <th>Neo4j Relations</th>
+                <th>Neo4j 节点关系</th>
                 <td>{{ backupResult.neo4jBytes }}</td>
               </tr>
               <tr>
-                <th>MinIO Media Assets</th>
+                <th>MinIO 媒体资产</th>
                 <td>{{ backupResult.minioBytes }}</td>
               </tr>
               <tr>
-                <th>SHA-256 Certificate</th>
+                <th>SHA-256 校验指纹</th>
                 <td class="code-font highlight" :title="backupResult.sha256">{{ backupResult.fileHash }}</td>
               </tr>
             </table>

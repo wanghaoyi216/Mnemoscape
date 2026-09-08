@@ -253,7 +253,7 @@ onMounted(async () => {
     <!-- ══════════════════════════════════════════════════════════════════
          用户 3D 刻画模块
          ══════════════════════════════════════════════════════════════════ -->
-    <section v-if="auth.user" class="section-card avatar3d-section" style="margin-top: 24px; padding: 28px;">
+    <section v-if="auth.user" v-reveal class="section-card avatar3d-section" style="margin-top: 24px; padding: 28px;">
       <header class="page-shell__header" style="margin-bottom: 20px;">
         <div>
           <p class="eyebrow">{{ t('profile.avatar3d.eyebrow') }}</p>
@@ -366,6 +366,7 @@ onMounted(async () => {
     <!-- 情绪混沌吸引子 — 替代雷达图 -->
     <section
       v-if="auth.user"
+      v-reveal
       class="attractor-section section-card"
       :style="{ backgroundImage: `linear-gradient(180deg, rgba(8,10,14,0.86) 0%, rgba(8,10,14,0.68) 100%), url(${attractorBg})` }"
     >

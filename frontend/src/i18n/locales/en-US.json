@@ -29,12 +29,12 @@
   },
   "nav": {
     "memories": "Memories",
-    "create": "New memory",
-    "graph": "Memory graph",
+    "create": "New",
+    "graph": "Graph",
     "timeline": "Timeline",
     "atlas": "Atlas",
     "resonance": "Resonance",
-    "chat": "Chat & Discovery",
+    "chat": "Chat",
     "profile": "Profile",
     "logout": "Sign out",
     "locale": "Language"
@@ -241,7 +241,7 @@
     "username": "Username",
     "usernamePlaceholder": "your.username",
     "email": "Email",
-    "emailPlaceholder": "name@company.com",
+    "emailPlaceholder": "name{'@'}company.com",
     "password": "Password",
     "passwordPlaceholder": "At least 8 characters",
     "confirmPassword": "Confirm password",
@@ -424,8 +424,9 @@
     },
     "detail": {
       "back": "Back",
-      "enterScene": "Enter 3D scene",
+      "enterScene": "Enter memory graph",
       "lock": "Lock memory",
+
       "unlock": "Unlock",
       "drift": "Drift",
       "fragments": "Fragments",
@@ -462,16 +463,17 @@
     }
   },
   "scene": {
-    "eyebrow": "3D scene walkthrough",
-    "loading": "Loading scene…",
-    "lead": "Walk through this reconstructed memory, find hidden fragments, watch the drift engine subtly shift air and color temperature.",
+    "eyebrow": "Memory graph reconstruction",
+    "loading": "Constructing graph…",
+    "lead": "Explore your memory's structural connections across five dimensions (Time, Location, Details, Process, and Associations) powered by Neo4j graph databases.",
     "metrics": {
-      "objects": "Objects",
-      "fragments": "Fragments",
+      "objects": "Graph entities",
+      "fragments": "Memory fragments",
       "drift": "Drift"
     },
     "hud": {
-      "reconstructing": "Reconstructing scene…",
+      "reconstructing": "Constructing graph…",
+
       "lightingSuffix": "lighting",
       "terrainSuffix": "terrain",
       "objects": "{count} objects",
@@ -637,8 +639,9 @@
       "icebreakerError": "Echo Envoy is offline right now, try again later.",
       "suggestionTitle": "Echo Envoy's icebreaker",
       "useSuggestion": "Use this",
-      "mentionTip": "Mention @AI in a group to summon me",
-      "mentionHint": "Start a message with @AI or @Echo and I'll reply using recent group context"
+      "mentionTip": "Mention {x27@'}AI in a group to summon me",
+      "mentionHint": "Start a message with {x27@'}AI or {x27@'}Echo and I'll reply using recent group context",
+      "thoughtProcess": "Thinking Process"
     },
     "tabs": {
       "chats": "Chats",

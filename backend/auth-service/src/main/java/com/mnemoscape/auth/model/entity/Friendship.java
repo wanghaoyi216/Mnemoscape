@@ -2,11 +2,17 @@ package com.mnemoscape.auth.model.entity;
 
 import jakarta.persistence.*;
 import java.time.LocalDateTime;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
 
 @Entity
 @Table(name = "friendships", uniqueConstraints = {
     @UniqueConstraint(columnNames = {"user_id_1", "user_id_2"})
 })
+@Getter
+@Setter
+@NoArgsConstructor
 public class Friendship {
     @Id
     @Column(length = 36)
@@ -30,63 +36,12 @@ public class Friendship {
 
     public enum FriendshipStatus { PENDING, ACCEPTED, REJECTED }
 
-    public Friendship() {
-    }
-
     public Friendship(String id, String userId1, String userId2, FriendshipStatus status, LocalDateTime createdAt, LocalDateTime updatedAt) {
         this.id = id;
         this.userId1 = userId1;
         this.userId2 = userId2;
         this.status = status;
         this.createdAt = createdAt;
-        this.updatedAt = updatedAt;
-    }
-
-    public String getId() {
-        return id;
-    }
-
-    public void setId(String id) {
-        this.id = id;
-    }
-
-    public String getUserId1() {
-        return userId1;
-    }
-
-    public void setUserId1(String userId1) {
-        this.userId1 = userId1;
-    }
-
-    public String getUserId2() {
-        return userId2;
-    }
-
-    public void setUserId2(String userId2) {
-        this.userId2 = userId2;
-    }
-
-    public FriendshipStatus getStatus() {
-        return status;
-    }
-
-    public void setStatus(FriendshipStatus status) {
-        this.status = status;
-    }
-
-    public LocalDateTime getCreatedAt() {
-        return createdAt;
-    }
-
-    public void setCreatedAt(LocalDateTime createdAt) {
-        this.createdAt = createdAt;
-    }
-
-    public LocalDateTime getUpdatedAt() {
-        return updatedAt;
-    }
-
-    public void setUpdatedAt(LocalDateTime updatedAt) {
         this.updatedAt = updatedAt;
     }
 

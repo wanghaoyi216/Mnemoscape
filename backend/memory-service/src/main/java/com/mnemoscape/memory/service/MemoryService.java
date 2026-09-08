@@ -97,6 +97,7 @@ public class MemoryService {
      * <p>之前主线程顺序跑 enrichWithReconstruction（10-30s）会让前端建造完按提交后
      * 卡很久，体验差且 axios 默认 15s 超时容易直接报错。
      */
+    @CacheEvict(value = "publicPool", allEntries = true)
     public Memory createMemory(CreateMemoryRequest request, String userId) {
         log.info("Starting memory creation process for user: {}", userId);
         Memory memory = persistBaseMemory(request, userId);
@@ -123,17 +124,20 @@ public class MemoryService {
         try {
             asyncEnrichmentSelf.runEnrichmentAsync(memoryId);
         } catch (Exception e) {
-            log.warn("Failed to dispatch async reconstruction enrichment for {}: {}", memoryId, e.toString());
+            log.error("[async-enrich] Failed to dispatch reconstruction enrichment for memory {} (visualData will be missing, needs manual check): {}",
+                    memoryId, e.toString());
         }
         try {
             asyncEnrichmentSelf.runGraphProjectionAsync(memoryId);
         } catch (Exception e) {
-            log.warn("Failed to dispatch async graph projection for {}: {}", memoryId, e.toString());
+            log.error("[async-enrich] Failed to dispatch graph projection for memory {} (graph node will be missing, needs manual check): {}",
+                    memoryId, e.toString());
         }
         try {
             asyncEnrichmentSelf.runVectorIndexingAsync(memoryId);
         } catch (Exception e) {
-            log.warn("Failed to dispatch async vector indexing for {}: {}", memoryId, e.toString());
+            log.error("[async-enrich] Failed to dispatch vector indexing for memory {} (vector will be missing, needs manual check): {}",
+                    memoryId, e.toString());
         }
     }
 
@@ -232,7 +236,8 @@ public class MemoryService {
      * <p>用于：1) 历史记忆在 geocoder 开启前创建，坐标为 null；
      *          2) 切换 geocoder 策略后给旧数据补坐标。
      * 逐条同步处理（geocoder 本地 anchor 表 O(1)，远程 Nominatim 有速率限制），
-     * 返回 {scanned, resolved, skipped, limit}。
+     * 返回 {scanned, resolved, skipped, failed, limit}。skipped=已有坐标/无地名的正常跳过;
+     * failed=geocoding 返回空或抛异常的失败数,管理员可据此看到真实失败率。
      *
      * @param limit 单次最多处理多少条（防止一次性全表扫描）
      */
@@ -243,6 +248,7 @@ public class MemoryService {
         int scanned = 0;
         int resolved = 0;
         int skipped = 0;
+        int failed = 0;
         for (Memory m : page.getContent()) {
             scanned++;
             // 已有坐标的跳过
@@ -265,21 +271,22 @@ public class MemoryService {
                     log.info("[geocoords-backfill] resolved memory {} location='{}' → [{},{}]",
                             m.getId(), m.getMemoryLocation(), coords.get()[0], coords.get()[1]);
                 } else {
-                    skipped++;
+                    failed++;
                 }
             } catch (Exception e) {
                 log.warn("[geocoords-backfill] failed for memory {}: {}", m.getId(), e.toString());
-                skipped++;
+                failed++;
             }
         }
         Map<String, Object> result = new java.util.LinkedHashMap<>();
         result.put("scanned", scanned);
         result.put("resolved", resolved);
         result.put("skipped", skipped);
+        result.put("failed", failed);
         result.put("limit", capped);
         result.put("total", page.getTotalElements());
-        log.info("[geocoords-backfill] scanned={} resolved={} skipped={} (total={})",
-                scanned, resolved, skipped, page.getTotalElements());
+        log.info("[geocoords-backfill] scanned={} resolved={} skipped={} failed={} (total={})",
+                scanned, resolved, skipped, failed, page.getTotalElements());
         return result;
     }
 
@@ -645,7 +652,16 @@ public class MemoryService {
         return memoryLookup.findById(memoryId);
     }
 
+    public Map<String, Object> getMemoryGraphData(String id, String userId) {
+        Memory memory = getMemory(id, userId);
+        Map<String, Object> graph = memoryGraphService.getMemoryGraph(id, userId);
+        Map<String, Object> result = new java.util.HashMap<>(graph);
+        result.put("centerTitle", memory.getTitle());
+        return result;
+    }
+
     public Page<Memory> listMemories(String userId, int page, int size) {
+
         return listMemories(userId, page, size, null);
     }
 
@@ -658,10 +674,34 @@ public class MemoryService {
                 userId, parsedPrivacy, PageRequest.of(page, size));
     }
 
+    /**
+     * 跨用户公共记忆池——专供 resonance-service 真实化检索。
+     *
+     * <p>这是一个高频读、低频写的热路径：每个用户每次共鸣搜索都会拉一遍全量公共池，
+     * 而公共记忆的增删频率远低于读取。因此用 Caffeine 缓存 60s（{@code publicPool}
+     * cache，见 application.yml），key = {@code 调用方userId + ':' + limit}。
+     * 任何记忆写操作（创建/更新/删除/改隐私）都会 {@code @CacheEvict allEntries}
+     * 把整个池清空，保证不会读到陈旧的公共记忆。
+     *
+     * <p>不缓存单用户自己的列表（{@link #listMemories}）——那条路径每个用户只看自己，
+     * 命中率低且写后立即要看到，缓存收益不划算。
+     */
+    @org.springframework.cache.annotation.Cacheable(
+            value = "publicPool", key = "#excludeUserId + ':' + #limit", sync = true)
+    public List<Memory> getPublicPool(String excludeUserId, int limit) {
+        int safeLimit = Math.max(10, Math.min(limit, 500));
+        return memoryRepository.findPublicPoolExcludingUser(
+                excludeUserId, PageRequest.of(0, safeLimit));
+    }
+
     @Transactional
-    @CacheEvict(value = "memories", key = "#memoryId")
+    @org.springframework.cache.annotation.Caching(evict = {
+            @CacheEvict(value = "memories", key = "#memoryId"),
+            @CacheEvict(value = "publicPool", allEntries = true)
+    })
     public Memory updateMemory(String memoryId, UpdateMemoryRequest request, String userId) {
         Memory memory = getMemory(memoryId, userId);
+        checkOwner(memory, userId);
         String title = normalizeNonBlank(request.getTitle(), "Title");
         if (title != null) memory.setTitle(title);
 
@@ -716,9 +756,13 @@ public class MemoryService {
     }
 
     @Transactional
-    @CacheEvict(value = "memories", key = "#memoryId")
+    @org.springframework.cache.annotation.Caching(evict = {
+            @CacheEvict(value = "memories", key = "#memoryId"),
+            @CacheEvict(value = "publicPool", allEntries = true)
+    })
     public void deleteMemory(String memoryId, String userId) {
         Memory memory = getMemory(memoryId, userId);
+        checkOwner(memory, userId);
         memoryRepository.delete(memory);
         // best-effort 清理向量库残留，避免删除后 AI 检索仍召回旧记忆。
         try {
@@ -729,9 +773,13 @@ public class MemoryService {
     }
 
     @Transactional
-    @CacheEvict(value = "memories", key = "#memoryId")
+    @org.springframework.cache.annotation.Caching(evict = {
+            @CacheEvict(value = "memories", key = "#memoryId"),
+            @CacheEvict(value = "publicPool", allEntries = true)
+    })
     public Memory lockMemory(String memoryId, String userId) {
         Memory memory = getMemory(memoryId, userId);
+        checkOwner(memory, userId);
         memory.setIsLocked(true);
         memory = memoryRepository.save(memory);
         createVersion(memory, MemoryVersion.ChangeType.LOCK, "Memory locked");
@@ -739,9 +787,13 @@ public class MemoryService {
     }
 
     @Transactional
-    @CacheEvict(value = "memories", key = "#memoryId")
+    @org.springframework.cache.annotation.Caching(evict = {
+            @CacheEvict(value = "memories", key = "#memoryId"),
+            @CacheEvict(value = "publicPool", allEntries = true)
+    })
     public Memory unlockMemory(String memoryId, String userId) {
         Memory memory = getMemory(memoryId, userId);
+        checkOwner(memory, userId);
         memory.setIsLocked(false);
         driftCalculator.calculateAndApply(memory);
         memory = memoryRepository.save(memory);
@@ -760,9 +812,13 @@ public class MemoryService {
     }
 
     @Transactional
-    @CacheEvict(value = "memories", key = "#memoryId")
+    @org.springframework.cache.annotation.Caching(evict = {
+            @CacheEvict(value = "memories", key = "#memoryId"),
+            @CacheEvict(value = "publicPool", allEntries = true)
+    })
     public Memory restoreVersion(String memoryId, int versionNumber, String userId) {
         Memory memory = getMemory(memoryId, userId);
+        checkOwner(memory, userId);
         List<MemoryVersion> versions = versionRepository.findByMemoryIdOrderByVersionNumberDesc(memoryId);
         MemoryVersion targetVersion = versions.stream()
                 .filter(v -> v.getVersionNumber() == versionNumber)
@@ -807,7 +863,8 @@ public class MemoryService {
         try {
             fragmentRepository.deleteByMemoryId(memoryId);
         } catch (Exception e) {
-            log.warn("Failed to clear old fragments for memory {}: {}", memoryId, e.toString());
+            log.error("Failed to clear old fragments for memory {}: {}", memoryId, e.toString());
+            throw new BizException(500, "清除旧场景碎片失败,请重试场景重建");
         }
         // 2. 重新跑 reconstruct（写入 visualData / emotionProfile / 新 fragments）
         enrichWithReconstruction(memory);
@@ -840,8 +897,15 @@ public class MemoryService {
                     .snapshotData(objectMapper.writeValueAsString(memory))
                     .build();
             versionRepository.save(version);
+            // 版本快照是回滚兜底,失败不阻断主流程,但会丢失历史版本(监控会抓 ERROR 日志)
         } catch (Exception e) {
             log.error("Failed to create version for memory {}", memory.getId(), e);
+        }
+    }
+
+    private void checkOwner(Memory memory, String userId) {
+        if (memory.getUserId() == null || !memory.getUserId().equals(userId)) {
+            throw BizException.forbidden();
         }
     }
 

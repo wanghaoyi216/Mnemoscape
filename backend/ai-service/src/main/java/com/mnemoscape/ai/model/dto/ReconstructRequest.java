@@ -2,6 +2,10 @@ package com.mnemoscape.ai.model.dto;
 
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Size;
+import lombok.AllArgsConstructor;
+import lombok.Builder;
+import lombok.Data;
+import lombok.NoArgsConstructor;
 
 /**
  * 场景重建请求。
@@ -15,6 +19,10 @@ import jakarta.validation.constraints.Size;
  * <p>历史下限 20 字符曾让 builder 端 5-19 字符的短描述被 400 拒绝；
  * 现下限放到 5，与 MemoryBuilderView 的提交阈值对齐。
  */
+@Data
+@NoArgsConstructor
+@AllArgsConstructor
+@Builder
 public class ReconstructRequest {
     @NotBlank(message = "Description is required")
     @Size(min = 5, max = 2000, message = "Description must be between 5 and 2000 characters")
@@ -26,23 +34,8 @@ public class ReconstructRequest {
     private String memoryTimeOfDay;  // MORNING / NOON / AFTERNOON / EVENING / NIGHT
     private String memoryLocation;
 
-    public ReconstructRequest() {
-    }
-
+    /** 历史签名：仅描述。保留兼容旧调用方（如 memory-service 老路径）。 */
     public ReconstructRequest(String description) {
         this.description = description;
     }
-
-    public String getDescription() { return description; }
-    public void setDescription(String description) { this.description = description; }
-    public String getTitle() { return title; }
-    public void setTitle(String title) { this.title = title; }
-    public Integer getMemoryYear() { return memoryYear; }
-    public void setMemoryYear(Integer memoryYear) { this.memoryYear = memoryYear; }
-    public String getMemorySeason() { return memorySeason; }
-    public void setMemorySeason(String memorySeason) { this.memorySeason = memorySeason; }
-    public String getMemoryTimeOfDay() { return memoryTimeOfDay; }
-    public void setMemoryTimeOfDay(String memoryTimeOfDay) { this.memoryTimeOfDay = memoryTimeOfDay; }
-    public String getMemoryLocation() { return memoryLocation; }
-    public void setMemoryLocation(String memoryLocation) { this.memoryLocation = memoryLocation; }
 }

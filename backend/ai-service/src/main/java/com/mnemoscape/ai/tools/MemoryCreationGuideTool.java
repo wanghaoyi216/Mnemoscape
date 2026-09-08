@@ -1,5 +1,6 @@
 package com.mnemoscape.ai.tools;
 
+import com.mnemoscape.ai.tools.audit.Tool;
 import org.springframework.ai.model.function.FunctionCallback;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
@@ -45,6 +46,7 @@ public class MemoryCreationGuideTool {
                 .build();
     }
 
+    @Tool("memoryCreationGuideTool")
     public Response guide(Request req) {
         Response resp = new Response();
         String desc = (req != null && req.currentDescription != null) ? req.currentDescription : "";

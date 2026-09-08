@@ -72,6 +72,15 @@
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-cache</artifactId>
         </dependency>
+        <!-- @AspectJ support for the RateLimit AOP aspect.  spring-boot-starter-aop
+             brings spring-aop + aspectjweaver; RateLimitAspect uses
+             @Around("@annotation(...)") to wrap controller methods with the
+             sliding-window check.  spring-context (already transitive via
+             spring-boot-starter-web) supplies @EnableAspectJAutoProxy. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-aop</artifactId>
+        </dependency>
         <!-- spring-data-redis exposes the RedisConnectionFailureException /
              RedisSystemException types that BypassOnFailureCacheManager catches
              to transparently degrade to "no cache" when Redis is down
@@ -81,6 +90,12 @@
         <dependency>
             <groupId>org.springframework.data</groupId>
             <artifactId>spring-data-redis</artifactId>
+        </dependency>
+        <!-- Redisson 分布式锁客户端。各服务注入 RedissonClient 即可用;
+             配置在 RedissonAutoConfig(连现有 Redis)。 -->
+        <dependency>
+            <groupId>org.redisson</groupId>
+            <artifactId>redisson-spring-boot-starter</artifactId>
         </dependency>
         <!-- Micrometer core — supplies MeterRegistry / Counter / Timer used by
              the admin-dashboard observability decorator (AdminMetrics).  Every
@@ -92,6 +107,15 @@
         <dependency>
             <groupId>io.micrometer</groupId>
             <artifactId>micrometer-core</artifactId>
+        </dependency>
+        <!-- Prometheus scrape format bridge — required so the actuator's
+             /actuator/prometheus endpoint actually renders Micrometer meters
+             in the Prometheus exposition format.  Without this, the endpoint
+             is registered but always 404/empty.  Version is BOM-managed by
+             spring-boot-dependencies (3.2.5 → 1.12.x). -->
+        <dependency>
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-registry-prometheus</artifactId>
         </dependency>
 
         <!-- OpenFeign primitives — needed by FeignAuthForwardingInterceptor so

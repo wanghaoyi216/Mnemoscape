@@ -3,12 +3,14 @@ package com.mnemoscape.ai.bugfix;
 import com.mnemoscape.ai.config.AiUpstreamProperties;
 import com.mnemoscape.ai.controller.ChatController;
 import com.mnemoscape.ai.model.dto.AiChatRequest;
+import com.mnemoscape.ai.service.AiCacheService;
 import com.mnemoscape.ai.service.ChatReasoner;
 import com.mnemoscape.ai.service.VisionDescriber;
 import com.mnemoscape.ai.tools.MilvusSearchTool;
 import org.junit.jupiter.api.Test;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.model.ChatModel;
+import org.springframework.beans.factory.ObjectProvider;
 import org.springframework.core.env.Environment;
 import org.springframework.mock.env.MockEnvironment;
 import org.springframework.web.servlet.mvc.method.annotation.SseEmitter;
@@ -66,10 +68,10 @@ class SseSleepCadenceExplorationTest {
         Environment env = new MockEnvironment()
                 .withProperty("spring.ai.openai.api-key",
                         "nvapi-placeholder-set-real-key-via-env-for-real-ai-calls");
-        VisionDescriber visionDescriber = new VisionDescriber(props, env, "https://integrate.api.nvidia.com");
-        MilvusSearchTool milvusTool = new MilvusSearchTool(null, null, null);
-        ChatReasoner reasoner = new ChatReasoner(builder, streamingBuilder, props, env, visionDescriber, milvusTool, "https://integrate.api.nvidia.com");
-        ChatController controller = new ChatController(reasoner, null);
+        VisionDescriber visionDescriber = new VisionDescriber(props, env, emptyProvider(), "https://integrate.api.nvidia.com");
+        MilvusSearchTool milvusTool = new MilvusSearchTool(null, null, null, null);
+        ChatReasoner reasoner = new ChatReasoner(builder, streamingBuilder, props, env, visionDescriber, milvusTool, emptyProvider(), null, null, null, reactor.core.scheduler.Schedulers.immediate(), "https://integrate.api.nvidia.com");
+        ChatController controller = new ChatController(reasoner, null, null, reactor.core.scheduler.Schedulers.immediate(), mock(com.mnemoscape.ai.quota.UserTokenQuotaService.class));
 
         AiChatRequest req = new AiChatRequest();
         req.setQuestion("帮我整理本月的情绪轨迹");
@@ -205,5 +207,12 @@ class SseSleepCadenceExplorationTest {
                 ec = ec.getSuperclass();
             }
         }
+    }
+
+    /** 给测试用：返回空的 ObjectProvider —— 让 ChatReasoner/VisionDescriber 内部
+     *  {@code getIfAvailable()} 拿到 null，从而走"无 AiCacheService 的旧路径"。 */
+    @SuppressWarnings("unchecked")
+    private static ObjectProvider<AiCacheService> emptyProvider() {
+        return (ObjectProvider<AiCacheService>) mock(ObjectProvider.class);
     }
 }

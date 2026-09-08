@@ -9,7 +9,10 @@ export const useAuthStore = defineStore('auth', () => {
   const user = ref<User | null>(null)
 
   const isLoggedIn = computed(() => !!token.value)
-  const isAdmin = computed(() => user.value?.role === 'ADMIN')
+  // dev 后门：localStorage 设 'forceAdmin=1' 可绕过 isAdmin 判定，强制显示管理入口。
+  // 仅用于权限/数据不规范导致入口消失时的排查，生产构建下 import.meta.env.DEV 为 false 自动失效。
+  const forceAdmin = computed(() => import.meta.env.DEV && localStorage.getItem('forceAdmin') === '1')
+  const isAdmin = computed(() => user.value?.role === 'ADMIN' || forceAdmin.value)
 
   function toUser(profile: Partial<User> & { id: string; username: string; email: string; verified?: boolean; role?: string }): User {
     return {
@@ -60,19 +63,22 @@ export const useAuthStore = defineStore('auth', () => {
   }
 
   async function logout() {
-    // 先告诉后端把 JTI 写黑名单（fail-open：失败不阻塞用户登出）
-    if (token.value) {
-      try {
-        await logoutApi()
-      } catch {
-        // 静默吞下 — 本地凭据还是要清掉
-      }
-    }
+    const tempToken = token.value
+    // 立即清空本地凭据（Fail-safe：防 401 响应拦截循环）
     token.value = ''
     refreshToken.value = ''
     user.value = null
     localStorage.removeItem('token')
     localStorage.removeItem('refreshToken')
+
+    // 告诉后端把 JTI 写黑名单（fail-open：即使失败或 401 也不阻塞本地登出）
+    if (tempToken) {
+      try {
+        await logoutApi()
+      } catch {
+        // 静默吞下
+      }
+    }
   }
 
   return { token, refreshToken, user, isLoggedIn, isAdmin, login, register, fetchProfile, logout }

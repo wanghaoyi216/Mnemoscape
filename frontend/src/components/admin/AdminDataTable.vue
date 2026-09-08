@@ -71,59 +71,62 @@ function gotoPage(p: number) {
     <div v-if="loading" class="admin-table__loader" role="status">
       <span class="admin-table__spinner" />
     </div>
-    <table class="admin-table__table">
-      <thead>
-        <tr>
-          <th v-if="selectable" class="admin-table__checkbox-cell">
-            <input type="checkbox" :checked="allSelected" @change="toggleAll" />
-          </th>
-          <th
-            v-for="col in columns"
-            :key="col.key"
-            :style="{ width: col.width, textAlign: col.align || 'left' }"
+    <div class="admin-table__wrapper">
+      <table class="admin-table__table">
+        <thead>
+          <tr>
+            <th v-if="selectable" class="admin-table__checkbox-cell" scope="col">
+              <input type="checkbox" :checked="allSelected" @change="toggleAll" />
+            </th>
+            <th
+              v-for="col in columns"
+              :key="col.key"
+              :style="{ width: col.width, minWidth: col.width, textAlign: col.align || 'left' }"
+              scope="col"
+            >
+              {{ t(col.labelKey) }}
+            </th>
+            <th class="admin-table__actions-head" scope="col">
+              <slot name="header-actions" />
+            </th>
+          </tr>
+        </thead>
+        <tbody>
+          <tr v-if="!rows.length && !loading" class="admin-table__empty-row">
+            <td :colspan="columns.length + (selectable ? 2 : 1)">
+              <slot name="empty">
+                <div class="admin-table__empty">{{ t('admin.common.empty') }}</div>
+              </slot>
+            </td>
+          </tr>
+          <tr
+            v-for="row in rows"
+            :key="row.id"
+            :class="{ 'admin-table__row--selected': (selectedIds || []).includes(row.id) }"
           >
-            {{ t(col.labelKey) }}
-          </th>
-          <th class="admin-table__actions-head">
-            <slot name="header-actions" />
-          </th>
-        </tr>
-      </thead>
-      <tbody>
-        <tr v-if="!rows.length && !loading" class="admin-table__empty-row">
-          <td :colspan="columns.length + (selectable ? 2 : 1)">
-            <slot name="empty">
-              <div class="admin-table__empty">{{ t('admin.common.empty') }}</div>
-            </slot>
-          </td>
-        </tr>
-        <tr
-          v-for="row in rows"
-          :key="row.id"
-          :class="{ 'admin-table__row--selected': (selectedIds || []).includes(row.id) }"
-        >
-          <td v-if="selectable" class="admin-table__checkbox-cell">
-            <input
-              type="checkbox"
-              :checked="(selectedIds || []).includes(row.id)"
-              @change="toggleRow(row.id)"
-            />
-          </td>
-          <td
-            v-for="col in columns"
-            :key="col.key"
-            :style="{ textAlign: col.align || 'left' }"
-          >
-            <slot :name="`cell-${col.key}`" :row="row" :value="(row as any)[col.key]">
-              {{ (row as any)[col.key] }}
-            </slot>
-          </td>
-          <td class="admin-table__actions-cell">
-            <slot name="row-actions" :row="row" />
-          </td>
-        </tr>
-      </tbody>
-    </table>
+            <td v-if="selectable" class="admin-table__checkbox-cell">
+              <input
+                type="checkbox"
+                :checked="(selectedIds || []).includes(row.id)"
+                @change="toggleRow(row.id)"
+              />
+            </td>
+            <td
+              v-for="col in columns"
+              :key="col.key"
+              :style="{ width: col.width, minWidth: col.width, textAlign: col.align || 'left' }"
+            >
+              <slot :name="`cell-${col.key}`" :row="row" :value="(row as any)[col.key]">
+                {{ (row as any)[col.key] }}
+              </slot>
+            </td>
+            <td class="admin-table__actions-cell">
+              <slot name="row-actions" :row="row" />
+            </td>
+          </tr>
+        </tbody>
+      </table>
+    </div>
 
     <div class="admin-table__footer">
       <span class="admin-table__total">{{ total }}</span>
@@ -150,6 +153,12 @@ function gotoPage(p: number) {
   overflow: hidden;
 }
 
+.admin-table__wrapper {
+  width: 100%;
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
 .admin-table__loader {
   position: absolute;
   top: 0; left: 0; right: 0;
@@ -174,6 +183,7 @@ function gotoPage(p: number) {
   border-bottom: 1px solid var(--border);
   text-align: left;
   vertical-align: middle;
+  white-space: nowrap;
 }
 .admin-table__table th {
   background: rgba(255, 255, 255, 0.02);
@@ -200,6 +210,15 @@ function gotoPage(p: number) {
   text-align: right;
   white-space: nowrap;
   width: 1%;
+  position: sticky;
+  right: 0;
+  background: rgba(14, 17, 22, 0.95);
+  backdrop-filter: blur(4px);
+  z-index: 2;
+  box-shadow: -4px 0 12px rgba(0, 0, 0, 0.1);
+}
+.admin-table__table tbody tr:hover .admin-table__actions-cell {
+  background: rgba(20, 30, 35, 0.95);
 }
 
 .admin-table__empty {

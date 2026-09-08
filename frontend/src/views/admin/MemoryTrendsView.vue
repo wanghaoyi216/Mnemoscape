@@ -55,6 +55,10 @@ const chartOption = computed(() => {
     tooltip: {
       trigger: 'axis',
       axisPointer: { type: 'shadow' },
+      backgroundColor: 'rgba(15, 23, 42, 0.85)',
+      borderColor: 'rgba(255, 255, 255, 0.1)',
+      borderWidth: 1,
+      textStyle: { color: '#ffffff' },
     },
     legend: {
       data: [t('admin.memoryTrends.legend.created'), t('admin.memoryTrends.legend.modified')],
@@ -66,21 +70,31 @@ const chartOption = computed(() => {
       type: 'category',
       data: buckets.map((b) => b.bucket),
       axisLabel: { color: '#8b95a1' },
-      axisLine: { lineStyle: { color: '#3a4250' } },
+      axisLine: { lineStyle: { color: 'rgba(255, 255, 255, 0.1)' } },
     },
     yAxis: {
       type: 'value',
       minInterval: 1,
       axisLabel: { color: '#8b95a1' },
       axisLine: { show: false },
-      splitLine: { lineStyle: { color: 'rgba(255,255,255,0.06)' } },
+      splitLine: { lineStyle: { color: 'rgba(255, 255, 255, 0.04)' } },
     },
     series: [
       {
         name: t('admin.memoryTrends.legend.created'),
         type: 'bar',
         stack: 'total',
-        itemStyle: { color: '#36d8b4', borderRadius: [4, 4, 0, 0] },
+        itemStyle: { 
+          color: {
+            type: 'linear',
+            x: 0, y: 0, x2: 0, y2: 1,
+            colorStops: [
+              { offset: 0, color: '#3b82f6' },
+              { offset: 1, color: '#8b5cf6' }
+            ]
+          },
+          borderRadius: [4, 4, 0, 0] 
+        },
         emphasis: { focus: 'series' },
         data: buckets.map((b) => b.createdCount),
       },
@@ -88,7 +102,17 @@ const chartOption = computed(() => {
         name: t('admin.memoryTrends.legend.modified'),
         type: 'bar',
         stack: 'total',
-        itemStyle: { color: '#f2b95c', borderRadius: [4, 4, 0, 0] },
+        itemStyle: { 
+          color: {
+            type: 'linear',
+            x: 0, y: 0, x2: 0, y2: 1,
+            colorStops: [
+              { offset: 0, color: '#f43f5e' },
+              { offset: 1, color: '#fb7185' }
+            ]
+          },
+          borderRadius: [4, 4, 0, 0] 
+        },
         emphasis: { focus: 'series' },
         data: buckets.map((b) => b.modifiedCount),
       },

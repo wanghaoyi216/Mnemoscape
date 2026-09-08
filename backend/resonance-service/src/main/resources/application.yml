@@ -7,14 +7,33 @@ spring:
     name: resonance-service
   lifecycle:
     timeout-per-shutdown-phase: 30s
+  # @Async 线程池显式收口。共鸣服务异步推送/通知任务走这里。
+  # 有界队列 + CALLER_RUNS 拒绝策略，避免高并发下队列无限堆积 OOM。
+  task:
+    execution:
+      pool:
+        core-size: 8
+        max-size: 24
+        queue-capacity: 200
+        keep-alive: 60s
+      thread-name-prefix: resonance-async-
+      shutdown:
+        await-termination: true
+        await-termination-period: 20s
   datasource:
     url: jdbc:mysql://${MYSQL_HOST:100.66.166.46}:3306/mnemoscape_resonance?createDatabaseIfNotExist=true&useSSL=false&allowPublicKeyRetrieval=true&characterEncoding=UTF-8
     username: ${MYSQL_USER:root}
     password: ${MYSQL_PASSWORD:root123}
     driver-class-name: com.mysql.cj.jdbc.Driver
     hikari:
-      maximum-pool-size: 15
-      minimum-idle: 3
+      # 高并发优化：连接池从 15→25
+      maximum-pool-size: 25
+      minimum-idle: 8
+      connection-timeout: ${HIKARI_CONNECTION_TIMEOUT_MS:20000}
+      validation-timeout: ${HIKARI_VALIDATION_TIMEOUT_MS:5000}
+      idle-timeout: ${HIKARI_IDLE_TIMEOUT_MS:300000}
+      max-lifetime: ${HIKARI_MAX_LIFETIME_MS:1200000}
+      leak-detection-threshold: ${HIKARI_LEAK_DETECTION_THRESHOLD_MS:60000}
       pool-name: MnemoscapeResonancePool
   jpa:
     hibernate:
@@ -37,10 +56,27 @@ spring:
       connect-timeout: 3s
       lettuce:
         pool:
-          max-active: 16
-          max-idle: 8
-          min-idle: 2
-          max-wait: 2s
+          # 高并发优化：Redis 连接池从 16→50
+          max-active: 50
+          max-idle: 20
+          min-idle: 5
+          max-wait: 3s
+  rabbitmq:
+    host: ${RABBITMQ_HOST:100.66.166.46}
+    port: ${RABBITMQ_PORT:5672}
+    username: ${RABBITMQ_USER:guest}
+    password: ${RABBITMQ_PASSWORD:guest}
+    listener:
+      simple:
+        prefetch: 16
+        acknowledge-mode: auto
+        default-requeue-rejected: false
+        retry:
+          enabled: true
+          initial-interval: 1s
+          multiplier: 2.0
+          max-interval: 8s
+          max-attempts: 3
   cloud:
     inetutils:
       preferred-networks:
@@ -74,7 +110,7 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,info,metrics,prometheus,loggers
+        include: health,info,metrics,prometheus,loggers,caches
   endpoint:
     health:
       show-details: when_authorized
@@ -92,6 +128,16 @@ logging:
 feign:
   client:
     config:
+      # 全局默认收紧到 15s：共鸣检索是交互式操作，原先 120s 会让下游变慢时
+      # 用户干等 2 分钟才超时，体验灾难。按下游特性分别覆写：
       default:
-        connectTimeout: 5000
-        readTimeout: 120000
+        connectTimeout: 3000
+        readTimeout: 15000
+      # memory-service 纯 DB 查询，正常 < 1s；给 8s 上限快速失败 fail-closed。
+      memory-service:
+        connectTimeout: 3000
+        readTimeout: 8000
+      # ai-service 含 embedding + Milvus 向量召回，允许稍宽，但远低于原 120s。
+      ai-service:
+        connectTimeout: 3000
+        readTimeout: 20000

@@ -1,6 +1,6 @@
 #!/bin/bash
 # E2E integration test script for Mnemoscape platform
-# Prerequisites: All services running (docker compose -f docker/docker-compose.all.yml up -d)
+# Prerequisites: All services running (docker compose -f deploy/docker-compose.all.yml up -d)
 
 BASE="http://localhost:8080/api/v1"
 PASS=0

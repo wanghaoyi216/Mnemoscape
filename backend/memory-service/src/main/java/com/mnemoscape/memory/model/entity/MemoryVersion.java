@@ -4,11 +4,17 @@ import jakarta.persistence.*;
 import java.time.LocalDateTime;
 import java.util.UUID;
 import com.mnemoscape.memory.model.converter.MemoryVersionChangeTypeConverter;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
 
 @Entity
 @Table(name = "memory_versions", uniqueConstraints = {
     @UniqueConstraint(columnNames = {"memory_id", "version_number"})
 })
+@Getter
+@Setter
+@NoArgsConstructor
 public class MemoryVersion {
     @Id
     @Column(length = 36)
@@ -34,8 +40,6 @@ public class MemoryVersion {
     private LocalDateTime createdAt;
 
     public enum ChangeType { CREATE, MODIFY, DRIFT, LOCK, RESTORE }
-
-    public MemoryVersion() {}
 
     public MemoryVersion(String id, String memoryId, Integer versionNumber, ChangeType changeType, String changeDescription, String snapshotData, LocalDateTime createdAt) {
         this.id = id;
@@ -74,21 +78,6 @@ public class MemoryVersion {
             return new MemoryVersion(id, memoryId, versionNumber, changeType, changeDescription, snapshotData, createdAt);
         }
     }
-
-    public String getId() { return id; }
-    public void setId(String id) { this.id = id; }
-    public String getMemoryId() { return memoryId; }
-    public void setMemoryId(String memoryId) { this.memoryId = memoryId; }
-    public Integer getVersionNumber() { return versionNumber; }
-    public void setVersionNumber(Integer versionNumber) { this.versionNumber = versionNumber; }
-    public ChangeType getChangeType() { return changeType; }
-    public void setChangeType(ChangeType changeType) { this.changeType = changeType; }
-    public String getChangeDescription() { return changeDescription; }
-    public void setChangeDescription(String changeDescription) { this.changeDescription = changeDescription; }
-    public String getSnapshotData() { return snapshotData; }
-    public void setSnapshotData(String snapshotData) { this.snapshotData = snapshotData; }
-    public LocalDateTime getCreatedAt() { return createdAt; }
-    public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
 
     @PrePersist
     protected void onCreate() {

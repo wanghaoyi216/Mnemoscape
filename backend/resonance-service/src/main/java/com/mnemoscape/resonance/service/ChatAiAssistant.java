@@ -148,6 +148,7 @@ public class ChatAiAssistant {
                 Map<String, Object> req = new LinkedHashMap<>();
                 req.put("question", prompt);
                 req.put("locale", "zh");
+                req.put("reAct", true);
                 ApiResponse<Map<String, Object>> resp = aiClient.chat(req, userId);
                 Map<String, Object> data = resp == null ? null : resp.getData();
                 Object answer = data == null ? null : data.get("answer");
@@ -164,6 +165,7 @@ public class ChatAiAssistant {
             Map<String, Object> req = new LinkedHashMap<>();
             req.put("question", prompt);
             req.put("locale", "zh");
+            req.put("reAct", true);
             
             String jsonReq = new com.fasterxml.jackson.databind.ObjectMapper().writeValueAsString(req);
             

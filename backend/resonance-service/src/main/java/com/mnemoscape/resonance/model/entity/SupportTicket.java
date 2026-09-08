@@ -3,6 +3,9 @@ package com.mnemoscape.resonance.model.entity;
 import jakarta.persistence.*;
 import java.time.LocalDateTime;
 import java.util.UUID;
+import lombok.Getter;
+import lombok.NoArgsConstructor;
+import lombok.Setter;
 
 /**
  * 客服工单。
@@ -18,6 +21,9 @@ import java.util.UUID;
         @Index(name = "idx_support_assigned", columnList = "assigned_admin_id"),
         @Index(name = "idx_support_created", columnList = "created_at")
 })
+@Getter
+@Setter
+@NoArgsConstructor
 public class SupportTicket {
     @Id
     @Column(length = 36)
@@ -57,31 +63,6 @@ public class SupportTicket {
 
     @Column(name = "updated_at")
     private LocalDateTime updatedAt;
-
-    public SupportTicket() {}
-
-    public String getId() { return id; }
-    public void setId(String id) { this.id = id; }
-    public String getUserId() { return userId; }
-    public void setUserId(String userId) { this.userId = userId; }
-    public String getSubject() { return subject; }
-    public void setSubject(String subject) { this.subject = subject; }
-    public String getDescription() { return description; }
-    public void setDescription(String description) { this.description = description; }
-    public String getStatus() { return status; }
-    public void setStatus(String status) { this.status = status; }
-    public String getPriority() { return priority; }
-    public void setPriority(String priority) { this.priority = priority; }
-    public String getAssignedAdminId() { return assignedAdminId; }
-    public void setAssignedAdminId(String assignedAdminId) { this.assignedAdminId = assignedAdminId; }
-    public String getClientType() { return clientType; }
-    public void setClientType(String clientType) { this.clientType = clientType; }
-    public LocalDateTime getLastMessageAt() { return lastMessageAt; }
-    public void setLastMessageAt(LocalDateTime lastMessageAt) { this.lastMessageAt = lastMessageAt; }
-    public LocalDateTime getCreatedAt() { return createdAt; }
-    public void setCreatedAt(LocalDateTime createdAt) { this.createdAt = createdAt; }
-    public LocalDateTime getUpdatedAt() { return updatedAt; }
-    public void setUpdatedAt(LocalDateTime updatedAt) { this.updatedAt = updatedAt; }
 
     @PrePersist
     protected void onCreate() {

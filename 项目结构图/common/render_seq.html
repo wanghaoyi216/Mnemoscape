@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html>
+<head><meta charset='utf-8'><script src='https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js'></script>
+<script>mermaid.initialize({startOnLoad:true,theme:'default',sequence:{showSequenceNumbers:true}});</script>
+<style>body{margin:20px;background:#fff;}</style></head>
+<body><div class='mermaid'>
+sequenceDiagram
+    autonumber
+    participant Client as 客户端
+    participant Mdc as MdcContextFilter<br/>(web)
+    participant Jwt as JwtAuthFilter<br/>(security)
+    participant SecCtx as SecurityContextHolder
+    participant RL as RateLimitAspect<br/>(ratelimit)
+    participant Redis1 as Redis(限流)
+    participant Ctrl as Controller
+    participant Svcs as Service / @Cacheable
+    participant Bypass as BypassCache<br/>(admin/cache)
+    participant Redis2 as Redis(缓存)
+    participant DB as 数据库/Milvus
+    participant Idem as IdempotencyGuard<br/>(idempotency) [写接口才走]
+    participant EH as GlobalExceptionHandler<br/>(exception)
+    participant Met as AdminMetrics<br/>(admin/metrics)
+    participant MQ as RabbitMQ<br/>(event producer)
+
+    Client->>Mdc: HTTP 请求 + Authorization 头
+    Note over Mdc: 生成/透传 requestId<br/>塞进 MDC（日志信标）
+    Mdc->>Jwt: 放行到下一个 Filter
+    Jwt->>Jwt: 取 Bearer token<br/>JwtTokenProvider.validateToken
+    alt token 无效/过期/在黑名单
+        Jwt-->>Client: 401 Invalid token
+    else token 合法
+        Jwt->>SecCtx: setAuthentication(通行证)<br/>(userId + ROLE_*)
+        Jwt->>Ctrl: filterChain.doFilter 放行
+        Note over Jwt: finally 清空 SecurityContext<br/>防线程复用串号
+    end
+
+    RL->>RL: @Around 拦截<br/>resolveSubject(用户/IP)
+    RL->>Redis1: tryAcquire(桶, limit, window)<br/>Lua 原子: 清旧→数→判
+    alt 超限
+        RL->>EH: throw RateLimitExceededException
+        EH-->>Client: 429 + Retry-After 头
+    else 未超限
+        RL->>Ctrl: proceed 放行
+    end
+
+    Ctrl->>Svcs: 调用 Service 方法
+    alt 是写接口(带 Idempotency-Key)
+        Svcs->>Idem: executeOnce(key, action)
+        Idem->>Idem: 查缓存→抢 SETNX 锁→执行→缓存结果
+    end
+
+    Svcs->>Bypass: cache.get(key) [@Cacheable]
+    alt Redis 缓存正常
+        Bypass->>Redis2: delegate.get(key)
+        Redis2-->>Bypass: 命中值
+        Bypass-->>Svcs: 返回缓存值
+        Svcs->>Met: cacheHits(endpoint).increment()
+    else Redis 故障
+        Bypass->>Redis2: delegate.get(key) 抛异常
+        Redis2--xBypass: RedisConnectionFailure
+        Note over Bypass: catch 吃掉异常<br/>返回 null(当未命中)
+        Bypass->>DB: valueLoader.call() 查库
+        DB-->>Bypass: 真实数据
+        Bypass-->>Svcs: 返回数据(未缓存)
+        Svcs->>Met: degraded(endpoint, reason).increment()
+    else 缓存未命中
+        Bypass->>DB: 执行底层方法查库
+        DB-->>Bypass: 数据
+        Bypass->>Redis2: put 缓存(失败仅 warn)
+        Bypass-->>Svcs: 返回数据
+        Svcs->>Met: cacheMisses + uncachedLatency.record()
+    end
+
+    Svcs->>MQ: publish MemoryIndexedEvent<br/>(event 包的 record 作为载荷)
+    Note over MQ: 异步发往 ai-service<br/>consumer 用 eventId 做<br/>MessageDedupGuard 幂等
+
+    Svcs-->>Ctrl: 业务结果
+    Ctrl-->>Client: 200 + ApiResponse 信封
+
+    Note over EH: 任何环节抛异常<br/>都由 GlobalExceptionHandler 接住<br/>统一转 ApiResponse
+    Note over Met: 全程 AdminMetrics 埋点<br/>→ Prometheus/Grafana
+</div></body></html>

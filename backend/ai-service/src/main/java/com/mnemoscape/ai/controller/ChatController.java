@@ -2,11 +2,16 @@ package com.mnemoscape.ai.controller;
 
 import com.mnemoscape.ai.exception.AiUpstreamException;
 import com.mnemoscape.ai.model.dto.AiChatRequest;
+import com.mnemoscape.ai.model.dto.AiChatResponse;
 import com.mnemoscape.ai.service.ChatReasoner;
 import com.mnemoscape.ai.service.ReActController;
+import com.mnemoscape.ai.agent.DynamicWorkflowEngine;
 import com.mnemoscape.common.dto.ApiResponse;
+import reactor.core.scheduler.Scheduler;
+import reactor.core.scheduler.Schedulers;
 import jakarta.annotation.PreDestroy;
 import jakarta.validation.Valid;
+import com.mnemoscape.ai.quota.UserTokenQuotaService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.MediaType;
@@ -50,6 +55,9 @@ public class ChatController {
 
     private final ChatReasoner reasoner;
     private final ReActController reactController;
+    private final DynamicWorkflowEngine workflowEngine;
+    private final Scheduler aiBlockingScheduler;
+    private final com.mnemoscape.ai.quota.UserTokenQuotaService tokenQuota;
 
     /** 共享调度器：在视觉前置阻塞 / 上游首字延迟期间发 SSE 注释帧 :keepalive，
      *  防止前端浏览器 / 反向代理 / 开发服务器把"无任何字节流出"的 SSE 当死连接 reset。
@@ -61,16 +69,30 @@ public class ChatController {
     });
 
     /** P3-13 动态 plan：把 LLM 规划调用放在独立线程池，不阻塞主回答的首字延迟。
-     *  生成完成后通过 SSE 的 plan_update 帧异步推到前端，前端 reducer 替换硬编码 plan。 */
-    private final java.util.concurrent.ExecutorService planExec = Executors.newCachedThreadPool(r -> {
-        Thread t = new Thread(r, "ai-dynamic-plan");
-        t.setDaemon(true);
-        return t;
-    });
+     *  生成完成后通过 SSE 的 plan_update 帧异步推到前端，前端 reducer 替换硬编码 plan。
+     *
+     *  <p>线程池收口：原先用 {@code newCachedThreadPool()}（无上限），上千并发对话峰值
+     *  会瞬间拉起上千线程拖垮 JVM。改成有界 {@link java.util.concurrent.ThreadPoolExecutor}：
+     *  core=4 / max=16 / 队列 100，拒绝策略 {@code CallerRunsPolicy} —— 队列满了由请求
+     *  线程自己跑规划（plan 本就是可选增强，慢一点也不影响主回答流），形成天然背压。 */
+    private final java.util.concurrent.ThreadPoolExecutor planExec = new java.util.concurrent.ThreadPoolExecutor(
+            4, 16, 60L, TimeUnit.SECONDS,
+            new java.util.concurrent.LinkedBlockingQueue<>(100),
+            r -> {
+                Thread t = new Thread(r, "ai-dynamic-plan");
+                t.setDaemon(true);
+                return t;
+            },
+            new java.util.concurrent.ThreadPoolExecutor.DiscardPolicy()); // 降级策略：队列满丢任务，plan 是可选增强，不能阻塞 servlet 线程
 
-    public ChatController(ChatReasoner reasoner, ReActController reactController) {
+    public ChatController(ChatReasoner reasoner, ReActController reactController, DynamicWorkflowEngine workflowEngine,
+                          @org.springframework.beans.factory.annotation.Qualifier("aiBlockingScheduler") Scheduler aiBlockingScheduler,
+                          com.mnemoscape.ai.quota.UserTokenQuotaService tokenQuota) {
         this.reasoner = reasoner;
         this.reactController = reactController;
+        this.workflowEngine = workflowEngine;
+        this.aiBlockingScheduler = aiBlockingScheduler;
+        this.tokenQuota = tokenQuota;
     }
 
     @PreDestroy
@@ -80,14 +102,37 @@ public class ChatController {
     }
 
     @PostMapping(consumes = MediaType.APPLICATION_JSON_VALUE)
-    public ResponseEntity<ApiResponse<Map<String, Object>>> chatOnce(
+    public ResponseEntity<ApiResponse<AiChatResponse>> chatOnce(
             @Valid @RequestBody AiChatRequest request,
             jakarta.servlet.http.HttpServletRequest http) {
         // 通过网关 X-User-Id 头取 caller，让 reasoner 能跑强制 RAG（关键词召回当前用户记忆）
         String userId = http.getHeader("X-User-Id");
-        Map<String, Object> body = buildPayload(request);
-        body.put("answer", reasoner.generateAnswer(request, userId));
+        // R8：per-user token 配额（同步路径：直接 429 + 友好消息）
+        if (!tokenQuota.tryAcquire(userId, Math.max(1, request.getQuestion().length() / 4))) {
+            return ResponseEntity.status(429)
+                    .body(ApiResponse.error(429, "今日 AI 使用额度已用完，请明天再来"));
+        }
+        String answer;
+        if (request.isReAct()) {
+            answer = generateReActAnswer(request, userId);
+        } else {
+            answer = reasoner.generateAnswer(request, userId);
+        }
+        AiChatResponse body = buildChatResponse(request, answer);
         return ResponseEntity.ok(ApiResponse.success(body));
+    }
+
+    private String generateReActAnswer(AiChatRequest request, String userId) {
+        String requestId = UUID.randomUUID().toString();
+        StringBuilder finalAnswer = new StringBuilder();
+        reactController.run(request, userId, requestId, evt -> {
+            if (evt != null && "token".equals(evt.type)) {
+                if (evt.text != null) {
+                    finalAnswer.append(evt.text);
+                }
+            }
+        });
+        return finalAnswer.toString().trim();
     }
 
     @PostMapping(value = "/stream",
@@ -97,6 +142,19 @@ public class ChatController {
                                   jakarta.servlet.http.HttpServletRequest http) {
         String userId = http.getHeader("X-User-Id");
         SseEmitter emitter = new SseEmitter(120_000L); // 2 min
+        // R8：per-user token 配额（流式路径：失败推 error 事件 + complete，不发任何 token）
+        // 必须放在 stream(emitter,...) 调用之前，避免前端已经看到 meta 后再被掐断
+        if (!tokenQuota.tryAcquire(userId, Math.max(1, request.getQuestion().length() / 4))) {
+            try {
+                emitter.send(SseEmitter.event().name("error").data(java.util.Map.of(
+                        "code", 429,
+                        "reason", "quota_exceeded",
+                        "detail", "今日 AI 使用额度已用完，请明天再来"
+                )));
+            } catch (Exception ignored) {}
+            emitter.complete();
+            return emitter;
+        }
         stream(emitter, request, userId);
         return emitter;
     }
@@ -119,6 +177,29 @@ public class ChatController {
             body.put("attachment_count", request.getImages().size());
         }
         return body;
+    }
+
+    /**
+     * 为 chatOnce 同步路径构建 AiChatResponse（与 stream 路径的 Map payload 平行）。
+     * 字段逐字对应当前 Map 的 key，可选字段仅当条件满足时设值，
+     * 依赖 {@link com.fasterxml.jackson.annotation.JsonInclude} NON_NULL 序列化等价原 Map。
+     */
+    private AiChatResponse buildChatResponse(AiChatRequest request, String answer) {
+        boolean zh = request.getLocale() == null || request.getLocale().startsWith("zh");
+        ChatReasoner.Intent intent = reasoner.classify(request.getQuestion()); // 意图识别
+        AiChatResponse.AiChatResponseBuilder builder = AiChatResponse.builder()
+                .intent(intent.name().toLowerCase())
+                .traceId(UUID.randomUUID().toString())
+                .answer(answer); // 拼接VO
+        if (intent == ChatReasoner.Intent.PLAN) {
+            builder.plan(reasoner.buildPlan(request.getQuestion(), zh));
+        }
+        if (reasoner.hasImages(request)) {
+            builder.vision_used(true)
+                   .vision_model(reasoner.getVisionModel())
+                   .attachment_count(request.getImages().size());
+        }
+        return builder.build();
     }
 
     /**
@@ -153,6 +234,12 @@ public class ChatController {
             return;
         }
 
+        // ============ 动态工作流路径 ============
+        if (request.isDynamicWorkflow()) {
+            streamWorkflow(emitter, request, userId, requestId);
+            return;
+        }
+
         // ============ 任务 C4：ReAct 自主循环路径 ============
         // 客户端在 AiChatRequest.reAct=true 时显式启用 ReAct；前端 SSE 帧
         // 会从 token/done 扩展为 thought/tool_start/tool_end/token/done，
@@ -172,10 +259,12 @@ public class ChatController {
                     java.util.List<String> dyn = reasoner.generateDynamicPlan(
                             request.getQuestion(), zh, userId);
                     if (dyn != null && !dyn.isEmpty()) {
-                        emitter.send(SseEmitter.event().name("plan_update").data(Map.of(
-                                "plan", dyn,
-                                "source", "llm",
-                                "requestId", requestId)));
+                        synchronized (emitter) {
+                            emitter.send(SseEmitter.event().name("plan_update").data(Map.of(
+                                    "plan", dyn,
+                                    "source", "llm",
+                                    "requestId", requestId)));
+                        }
                     }
                 } catch (Exception e) {
                     log.debug("[ChatController] plan_update emit failed (client gone?): {}", e.getMessage());
@@ -391,6 +480,101 @@ public class ChatController {
         });
         emitter.onError(t -> {
             keepAlive.cancel(false);
+        });
+    }
+
+    private void streamWorkflow(SseEmitter emitter, AiChatRequest request, String userId, String requestId) {
+        AtomicBoolean firstTokenSeen = new AtomicBoolean(false);
+        ScheduledFuture<?> keepAlive = keepAliveExec.scheduleAtFixedRate(() -> {
+            if (firstTokenSeen.get()) return;
+            try {
+                emitter.send(SseEmitter.event().comment("keepalive"));
+            } catch (Exception e) {
+                // Ignore
+            }
+        }, 5, 5, TimeUnit.SECONDS);
+
+        Disposable disposable = workflowEngine.executeWorkflow(request, userId, requestId)
+                .subscribeOn(aiBlockingScheduler)
+                .subscribe(
+                        evt -> {
+                            if (evt == null) return;
+                            try {
+                                switch (evt.type == null ? "" : evt.type) {
+                                    case "thought": {
+                                        emitter.send(SseEmitter.event().name("thought").data(Map.of("text", evt.text)));
+                                        break;
+                                    }
+                                    case "workflow_start": {
+                                        emitter.send(SseEmitter.event().name("workflow_start").data(Map.of("steps", evt.text)));
+                                        break;
+                                    }
+                                    case "workflow_step_start": {
+                                        emitter.send(SseEmitter.event().name("workflow_step_start").data(Map.of("stepId", evt.text)));
+                                        break;
+                                    }
+                                    case "workflow_step_end": {
+                                        emitter.send(SseEmitter.event().name("workflow_step_end").data(Map.of("result", evt.text)));
+                                        break;
+                                    }
+                                    case "subagent_start": {
+                                        emitter.send(SseEmitter.event().name("subagent_start").data(Map.of("payload", evt.text)));
+                                        break;
+                                    }
+                                    case "subagent_end": {
+                                        emitter.send(SseEmitter.event().name("subagent_end").data(Map.of("payload", evt.text)));
+                                        break;
+                                    }
+                                    case "acceptance_start": {
+                                        emitter.send(SseEmitter.event().name("acceptance_start").data(Map.of("requestId", requestId)));
+                                        break;
+                                    }
+                                    case "acceptance_end": {
+                                        emitter.send(SseEmitter.event().name("acceptance_end").data(Map.of("result", evt.text)));
+                                        break;
+                                    }
+                                    case "token": {
+                                        if (evt.text == null || evt.text.isEmpty()) break;
+                                        firstTokenSeen.set(true);
+                                        emitter.send(SseEmitter.event().name("token").data(evt.text));
+                                        break;
+                                    }
+                                    case "done": {
+                                        emitter.send(SseEmitter.event().name("done").data(Map.of("ok", true, "requestId", requestId)));
+                                        try { emitter.complete(); } catch (Exception ignored) {}
+                                        break;
+                                    }
+                                    case "error": {
+                                        emitter.send(SseEmitter.event().name("error").data(Map.of("code", "WORKFLOW_ERROR", "detail", evt.text, "requestId", requestId)));
+                                        try { emitter.complete(); } catch (Exception ignored) {}
+                                        break;
+                                    }
+                                }
+                            } catch (Exception e) {
+                                log.debug("[ChatController] workflow SSE emit failed: {}", e.getMessage());
+                            }
+                        },
+                        err -> {
+                            keepAlive.cancel(false);
+                            log.error("[ChatController] workflow execution failed: {}", err.getMessage());
+                            try {
+                                emitter.send(SseEmitter.event().name("error").data(Map.of("code", "WORKFLOW_UNCAUGHT", "detail", err.getMessage(), "requestId", requestId)));
+                                emitter.complete();
+                            } catch (Exception ignored) {}
+                        },
+                        () -> {
+                            keepAlive.cancel(false);
+                        }
+                );
+
+        emitter.onTimeout(() -> {
+            keepAlive.cancel(false);
+            disposable.dispose();
+            try { emitter.complete(); } catch (Exception ignored) {}
+        });
+        emitter.onError(t -> {
+            keepAlive.cancel(false);
+            disposable.dispose();
         });
     }
 }

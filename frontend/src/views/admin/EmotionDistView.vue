@@ -48,34 +48,43 @@ const panelState = computed<'idle' | 'loading' | 'empty' | 'error' | 'ready'>(()
 
 const chartOption = computed(() => {
   const d = data.value
-  // Always materialise an indicators array; even when data is null we render
-  // the radar shape (Vue's v-if hides the chart for non-ready states anyway).
   return {
-    tooltip: { trigger: 'item' },
+    tooltip: { 
+      trigger: 'item',
+      backgroundColor: 'rgba(15, 23, 42, 0.85)',
+      borderColor: 'rgba(255, 255, 255, 0.1)',
+      borderWidth: 1,
+      textStyle: { color: '#ffffff' },
+    },
     legend: { textStyle: { color: '#cdd5dd' }, top: 4 },
     radar: {
       indicator: COMPONENTS.map((k) => ({
         name: t(`admin.emotion.components.${k}`),
         max: 1.0,
       })),
-      splitLine: { lineStyle: { color: 'rgba(255,255,255,0.10)' } },
+      splitLine: { lineStyle: { color: 'rgba(255,255,255,0.04)' } },
       splitArea: {
         areaStyle: {
-          color: ['rgba(54,216,180,0.04)', 'rgba(54,216,180,0.02)'],
+          color: ['rgba(255, 255, 255, 0.01)', 'rgba(255, 255, 255, 0.03)'],
         },
       },
-      axisLine: { lineStyle: { color: 'rgba(255,255,255,0.18)' } },
+      axisLine: { lineStyle: { color: 'rgba(255,255,255,0.08)' } },
       axisName: { color: '#cdd5dd', fontSize: 12 },
-      radius: '64%',
+      radius: '68%',
     },
     series: [
       {
         type: 'radar',
         symbol: 'circle',
         symbolSize: 6,
-        lineStyle: { color: '#36d8b4', width: 2 },
-        itemStyle: { color: '#36d8b4' },
-        areaStyle: { color: 'rgba(54, 216, 180, 0.18)' },
+        lineStyle: { 
+          color: '#8b5cf6', 
+          width: 2.2,
+          shadowColor: 'rgba(139, 92, 246, 0.5)',
+          shadowBlur: 10
+        },
+        itemStyle: { color: '#8b5cf6' },
+        areaStyle: { color: 'rgba(139, 92, 246, 0.24)' },
         data: d
           ? [
               {

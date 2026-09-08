@@ -15,6 +15,7 @@ import static org.junit.jupiter.api.Assertions.assertTrue;
 import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.anyList;
 import static org.mockito.ArgumentMatchers.anyString;
+import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.Mockito.doReturn;
 import static org.mockito.Mockito.mock;
 import static org.mockito.Mockito.when;
@@ -42,7 +43,8 @@ import static org.mockito.Mockito.when;
  *
  * <p>为了不依赖 Spring 容器和真实 ChatClient：
  *  1) mock {@link ChatReasoner} — {@code streamReActAnswer} 返回预制 token 流
- *  2) mock {@link ToolRegistry} — {@code get("milvusSearchTool")} 返回 fake tool
+ *  2) mock {@link ToolRegistry} — 直接 stub 统一执行口
+ *     {@code execute("milvusSearchTool", ...)} 返回预制结果
  *  3) 直接 new {@link ReActController}(reasoner, registry)
  */
 class ReActControllerIntegrationTest {
@@ -55,7 +57,7 @@ class ReActControllerIntegrationTest {
     void setUp() {
         reasoner = mock(ChatReasoner.class);
         toolRegistry = mock(ToolRegistry.class);
-        controller = new ReActController(reasoner, toolRegistry);
+        controller = new ReActController(reasoner, toolRegistry, reactor.core.scheduler.Schedulers.immediate());
     }
 
     @Test
@@ -81,12 +83,9 @@ class ReActControllerIntegrationTest {
                     return n == 0 ? turn0Flux : turn1Flux;
                 });
 
-        // ---- mock ToolRegistry.get("milvusSearchTool") ----
-        ToolRegistry.Tool fakeMilvus = mock(ToolRegistry.Tool.class);
-        when(fakeMilvus.name()).thenReturn("milvusSearchTool");
-        when(fakeMilvus.execute(anyString(), any()))
+        // ---- mock ToolRegistry 统一执行口（带审计）----
+        when(toolRegistry.execute(eq("milvusSearchTool"), anyString(), any()))
                 .thenReturn(java.util.Map.of("hits", 3, "summaries", List.of()));
-        when(toolRegistry.get("milvusSearchTool")).thenReturn(fakeMilvus);
 
         // ---- 收集事件 ----
         List<ChatReasoner.ReActEvent> events = new CopyOnWriteArrayList<>();
@@ -148,10 +147,8 @@ class ReActControllerIntegrationTest {
                 any(), any()))
                 .thenReturn(loop);
 
-        ToolRegistry.Tool fakeMilvus = mock(ToolRegistry.Tool.class);
-        when(fakeMilvus.name()).thenReturn("milvusSearchTool");
-        doReturn(java.util.Map.of("hits", 0)).when(fakeMilvus).execute(anyString(), any());
-        when(toolRegistry.get("milvusSearchTool")).thenReturn(fakeMilvus);
+        doReturn(java.util.Map.of("hits", 0)).when(toolRegistry)
+                .execute(anyString(), anyString(), any());
 
         List<ChatReasoner.ReActEvent> events = new CopyOnWriteArrayList<>();
         AiChatRequest req = new AiChatRequest();

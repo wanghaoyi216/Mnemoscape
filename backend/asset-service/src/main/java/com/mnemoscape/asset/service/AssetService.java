@@ -29,9 +29,32 @@ public class AssetService {
     private final MinioClient minioClient;
     private final StorageProperties properties;
 
+    /**
+     * MinIO 列表的轻量 TTL 缓存（无外部依赖）。
+     *
+     * <p>{@code /static/resources} 是前端每次进页面都打的热路径，而它每次都要全桶
+     * recursive 扫描 + 给每个对象现生成 presigned URL（N 次 HMAC 签名），素材一多就是
+     * 几百 ms。素材的增删频率远低于读取，所以这里按 {@code userId} 缓存结果 30s：
+     * presigned URL 有效期是 1h（见 getPresignedUrl），30s 内复用完全安全。
+     * 上传 / 删除 / 迁移等写操作会主动 {@link #invalidateListCache()} 清空，保证新素材
+     * 最迟下一次请求（或热加载窗口）就能看到。
+     */
+    private static final long LIST_CACHE_TTL_MS = 30_000L;
+    private final java.util.concurrent.ConcurrentHashMap<String, CachedListing> listCache =
+            new java.util.concurrent.ConcurrentHashMap<>();
+
+    private record CachedListing(List<StaticResource> items, long expiresAt) {
+        boolean fresh() { return System.currentTimeMillis() < expiresAt; }
+    }
+
     public AssetService(MinioClient minioClient, StorageProperties properties) {
         this.minioClient = minioClient;
         this.properties = properties;
+    }
+
+    /** 写操作后清空列表缓存，避免读到不含新对象的陈旧列表。 */
+    public void invalidateListCache() {
+        listCache.clear();
     }
 
     /**
@@ -41,12 +64,17 @@ public class AssetService {
      * 不接受任何用户提示词 / 表单字段覆盖。
      */
     public String uploadForUser(MultipartFile file, String userId) {
+        return uploadForUser(file, userId, null);
+    }
+
+    public String uploadForUser(MultipartFile file, String userId, String purpose) {
         if (userId == null || userId.isBlank()) {
             throw new BizException(401, "未通过身份认证，请重新登录");
         }
         requireMinioCredentials();
         String safeName = sanitizeFilename(file.getOriginalFilename());
-        String objectName = USER_PREFIX + userId + "/" + UUID.randomUUID() + "-" + safeName;
+        String subPath = (purpose != null && !purpose.isBlank()) ? purpose.trim() + "/" : "";
+        String objectName = USER_PREFIX + userId + "/" + subPath + UUID.randomUUID() + "-" + safeName;
         ensureBucket();
         try (InputStream in = file.getInputStream()) {
             minioClient.putObject(PutObjectArgs.builder()
@@ -55,10 +83,11 @@ public class AssetService {
                     .stream(in, file.getSize(), properties.getPartSize())
                     .contentType(file.getContentType())
                     .build());
-            log.info("Uploaded for user={} object={}", userId, objectName);
+            log.info("Uploaded for user={} purpose={} object={}", userId, purpose, objectName);
+            invalidateListCache();
             return objectName;
         } catch (Exception e) {
-            throw new RuntimeException("Upload failed", e);
+            throw BizException.internalError("Upload failed", e);
         }
     }
 
@@ -79,9 +108,10 @@ public class AssetService {
                     .contentType(file.getContentType())
                     .build());
             log.info("Uploaded (legacy, public): {}", objectName);
+            invalidateListCache();
             return objectName;
         } catch (Exception e) {
-            throw new RuntimeException("Upload failed", e);
+            throw BizException.internalError("Upload failed", e);
         }
     }
 
@@ -95,7 +125,7 @@ public class AssetService {
         } catch (ErrorResponseException ex) {
             throw BizException.notFound("Asset", objectName);
         } catch (Exception e) {
-            throw new RuntimeException("Download failed", e);
+            throw BizException.internalError("Download failed", e);
         }
     }
 
@@ -109,7 +139,7 @@ public class AssetService {
                     .expiry(properties.getPresignedTtlSeconds(), TimeUnit.SECONDS)
                     .build());
         } catch (Exception e) {
-            throw new RuntimeException("Failed to generate URL", e);
+            throw BizException.internalError("Failed to generate URL", e);
         }
     }
 
@@ -121,8 +151,9 @@ public class AssetService {
                     .object(objectName)
                     .build());
             log.info("Deleted: {}", objectName);
+            invalidateListCache();
         } catch (Exception e) {
-            throw new RuntimeException("Delete failed", e);
+            throw BizException.internalError("Delete failed", e);
         }
     }
 
@@ -146,7 +177,14 @@ public class AssetService {
      * </ul>
      */
     public List<StaticResource> listMinioStaticForUser(String userId) {
-        return listMinioStaticInternal(userId, false /* includeAllUsers */);
+        String cacheKey = userId == null ? "__anon__" : userId;
+        CachedListing cached = listCache.get(cacheKey);
+        if (cached != null && cached.fresh()) {
+            return cached.items();
+        }
+        List<StaticResource> fresh = listMinioStaticInternal(userId, false /* includeAllUsers */);
+        listCache.put(cacheKey, new CachedListing(fresh, System.currentTimeMillis() + LIST_CACHE_TTL_MS));
+        return fresh;
     }
 
     private List<StaticResource> listMinioStaticInternal(String userId, boolean includeAllUsers) {
@@ -185,9 +223,14 @@ public class AssetService {
                     if (topDir.equals("users")) {
                         // 私有对象 owner 检查：与原 name.startsWith(USER_PREFIX) 分支语义一致
                         if (!includeAllUsers) {
-                            if (userScope == null || !name.startsWith(userScope)) {
-                                continue;
-                            }
+                             if (userScope == null || !name.startsWith(userScope)) {
+                                 continue;
+                             }
+                             // 过滤掉聊天、客服支持等非记忆存储相关的子目录对象
+                             String relativePath = name.substring(userScope.length());
+                             if (relativePath.startsWith("chat/") || relativePath.startsWith("support/")) {
+                                 continue;
+                             }
                         }
                     } else if (StorageProperties.PUBLIC_TOP_LEVEL_DIRS.contains(topDir)) {
                         // 白名单公共对象放行
@@ -351,6 +394,7 @@ public class AssetService {
         result.put("migrated", migrated);
         result.put("dryRun", dryRun);
         result.put("samples", samples);
+        if (!dryRun && migrated > 0) invalidateListCache();
         log.info("[migrate] legacy-orphan scan done: scanned={} candidates={} migrated={} dryRun={}",
                 scanned, candidates, migrated, dryRun);
         return result;
@@ -465,6 +509,7 @@ public class AssetService {
         result.put("wouldMigrate", wouldMigrate);
         result.put("dryRun", dryRun);
         result.put("samples", samples);
+        if (!dryRun && wouldMigrate > 0) invalidateListCache();
         log.info("[migrate] off-allowlist scan done: scanned={} candidates={} wouldMigrate={} dryRun={}",
                 scanned, candidates, wouldMigrate, dryRun);
         return result;
@@ -534,7 +579,7 @@ public class AssetService {
                         .bucket(properties.getBucket()).build());
             }
         } catch (Exception e) {
-            throw new RuntimeException("Bucket check failed", e);
+            throw BizException.internalError("Bucket check failed", e);
         }
     }
 }

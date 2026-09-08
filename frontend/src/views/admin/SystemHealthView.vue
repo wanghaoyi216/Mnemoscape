@@ -11,7 +11,6 @@ import AdminPanel from '../../components/admin/AdminPanel.vue'
 import { useAdminHealth } from '../../composables/useAdminHealth'
 import { getAdminAuditLogs } from '../../api/admin'
 import type { AdminHealthComponent, AdminHealthStatus, AuditLog } from '../../api/admin'
-import { renderMarkdown } from '../../composables/useMarkdown'
 
 const { t } = useI18n()
 const { data, loading, error, degraded, degradedReasons, fetch } = useAdminHealth()
@@ -127,15 +126,52 @@ async function fetchAuditLogs() {
 }
 
 let auditTimer: any = null
+let visibilityHandler: (() => void) | null = null
 
 onMounted(() => {
   void fetch()
   void fetchAuditLogs()
-  auditTimer = setInterval(fetchAuditLogs, 4000)
+  // 30s 轮询（与后端 admin cache TTL 60s 错开，保证第二次拿 cache）。
+  // tab 隐藏时由 visibilitychange 暂停；连续错误时用 backoff 拉长间隔，
+  // 避免后端 5xx 风暴里打爆服务。
+  const baseInterval = 30_000
+  const maxInterval = 5 * 60_000
+  let consecutiveErrors = 0
+  let currentInterval = baseInterval
+
+  const tick = async () => {
+    if (document.hidden) return
+    try {
+      await fetchAuditLogs()
+      if (consecutiveErrors > 0) {
+        consecutiveErrors = 0
+        currentInterval = baseInterval
+      }
+    } catch {
+      consecutiveErrors++
+      currentInterval = Math.min(maxInterval, baseInterval * Math.pow(2, Math.min(consecutiveErrors, 5)))
+    }
+  }
+  const schedule = () => {
+    if (auditTimer) clearInterval(auditTimer)
+    auditTimer = setInterval(tick, currentInterval)
+  }
+  schedule()
+  // 错误恢复 / 隐藏 → 重新调度
+  visibilityHandler = () => {
+    if (!document.hidden) {
+      consecutiveErrors = 0
+      currentInterval = baseInterval
+      schedule()
+      void fetchAuditLogs()
+    }
+  }
+  document.addEventListener('visibilitychange', visibilityHandler)
 })
 
 onUnmounted(() => {
   if (auditTimer) clearInterval(auditTimer)
+  if (visibilityHandler) document.removeEventListener('visibilitychange', visibilityHandler)
 })
 </script>
 
@@ -332,6 +368,7 @@ onUnmounted(() => {
             </header>
             <div class="audit-modal-body">
               <table class="audit-detail-table">
+                <tbody>
                 <tr>
                   <th>Timestamp</th>
                   <td>{{ selectedLog.time }}</td>
@@ -374,6 +411,7 @@ onUnmounted(() => {
                   <th>Integrity SHA-256 Hash</th>
                   <td class="code-font">{{ selectedLog.payloadHash }}</td>
                 </tr>
+                </tbody>
               </table>
             </div>
             <footer class="audit-modal-footer">
