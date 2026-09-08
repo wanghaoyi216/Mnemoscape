@@ -74,7 +74,7 @@ public class ResonanceService {
      *   <li>低于 {@value #SCORE_FLOOR} 的丢弃；最终最少返回 {@value #MIN_TOP_K} 条（即使低分）</li>
      * </ol>
      */
-    @Cacheable(value = AdminCacheConfig.CACHE_RESONANCE_SEARCH, key = "#memoryId + '-' + #userId")
+    @Cacheable(value = AdminCacheConfig.CACHE_RESONANCE_SEARCH, key = "#memoryId + '-' + #userId", sync = true)
     public List<Map<String, Object>> searchResonances(String memoryId, String userId) {
         if (userId == null || userId.isBlank()) {
 

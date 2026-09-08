@@ -1,6 +1,7 @@
 package com.mnemoscape.ai.tools;
 
 import com.mnemoscape.ai.client.MemoryServiceClient;
+import com.mnemoscape.ai.tools.audit.Tool;
 import com.mnemoscape.common.dto.ApiResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -66,6 +67,7 @@ public class TimelineNavigationTool {
     }
 
     @SuppressWarnings("unchecked")
+    @Tool("timelineNavigationTool")
     public Response navigate(Request req) {
         Response resp = new Response();
         String userId = MilvusSearchTool.currentUserId();

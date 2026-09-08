@@ -22,9 +22,11 @@ public class AiCacheProperties {
 
     private final Cache cache = new Cache();
     private final RateLimit rateLimit = new RateLimit();
+    private final Quota quota = new Quota();
 
     public Cache getCache() { return cache; }
     public RateLimit getRateLimit() { return rateLimit; }
+    public Quota getQuota() { return quota; }
 
     public static class Cache {
         private final Embedding embedding = new Embedding();
@@ -66,5 +68,20 @@ public class AiCacheProperties {
         public void setEmbedRpm(int embedRpm) { this.embedRpm = Math.max(1, embedRpm); }
         public int getVisionRpm() { return visionRpm; }
         public void setVisionRpm(int visionRpm) { this.visionRpm = Math.max(1, visionRpm); }
+    }
+
+    /**
+     * Per-user 每日 Token 配额（移植自墨问 per-user LLM Token 配额思路）。
+     * 与 {@link RateLimit} 的"全局 RPM 防上游 429"互补：这个按
+     * "单用户 / 自然日 / token 总量"做成本治理，超限拒绝本次对话并返回友好提示。
+     */
+    public static class Quota {
+        private boolean enabled = true;
+        private long dailyTokenLimit = 200_000L;
+
+        public boolean isEnabled() { return enabled; }
+        public void setEnabled(boolean enabled) { this.enabled = enabled; }
+        public long getDailyTokenLimit() { return dailyTokenLimit; }
+        public void setDailyTokenLimit(long dailyTokenLimit) { this.dailyTokenLimit = Math.max(1, dailyTokenLimit); }
     }
 }

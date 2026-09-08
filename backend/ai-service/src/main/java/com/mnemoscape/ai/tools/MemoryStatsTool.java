@@ -1,6 +1,7 @@
 package com.mnemoscape.ai.tools;
 
 import com.mnemoscape.ai.client.MemoryServiceClient;
+import com.mnemoscape.ai.tools.audit.Tool;
 import com.mnemoscape.common.dto.ApiResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -74,6 +75,7 @@ public class MemoryStatsTool {
     }
 
     @SuppressWarnings("unchecked")
+    @Tool("memoryStatsTool")
     public Response compute(Request req) {
         Response resp = new Response();
         String userId = MilvusSearchTool.currentUserId();

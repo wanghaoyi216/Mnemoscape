@@ -62,6 +62,43 @@ coverage/
 # ---- AI / 工具临时 ----
 .antigravitycli/
 backend/.antigravitycli/
+.pi/
+**/.pi/
+.cloud/
+**/.cloud/
+.codex/
+**/.codex/
+.agents/
+**/.agents/
+.claude/
+**/.claude/
+.cursor/
+**/.cursor/
+.trae/
+**/.trae/
+
+# ---- Python 本地缓存（保留可复用的 .py 源码）----
+**/__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# ---- 测试 / 浏览器生成物 ----
+playwright-report/
+test-results/
+**/playwright-report/
+**/test-results/
+*.har
+*.trace.zip
+
+# ---- 本地导出与临时文档 ----
+*.bak
+*.tmp
+*.swp
+*.swo
+*.local.md
+*_private.md
 
 # ---- jqwik 随机种子缓存（属性测试用）----
 **/.jqwik-database

@@ -108,6 +108,15 @@
             <groupId>io.micrometer</groupId>
             <artifactId>micrometer-core</artifactId>
         </dependency>
+        <!-- Prometheus scrape format bridge — required so the actuator's
+             /actuator/prometheus endpoint actually renders Micrometer meters
+             in the Prometheus exposition format.  Without this, the endpoint
+             is registered but always 404/empty.  Version is BOM-managed by
+             spring-boot-dependencies (3.2.5 → 1.12.x). -->
+        <dependency>
+            <groupId>io.micrometer</groupId>
+            <artifactId>micrometer-registry-prometheus</artifactId>
+        </dependency>
 
         <!-- OpenFeign primitives — needed by FeignAuthForwardingInterceptor so
              cross-service calls can propagate the caller's bearer token to the

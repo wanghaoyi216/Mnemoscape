@@ -122,6 +122,7 @@ onMounted(async () => {
 onUnmounted(() => {
   stopPlayback()
   cancelAnimationFrame(animId)
+  window.removeEventListener('resize', onResize)
   renderer?.dispose()
   currentTexture?.dispose()
   nextTexture?.dispose()

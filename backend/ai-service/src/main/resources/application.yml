@@ -160,6 +160,23 @@ mnemoscape:
       collection-name: ${MILVUS_COLLECTION:mnemoscape_memories}
       milvus-timeout-ms: ${MILVUS_TIMEOUT_MS:8000}
       default-top-k: ${VECTOR_DEFAULT_TOPK:5}
+      # ---------------- R19: Milvus 索引参数外部化 + 重建策略 ----------------
+      # 5w 节点默认参数：M=16 / efConstruction=200 足够（实测 recall@10 ≈ 0.95）
+      # 10w+ 节点建议把 M 提到 24~32，efConstruction 提到 300~400（牺牲建索引时间换召回）
+      index:
+        index-type: ${MILVUS_INDEX_TYPE:HNSW}
+        metric-type: ${MILVUS_METRIC_TYPE:COSINE}
+        hnsw-m: ${MILVUS_HNSW_M:16}
+        hnsw-ef-construction: ${MILVUS_HNSW_EF_CONSTRUCTION:200}
+        hnsw-ef: ${MILVUS_HNSW_EF:128}
+        nlist: ${MILVUS_NLIST:1024}
+        # 每累计多少条 upsert 触发一次后台重建（R19 设计：1000）
+        dirty-threshold: ${MILVUS_DIRTY_THRESHOLD:1000}
+        # 兜底周期重建 cron（业务低峰：每天 3 点）
+        rebuild-cron: ${MILVUS_REBUILD_CRON:0 3 * * *}
+        drop-on-rebuild: ${MILVUS_DROP_ON_REBUILD:true}
+        online-rebuild: ${MILVUS_ONLINE_REBUILD:true}
+        max-rebuild-batch-size: ${MILVUS_MAX_REBUILD_BATCH:100000}
     # ---------------- Redis 性能加速层 (AiCacheService 统一管控) ----------------
     # 三类用途, 默认全开; 任一开关关掉走"无缓存直连 + 无限流"的旧行为, 业务不变.
     # 失败行为统一: Redis 抖动 → 静默降级到无缓存, 绝不阻塞 NVIDIA 真实调用.
@@ -232,10 +249,23 @@ springdoc:
   packages-to-scan: com.mnemoscape.ai
 
 management:
+  # 分布式追踪试点：Micrometer Tracing（桥接 OpenTelemetry）。
+  # traceId 自动写入 slf4j MDC，与网关 RequestCorrelationFilter 下发的
+  # X-Correlation-Id 并存互不影响：correlationId 是应用层业务 ID，traceId 是 W3C 标准链路上下文。
+  tracing:
+    sampling:
+      probability: 1.0 # 试点期全采样，量大后调低
+  otlp:
+    tracing:
+      # OTLP HTTP exporter；容器内部署时通过环境变量覆盖为 http://jaeger:4318/v1/traces
+      endpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:http://localhost:4318/v1/traces}
   endpoints:
     web:
       exposure:
-        include: health,info,metrics,prometheus,circuitbreakers,retries
+        # R32: 必须显式暴露 health / info / prometheus / metrics —— 这四个端点是
+        # Prometheus 抓取 + Grafana 健康检查 + 服务间 readiness/liveness 的最小集。
+        # 其余（circuitbreakers / retries / caches）是 ai-service 特有的可观测面板。
+        include: health,info,prometheus,metrics,circuitbreakers,retries,caches
   endpoint:
     health:
       show-details: when_authorized

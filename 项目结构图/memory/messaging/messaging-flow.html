@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>messaging 模块流程图</title>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+    <style>
+        body { background: #1a1a2e; color: #e0e0e0; font-family: "Microsoft YaHei", sans-serif; display: flex; justify-content: center; padding: 40px 20px; }
+        .container { max-width: 1100px; width: 100%; }
+        h1 { text-align: center; color: #81C784; font-size: 1.6em; margin-bottom: 30px; }
+        .mermaid { background: #16213e; border-radius: 8px; padding: 20px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>messaging 模块流程图</h1>
+        <div class="mermaid">
+flowchart TD
+    Service["MemoryService @Transactional 业务方法"]
+    EP["EventPublisher 寄件柜台"]
+    SafePublish["safePublish 尝试发消息"]
+    MQ["RabbitMQ 消息队列"]
+    StageToOutbox["stageToOutbox MQ失败兜底"]
+    OEP_Best["OutboxEventPublisher.stageBestEffort REQUIRES_NEW 独立事务落库"]
+    OEP_Stage["OutboxEventPublisher.stage MANDATORY 搭业务事务"]
+    DB[("outbox_event 表 MySQL")]
+    Scheduler["OutboxRetryScheduler 每30秒扫一次"]
+    FindReady["findReady 查PENDING且时间到的"]
+    Restore["还原类型+还原对象"]
+    RetrySend["rabbitTemplate.convertAndSend"]
+    Published["标记 PUBLISHED"]
+    Retry["attempts+1 退避5s到320s"]
+    Failed["标记 FAILED 超过10次"]
+    Cleanup["cleanup 每5分钟清理PUBLISHED记录"]
+    Alert["运维告警 人工介入"]
+
+    Service --> EP
+    EP --> SafePublish
+    SafePublish -->|成功| MQ
+    MQ -->|消费者处理| Done1["结束"]
+
+    SafePublish -->|AmqpException| StageToOutbox
+    StageToOutbox --> OEP_Best
+    OEP_Best -->|REQUIRES_NEW| DB
+    Service -.->|同一事务内| OEP_Stage
+    OEP_Stage -->|MANDATORY| DB
+
+    DB --> Scheduler
+    Scheduler --> FindReady
+    FindReady --> Restore
+    Restore --> RetrySend
+
+    RetrySend -->|成功| Published
+    RetrySend -->|失败| Retry
+    Retry -->|未超10次| DB
+    Retry -->|超过10次| Failed
+    Failed --> Alert
+
+    Published --> Cleanup
+    Cleanup -->|删除已投递记录| DB
+
+    style MQ fill:#4CAF50,color:#fff
+    style DB fill:#2196F3,color:#fff
+    style Failed fill:#f44336,color:#fff
+    style Published fill:#81C784,color:#fff
+    style Alert fill:#FF9800,color:#fff
+        </div>
+    </div>
+    <script>mermaid.initialize({startOnLoad:true,theme:'dark'});</script>
+</body>
+</html>

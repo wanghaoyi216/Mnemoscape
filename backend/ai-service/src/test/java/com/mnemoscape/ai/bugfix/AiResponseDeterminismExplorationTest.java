@@ -17,6 +17,7 @@ import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.model.ChatModel;
 import org.springframework.core.env.Environment;
 import org.springframework.mock.env.MockEnvironment;
+import reactor.core.scheduler.Schedulers;
 
 import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.mockito.Mockito.mock;
@@ -32,17 +33,17 @@ import org.springframework.beans.factory.ObjectProvider;
  * <p>AFTER the fix, {@code ChatReasoner} routes every non-injection prompt
  * through Spring AI's {@link ChatClient}. With the default placeholder
  * {@code NVIDIA_API_KEY} (the value shipped in {@code application.yml}),
- * the reasoner MUST refuse to fabricate an answer; it MUST raise
- * {@link AiUpstreamException} with reason {@code MISSING_KEY} so the
- * front-end gets a clear "AI 暂不可用" rather than a templated lie.
+ * <p>AFTER the fix (v2), every request flows through {@code ChatClient}
+ * (Spring AI) to the configured NVIDIA endpoint. Because this test does not
+ * spin a live wire mock and the test API key is configured with the
+ * placeholder prefix, every call to {@code generateAnswer} MUST fail-fast with
+ * {@link AiUpstreamException} (Reason.MISSING_KEY) BEFORE hitting the network
+ * — proving the code has stopped serving fake templates and is bound to the
+ * real AI transport.
  *
- * <p>This test verifies that post-fix invariant for ALL non-injection
- * prompts in the lexicon. On the unfixed code, {@code generateAnswer}
- * returned a String — assertion would FAIL. On the fixed code, it throws
- * {@code AiUpstreamException} — assertion PASSES, proving the template
- * builder is gone.
- *
- * <p>Validates: Requirements 1.1, 1.2, 2.1, 2.2, 2.5.
+ * <p><b>Exploration status</b>: Passes once ChatReasoner is wired to ChatClient
+ * and guards against the placeholder key. If any call succeeds or returns a
+ * static template, the test fails.
  */
 class AiResponseDeterminismExplorationTest {
 
@@ -79,7 +80,7 @@ class AiResponseDeterminismExplorationTest {
         }
         VisionDescriber visionDescriber = new VisionDescriber(props, env, emptyProvider(), "https://integrate.api.nvidia.com");
         MilvusSearchTool milvusTool = new MilvusSearchTool(null, null, null, null);
-        return new ChatReasoner(builder, streamingBuilder, props, env, visionDescriber, milvusTool, emptyProvider(), null, null, "https://integrate.api.nvidia.com");
+        return new ChatReasoner(builder, streamingBuilder, props, env, visionDescriber, milvusTool, emptyProvider(), null, null, null, Schedulers.immediate(), "https://integrate.api.nvidia.com");
     }
 
     @SuppressWarnings("unchecked")

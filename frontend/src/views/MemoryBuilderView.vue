@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useMemoryStore } from '../stores/memory'
@@ -27,6 +27,38 @@ const memoryCoords = ref<[number, number] | null>(null)
 const privacyLevel = ref('PRIVATE')
 const error = ref('')
 const loading = ref(false)
+const titleTouched = ref(false)
+const descriptionTouched = ref(false)
+const titleInput = ref<HTMLInputElement | null>(null)
+const descriptionInput = ref<HTMLTextAreaElement | null>(null)
+const errorMessage = ref<HTMLElement | null>(null)
+const reduceMotion = ref(true)
+let motionPreference: MediaQueryList | undefined
+
+const builderFeedback = computed(() => locale.value === 'zh-CN' ? {
+  titleRequired: '请先填写记忆标题。',
+  requestPending: '已有创建请求正在处理，请稍候再试。',
+  requiredFields: '标题必填，描述至少 5 字。500 字为建议值，可继续写。',
+} : {
+  titleRequired: 'Enter a memory title first.',
+  requestPending: 'A creation request is already in progress. Please wait before trying again.',
+  requiredFields: 'A title and at least 5 description characters are required. 500 characters is a recommendation, not a limit.',
+})
+
+function updateMotionPreference(event: MediaQueryListEvent) {
+  reduceMotion.value = event.matches
+}
+
+onMounted(() => {
+  if (typeof window.matchMedia !== 'function') return
+  motionPreference = window.matchMedia('(prefers-reduced-motion: reduce)')
+  reduceMotion.value = motionPreference.matches
+  motionPreference.addEventListener('change', updateMotionPreference)
+})
+
+onBeforeUnmount(() => {
+  motionPreference?.removeEventListener('change', updateMotionPreference)
+})
 
 // 封面选择器对话框：替代旧的"挤在表单里的窄网格"
 const coverPickerOpen = ref(false)
@@ -63,9 +95,18 @@ const canSubmit = computed(() => (
 ))
 
 async function handleSubmit() {
+  if (loading.value) return
   error.value = ''
+  titleTouched.value = true
+  descriptionTouched.value = true
+  if (!title.value.trim()) {
+    error.value = builderFeedback.value.titleRequired
+    titleInput.value?.focus()
+    return
+  }
   if (descriptionLength.value < 5) {
     error.value = t('memory.builder.error.tooShort')
+    descriptionInput.value?.focus()
     return
   }
 
@@ -84,21 +125,30 @@ async function handleSubmit() {
       privacyLevel: privacyLevel.value,
       sceneDataUrl: selectedCoverUrl.value || undefined,
     })
-    router.push(`/memories/${memory.id}`)
-  } catch (e: any) {
-    error.value = e.response?.data?.message || t('memory.builder.error.fallback')
+    if (!memory) {
+      error.value = builderFeedback.value.requestPending
+      return
+    }
+    await router.push(`/memories/${memory.id}`)
+  } catch (cause: any) {
+    error.value = cause.response?.data?.message || t('memory.builder.error.fallback')
   } finally {
     loading.value = false
+    if (error.value) {
+      await nextTick()
+      errorMessage.value?.focus()
+    }
   }
 }
 </script>
 
 <template>
-  <div class="page-shell page-shell--wide">
+  <div class="page-shell page-shell--wide memory-builder">
     <!-- 提交期间的沉浸式遮罩 — 沙漏倒流视频替代干瘪的 Loading 圈 -->
     <transition name="reconstruct">
       <div v-if="loading" class="reconstruct-veil" role="status" aria-live="polite">
-        <video class="reconstruct-veil__video" autoplay muted loop playsinline preload="metadata" :poster="reconstructingPoster">
+        <img v-if="reduceMotion" class="reconstruct-veil__video" :src="reconstructingPoster" alt="" aria-hidden="true" />
+        <video v-else class="reconstruct-veil__video" autoplay muted loop playsinline preload="metadata" :poster="reconstructingPoster" aria-hidden="true" tabindex="-1">
           <source :src="reconstructingVideo" type="video/mp4" />
         </video>
         <div class="reconstruct-veil__mask"></div>
@@ -160,48 +210,53 @@ async function handleSubmit() {
         </div>
       </section>
 
-      <form class="builder-card stack" @submit.prevent="handleSubmit">
+      <form class="builder-card stack" :aria-busy="loading" aria-labelledby="builder-form-title" @submit.prevent="handleSubmit">
         <div class="stack">
           <div>
             <p class="eyebrow">{{ t('memory.builder.card.eyebrow') }}</p>
-            <h2 class="section-title">{{ t('memory.builder.card.title') }}</h2>
+            <h2 id="builder-form-title" class="section-title">{{ t('memory.builder.card.title') }}</h2>
             <p class="subtitle">{{ t('memory.builder.card.subtitle') }}</p>
+            <p id="builder-required-hint" class="help-text">{{ builderFeedback.requiredFields }}</p>
           </div>
 
           <transition name="alert">
-            <div v-if="error" class="status-pill status-pill--danger" role="alert">{{ error }}</div>
+            <div v-if="error" id="builder-error" ref="errorMessage" class="status-pill status-pill--danger builder-error" role="alert" tabindex="-1">{{ error }}</div>
           </transition>
         </div>
 
-        <div class="form-grid">
+        <fieldset class="form-grid builder-fields" :disabled="loading" aria-labelledby="builder-form-title">
           <label class="field" style="grid-column: 1 / -1;">
-            <span class="field__label">{{ t('memory.builder.fields.title') }}</span>
-            <input v-model="title" class="input" :placeholder="t('memory.builder.fields.titlePlaceholder')" required maxlength="200" />
+            <span class="field__label">{{ t('memory.builder.fields.title') }} <span aria-hidden="true">*</span></span>
+            <input ref="titleInput" v-model="title" class="input" :placeholder="t('memory.builder.fields.titlePlaceholder')" required maxlength="200" :aria-invalid="titleTouched && !title.trim()" aria-describedby="builder-required-hint" @blur="titleTouched = true" />
           </label>
 
           <label class="field" style="grid-column: 1 / -1;">
-            <span class="field__label">{{ t('memory.builder.fields.description') }}</span>
+            <span class="field__label">{{ t('memory.builder.fields.description') }} <span aria-hidden="true">*</span></span>
             <textarea
+              ref="descriptionInput"
               v-model="description"
               class="textarea"
               :placeholder="t('memory.builder.fields.descriptionPlaceholder')"
               rows="7"
               required
+              :aria-invalid="descriptionTouched && descriptionLength < 5"
+              aria-describedby="builder-required-hint builder-description-count builder-description-tip"
+              @blur="descriptionTouched = true"
             ></textarea>
             <div class="builder-description-meter">
-              <div class="fade-bar" style="flex: 1;">
+              <div class="fade-bar" style="flex: 1;" aria-hidden="true">
                 <div
                   class="fade-bar__fill"
                   :class="`fade-bar__fill--${descriptionStatus}`"
                   :style="{ width: `${descriptionProgress}%` }"
                 ></div>
               </div>
-              <span :class="['builder-description-counter', `builder-description-counter--${descriptionStatus}`]">
+              <span id="builder-description-count" :class="['builder-description-counter', `builder-description-counter--${descriptionStatus}`]">
                 {{ descriptionLength }} / 500
               </span>
             </div>
-            <div class="builder-description-tip">
-              <span v-if="descriptionStatus === 'too-short'" class="status-pill status-pill--danger" style="padding: 2px 8px; font-size: 0.72rem;">
+            <div id="builder-description-tip" class="builder-description-tip">
+              <span v-if="descriptionStatus === 'too-short' && (descriptionTouched || descriptionLength > 0)" class="status-pill status-pill--danger" style="padding: 2px 8px; font-size: 0.72rem;">
                 {{ t('memory.builder.error.tooShort') }}
               </span>
               <span v-else-if="descriptionStatus === 'short'" class="status-pill status-pill--warning" style="padding: 2px 8px; font-size: 0.72rem;">
@@ -231,6 +286,9 @@ async function handleSubmit() {
                 type="button"
                 class="cover-trigger__preview"
                 :title="t('memory.builder.cover.change')"
+                :aria-label="t('memory.builder.cover.change')"
+                aria-haspopup="dialog"
+                :aria-expanded="coverPickerOpen"
                 @click="coverPickerOpen = true"
               >
                 <img :src="selectedCoverUrl" :alt="t('memory.builder.cover.current')" />
@@ -240,6 +298,8 @@ async function handleSubmit() {
                 v-else
                 type="button"
                 class="cover-trigger__empty"
+                aria-haspopup="dialog"
+                :aria-expanded="coverPickerOpen"
                 @click="coverPickerOpen = true"
               >
                 <svg viewBox="0 0 24 24" width="22" height="22" fill="none" aria-hidden="true">
@@ -257,6 +317,7 @@ async function handleSubmit() {
                 type="button"
                 class="cover-trigger__clear"
                 :title="t('memory.builder.cover.clear')"
+                :aria-label="t('memory.builder.cover.clear')"
                 @click="selectedCoverUrl = ''"
               >×</button>
             </div>
@@ -295,15 +356,15 @@ async function handleSubmit() {
             </select>
           </label>
 
-          <label class="field" style="grid-column: 1 / -1;">
-            <span class="field__label">{{ t('memory.builder.fields.location') }}</span>
+          <div class="field builder-location" style="grid-column: 1 / -1;" role="group" aria-labelledby="builder-location-label" aria-describedby="builder-location-help">
+            <span id="builder-location-label" class="field__label">{{ t('memory.builder.fields.location') }}</span>
             <LocationPicker v-model="memoryLocation" @update:coords="memoryCoords = $event" />
-            <p class="location-helper">
+            <p id="builder-location-help" class="location-helper">
               {{ locale === 'zh-CN'
                 ? '💡 选择国家/省/市后可继续填写街道；点击「📍 使用当前位置」让浏览器自动定位（需要授予权限）。系统会按这条信息在时空地图上标点。'
                 : '💡 Pick country/state/city, then optionally add a street. Tap "📍 Use current location" to fill via browser GPS (needs permission). The atlas will pin this memory using the saved string.' }}
             </p>
-          </label>
+          </div>
 
           <label class="field">
             <span class="field__label">{{ t('memory.builder.fields.privacy') }}</span>
@@ -313,10 +374,10 @@ async function handleSubmit() {
               <option value="PUBLIC">{{ t('memory.builder.privacy.PUBLIC') }}</option>
             </select>
           </label>
-        </div>
+        </fieldset>
 
         <div class="builder-actions">
-          <button type="submit" class="button button--primary" :disabled="!canSubmit">
+          <button type="submit" class="button button--primary" :disabled="!canSubmit" :aria-busy="loading" aria-describedby="builder-required-hint">
             <span v-if="loading" class="auth-spinner" aria-hidden="true"></span>
             <span>{{ loading ? t('memory.builder.submitting') : t('memory.builder.submit') }}</span>
             <svg v-if="!loading" viewBox="0 0 24 24" width="16" height="16" fill="none" aria-hidden="true">
@@ -415,9 +476,30 @@ async function handleSubmit() {
 
 .builder-grid {
   display: grid;
-  grid-template-columns: 1.05fr 0.95fr;
+  grid-template-columns: minmax(0, 0.9fr) minmax(0, 1.1fr);
+  align-items: start;
   gap: 32px;
   margin-top: 24px;
+}
+
+.builder-fields {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.builder-error {
+  white-space: normal;
+  overflow-wrap: anywhere;
+}
+
+.builder-card :is(.input, .select, .cover-trigger__clear) {
+  min-height: 44px;
+}
+
+.builder-location {
+  min-width: 0;
 }
 
 .builder-hero {
@@ -428,7 +510,7 @@ async function handleSubmit() {
 
 .builder-hero__metric-grid {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 12px;
 }
 
@@ -720,6 +802,7 @@ async function handleSubmit() {
 }
 
 .builder-description-counter {
+  flex-shrink: 0;
   font-size: 0.82rem;
   color: var(--text-muted);
   font-family: var(--font-mono);
@@ -783,13 +866,35 @@ async function handleSubmit() {
 
 @media (max-width: 1100px) {
   .builder-grid {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
+    gap: 24px;
   }
 }
 
 @media (max-width: 640px) {
+  .builder-grid {
+    margin-top: 0;
+  }
+  .builder-hero {
+    gap: 18px;
+    padding: 24px;
+  }
+  .builder-hero .display-title {
+    font-size: clamp(2rem, 8vw, 3rem);
+  }
   .builder-hero__metric-grid {
-    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+  .builder-hero__metric-grid .metric-card {
+    padding: 10px;
+  }
+  .builder-hero__metric-grid .metric-card__value {
+    font-size: 1rem;
+    overflow-wrap: anywhere;
+  }
+  .builder-actions .button {
+    width: 100%;
+    min-height: 48px;
   }
 }
 </style>

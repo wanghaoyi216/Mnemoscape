@@ -3,42 +3,36 @@ import { computed, ref, onMounted, onBeforeUnmount } from 'vue'
 import { useRouter } from 'vue-router'
 import { useI18n } from 'vue-i18n'
 import { useAuthStore } from '../stores/auth'
-import LiquidMemoryBackground from '../components/auth/LiquidMemoryBackground.vue'
-import { loginBackgrounds, videos } from '../assets/media-catalog'
+import { loginBackgrounds } from '../assets/media-catalog'
 
 const router = useRouter()
 const auth = useAuthStore()
-const { t, locale } = useI18n()
+const { t } = useI18n()
 
 const username = ref('')
 const password = ref('')
 const error = ref('')
 const loading = ref(false)
 
-interface PlaylistItem {
-  src: string
-  label: string
-  eng: string
-}
-
-const defaultPlaylist: PlaylistItem[] = [
-  { src: videos.neuralResonance.src, label: '神经共鸣', eng: 'Neural Resonance' },
-  { src: videos.chronosFlow.src, label: '时间之流', eng: 'Chronos Flow' },
-  { src: videos.ebbingHourglass.src, label: '沙漏倒流', eng: 'Ebbing Hourglass' }
-]
-
 /*
  * 登录页视频背景层级：
  *  1) .env.local 的 VITE_LOGIN_VIDEO_URL 优先（可换你自己的素材）
- *  2) 未配置时使用 public/media/videos/ 内置三段轻量氛围视频
- *  3) 配置成空字符串则关闭视频层，保留编号背景与 WebGL/CSS
+ *  2) 未配置时不加载视频，让编号背景图成为唯一 LCP 候选。
  */
 const envVideo = (import.meta.env.VITE_LOGIN_VIDEO_URL as string | undefined)
-const playlist = ref<PlaylistItem[]>(defaultPlaylist)
-const currentVideoIndex = ref(0)
-const currentBackgroundIndex = ref(0)
+const currentBackgroundIndex = ref(11)
 const currentBackground = computed(() => loginBackgrounds[currentBackgroundIndex.value])
-const videoUrl = computed(() => envVideo !== undefined ? envVideo : (playlist.value[currentVideoIndex.value]?.src || ''))
+const videoUrl = computed(() => envVideo?.trim() || '')
+// 将本地化标题中的换行标记转成纯文本，避免 v-html 带来的 i18n 警告与不必要的 HTML 注入面。
+const loginTitle = computed(() => t('login.title').replace(/<br\s*\/?\s*>/gi, '\n'))
+
+const particles = Array.from({ length: 20 }, (_, index) => ({
+  x: `${(index * 37 + 11) % 97}%`,
+  y: `${(index * 61 + 7) % 91}%`,
+  duration: `${10 + (index % 7) * 1.4}s`,
+  delay: `${-(index % 9) * 1.1}s`,
+  scale: String(0.45 + (index % 5) * 0.14),
+}))
 
 // 背景画廊默认折叠，避免控制器抢占登录表单注意力。
 const selectorOpen = ref(false)
@@ -50,9 +44,6 @@ function startAutoCycle() {
   stopAutoCycle()
   if (!autoCycle.value || loginBackgrounds.length < 2) return
   cycleTimer = window.setInterval(() => {
-    if (envVideo === undefined && playlist.value.length > 1) {
-      currentVideoIndex.value = (currentVideoIndex.value + 1) % playlist.value.length
-    }
     currentBackgroundIndex.value = (currentBackgroundIndex.value + 1) % loginBackgrounds.length
   }, 18000)
 }
@@ -72,14 +63,6 @@ function pickBackground(index: number) {
   currentBackgroundIndex.value = index
   if (autoCycle.value) startAutoCycle()
 }
-
-function handleVideoEnded() {
-  if (envVideo === undefined && playlist.value.length > 0) {
-    currentVideoIndex.value = (currentVideoIndex.value + 1) % playlist.value.length
-    currentBackgroundIndex.value = (currentBackgroundIndex.value + 1) % loginBackgrounds.length
-  }
-}
-
 
 onMounted(startAutoCycle)
 
@@ -109,22 +92,13 @@ async function handleSubmit() {
 
 <template>
   <div class="login-stage">
-    <!--
-      背景层级（z-index 从底到面）：
-        1) WebGL "记忆流体"着色器 - 鼠标互动 + 神经突触粒子（首选）
-        2) 可选视频背景 - 用户在 .env.local 配置 VITE_LOGIN_VIDEO_URL 时叠加
-        3) CSS 墨水 / 星光粒子 / 暗色蒙版 - 永远存在的兜底层
-      WebGL 在 GPU 缺失/用户偏好"减少动画"时自动退化，CSS 层永远保证基线视觉。
-    -->
-    <LiquidMemoryBackground />
-
     <!-- 1–12 号生成背景按固定节奏交叉淡入；编号与素材方案保持一致。 -->
     <transition name="background-fade" mode="in-out">
       <img
         :key="currentBackground.src"
         class="login-stage__image"
         :src="currentBackground.src"
-        :alt="currentBackground.origin"
+        :alt="t('login.backgrounds.artAlt', { number: currentBackground.number })"
         fetchpriority="high"
       />
     </transition>
@@ -141,7 +115,6 @@ async function handleSubmit() {
         playsinline
         preload="metadata"
         :poster="currentBackground.src"
-        @ended="handleVideoEnded"
       >
         <source :src="videoUrl" type="video/mp4" />
       </video>
@@ -156,12 +129,12 @@ async function handleSubmit() {
 
     <!-- 星光粒子层 -->
     <div class="login-stage__particles" aria-hidden="true">
-      <span v-for="i in 48" :key="i" class="particle" :style="{
-        '--x': `${Math.random() * 100}%`,
-        '--y': `${Math.random() * 100}%`,
-        '--d': `${8 + Math.random() * 12}s`,
-        '--delay': `-${Math.random() * 12}s`,
-        '--scale': `${0.4 + Math.random() * 0.8}`,
+      <span v-for="(particle, index) in particles" :key="index" class="particle" :style="{
+        '--x': particle.x,
+        '--y': particle.y,
+        '--d': particle.duration,
+        '--delay': particle.delay,
+        '--scale': particle.scale,
       }"></span>
     </div>
 
@@ -178,7 +151,7 @@ async function handleSubmit() {
         class="theme-selector-trigger"
         :aria-expanded="selectorOpen"
         aria-controls="login-background-panel"
-        :aria-label="locale === 'zh-CN' ? '选择登录背景' : 'Choose login background'"
+        :aria-label="t('login.backgrounds.choose')"
         @click="selectorOpen = !selectorOpen"
       >
         <svg viewBox="0 0 24 24" width="16" height="16" fill="none" aria-hidden="true">
@@ -186,16 +159,16 @@ async function handleSubmit() {
           <path d="m6 16 4-4 3 3 2-2 3 3" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"/>
         </svg>
         <span class="theme-selector-trigger__label">
-          {{ locale === 'zh-CN' ? '背景画廊' : 'Backgrounds' }}
+          {{ t('login.backgrounds.title') }}
         </span>
-        <span class="theme-selector-trigger__current">{{ currentBackground.origin }}</span>
+        <span class="theme-selector-trigger__current">{{ t('login.backgrounds.current', { number: currentBackground.number }) }}</span>
         <svg class="theme-selector-trigger__chev" viewBox="0 0 24 24" width="12" height="12" fill="none" aria-hidden="true">
           <path d="M6 9l6 6 6-6" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
         </svg>
       </button>
       <transition name="theme-panel">
         <div v-if="selectorOpen" id="login-background-panel" class="theme-selector-panel">
-          <div class="background-selector-grid" role="list" :aria-label="locale === 'zh-CN' ? '登录背景列表' : 'Login backgrounds'">
+          <div class="background-selector-grid" role="list" :aria-label="t('login.backgrounds.list')">
             <button
               v-for="(background, index) in loginBackgrounds"
               :key="background.number"
@@ -213,7 +186,7 @@ async function handleSubmit() {
           </div>
           <label class="theme-selector-cycle">
             <input type="checkbox" :checked="autoCycle" @change="toggleAutoCycle" />
-            <span>{{ locale === 'zh-CN' ? '自动轮播背景' : 'Auto rotate backgrounds' }}</span>
+            <span>{{ t('login.backgrounds.auto') }}</span>
           </label>
         </div>
       </transition>
@@ -222,10 +195,10 @@ async function handleSubmit() {
     <!-- 实际内容（玻璃拟态卡片） -->
     <div class="login-stage__content">
       <div class="login-grid">
-        <section class="login-hero login-glass">
+        <section class="login-hero">
           <div class="stack stack--lg">
               <p class="eyebrow reveal">{{ t('login.eyebrow') }}</p>
-              <h1 class="display-title text-gradient reveal reveal-delay-1" v-html="t('login.title')"></h1>
+              <h1 class="display-title text-gradient reveal reveal-delay-1">{{ loginTitle }}</h1>
               <p class="lead reveal reveal-delay-2">{{ t('login.lead') }}</p>
 
               <div class="login-hero__feature-grid reveal reveal-delay-3">
@@ -284,7 +257,7 @@ async function handleSubmit() {
           </div>
         </section>
 
-        <form class="auth-card login-glass login-glass--gold stack ai-glow-border ai-glow-border--intense" @submit.prevent="handleSubmit" aria-labelledby="login-title">
+        <form class="auth-card login-glass login-glass--gold stack" @submit.prevent="handleSubmit" aria-labelledby="login-title">
           <div class="stack">
             <p class="eyebrow">{{ t('login.card.eyebrow') }}</p>
             <h2 id="login-title" class="section-title">{{ t('login.card.title') }}</h2>
@@ -356,13 +329,16 @@ async function handleSubmit() {
    * 视口并打破 .page-shell 的 padding。但 LoginView 没经过 .page-shell 包裹（直接挂
    * 在 <main class="app-shell__main"> 下），那个 -32px 让表单看起来"偏上不居中"。
    * 改成 0 边距 + 100vh 减去实际 header 高度，保证内容在视口正中。 */
-  min-height: 100vh;
+  min-height: calc(100svh - var(--app-header-h, 76px));
   margin: 0 calc(50% - 50vw);
   overflow: hidden;
   isolation: isolate;
   display: flex;
   align-items: center;
   justify-content: center;
+  background:
+    radial-gradient(circle at 18% 18%, color-mix(in srgb, var(--primary) 10%, transparent), transparent 34%),
+    #080611;
 }
 
 .login-stage__image {
@@ -373,7 +349,7 @@ async function handleSubmit() {
   object-fit: cover;
   object-position: center;
   z-index: -3;
-  filter: saturate(1.04) contrast(1.02);
+  filter: saturate(0.96) contrast(1.05) brightness(0.9);
 }
 
 .background-fade-enter-active,
@@ -395,7 +371,7 @@ async function handleSubmit() {
   height: 100%;
   object-fit: cover;
   z-index: -2;
-  opacity: 0.18;
+  opacity: 0.12;
   mix-blend-mode: screen;
   filter: contrast(1.05) saturate(0.9) brightness(0.78);
 }
@@ -403,8 +379,8 @@ async function handleSubmit() {
 /* ============== 记忆时空维网切换器 — 默认折叠 ============== */
 .login-stage__theme-selector {
   position: absolute;
-  bottom: 24px;
-  right: 24px;
+  bottom: 20px;
+  right: 20px;
   z-index: 10;
   display: flex;
   flex-direction: column;
@@ -419,10 +395,10 @@ async function handleSubmit() {
   align-items: center;
   gap: 10px;
   padding: 9px 14px;
-  background: rgba(14, 17, 22, 0.55);
+  background: rgba(10, 8, 22, 0.7);
   backdrop-filter: blur(16px) saturate(140%);
   -webkit-backdrop-filter: blur(16px) saturate(140%);
-  border: 1px solid rgba(54, 216, 180, 0.22);
+  border: 1px solid rgba(231, 224, 255, 0.18);
   border-radius: 999px;
   color: var(--text-soft);
   font-size: 0.78rem;
@@ -432,13 +408,13 @@ async function handleSubmit() {
   box-shadow: 0 10px 28px rgba(0, 0, 0, 0.45);
 }
 .theme-selector-trigger:hover {
-  border-color: rgba(54, 216, 180, 0.55);
-  background: rgba(14, 17, 22, 0.72);
+  border-color: color-mix(in srgb, var(--primary) 55%, transparent);
+  background: rgba(16, 12, 34, 0.82);
   color: var(--text);
-  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.55), 0 0 22px rgba(54, 216, 180, 0.18);
+  box-shadow: 0 10px 28px rgba(0, 0, 0, 0.55), 0 0 22px var(--primary-glow);
 }
 .login-stage__theme-selector--open .theme-selector-trigger {
-  border-color: rgba(54, 216, 180, 0.6);
+  border-color: color-mix(in srgb, var(--primary) 60%, transparent);
   color: var(--primary);
 }
 .theme-selector-trigger__label {
@@ -466,7 +442,7 @@ async function handleSubmit() {
 }
 
 .theme-selector-panel {
-  background: rgba(10, 14, 22, 0.65);
+  background: rgba(10, 8, 24, 0.84);
   backdrop-filter: blur(20px) saturate(160%);
   -webkit-backdrop-filter: blur(20px) saturate(160%);
   border: 1px solid rgba(255, 255, 255, 0.08);
@@ -507,9 +483,9 @@ async function handleSubmit() {
 }
 
 .theme-sel-btn.active {
-  background: rgba(54, 216, 180, 0.08);
+  background: color-mix(in srgb, var(--primary) 9%, transparent);
   color: var(--primary);
-  box-shadow: inset 0 0 0 1px rgba(54, 216, 180, 0.2);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--primary) 28%, transparent);
 }
 
 .theme-sel-btn__dot {
@@ -557,7 +533,7 @@ async function handleSubmit() {
 }
 .background-swatch--active {
   border-color: var(--primary);
-  box-shadow: 0 0 0 2px rgba(54, 216, 180, 0.2);
+  box-shadow: 0 0 0 2px var(--primary-glow);
 }
 .background-swatch img {
   width: 100%;
@@ -588,12 +564,11 @@ async function handleSubmit() {
 
 @media (max-width: 768px) {
   .login-stage__theme-selector {
-    position: relative;
-    bottom: auto;
-    right: auto;
-    margin: 24px auto 0;
-    align-self: center;
-    width: 100%;
+    position: absolute;
+    right: 16px;
+    bottom: 16px;
+    margin: 0;
+    width: calc(100% - 32px);
     max-width: 320px;
   }
 }
@@ -603,8 +578,8 @@ async function handleSubmit() {
   position: absolute;
   inset: 0;
   z-index: -2;
-  background: radial-gradient(ellipse at top left, rgba(54, 216, 180, 0.06), transparent 50%),
-              radial-gradient(ellipse at bottom right, rgba(242, 185, 92, 0.05), transparent 50%);
+  background: radial-gradient(ellipse at top left, color-mix(in srgb, var(--primary) 10%, transparent), transparent 50%),
+              radial-gradient(ellipse at bottom right, color-mix(in srgb, var(--gold) 8%, transparent), transparent 50%);
 }
 
 .ink-drop {
@@ -622,21 +597,21 @@ async function handleSubmit() {
 .ink-drop--gold {
   top: -15vmin;
   left: -10vmin;
-  background: radial-gradient(circle at 30% 30%, rgba(242, 185, 92, 0.55), transparent 65%);
+  background: radial-gradient(circle at 30% 30%, color-mix(in srgb, var(--gold) 55%, transparent), transparent 65%);
   animation-delay: 0s;
 }
 
 .ink-drop--teal {
   top: 30vmin;
   right: -15vmin;
-  background: radial-gradient(circle at 40% 40%, rgba(54, 216, 180, 0.5), transparent 65%);
+  background: radial-gradient(circle at 40% 40%, color-mix(in srgb, var(--primary) 50%, transparent), transparent 65%);
   animation-delay: -8s;
 }
 
 .ink-drop--violet {
   bottom: -20vmin;
   left: 30vmin;
-  background: radial-gradient(circle at 50% 50%, rgba(132, 110, 220, 0.4), transparent 65%);
+  background: radial-gradient(circle at 50% 50%, color-mix(in srgb, var(--accent) 40%, transparent), transparent 65%);
   animation-delay: -16s;
 }
 
@@ -682,15 +657,15 @@ async function handleSubmit() {
   inset: 0;
   z-index: -1;
   background:
-    linear-gradient(180deg, rgba(8, 10, 14, 0.45) 0%, rgba(8, 10, 14, 0.22) 50%, rgba(8, 10, 14, 0.58) 100%),
-    radial-gradient(ellipse at center, transparent 0%, rgba(8, 10, 14, 0.28) 100%);
+    linear-gradient(90deg, rgba(7, 5, 16, 0.72) 0%, rgba(7, 5, 16, 0.22) 46%, rgba(7, 5, 16, 0.68) 100%),
+    linear-gradient(180deg, rgba(7, 5, 16, 0.25) 0%, rgba(7, 5, 16, 0.08) 48%, rgba(7, 5, 16, 0.62) 100%);
   pointer-events: none;
 }
 
 /* 内容区 */
 .login-stage__content {
   position: relative;
-  padding: 40px 24px;
+  padding: clamp(36px, 6vw, 84px) 24px 96px;
   max-width: var(--page-width-wide);
   margin: 0 auto;
   width: 100%;
@@ -699,20 +674,20 @@ async function handleSubmit() {
 
 .login-grid {
   display: grid;
-  grid-template-columns: 1.15fr 0.85fr;
-  gap: 36px;
+  grid-template-columns: minmax(0, 1fr) minmax(360px, 460px);
+  gap: clamp(44px, 8vw, 120px);
   align-items: center;
 }
 
 /* ============== 玻璃拟态 ============== */
 .login-glass {
   position: relative;
-  background: rgba(14, 17, 22, 0.42);
-  backdrop-filter: blur(24px) saturate(160%);
-  -webkit-backdrop-filter: blur(24px) saturate(160%);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: var(--radius-lg);
-  padding: 40px;
+  background: rgba(12, 9, 27, 0.78);
+  backdrop-filter: blur(30px) saturate(145%);
+  -webkit-backdrop-filter: blur(30px) saturate(145%);
+  border: 1px solid rgba(235, 226, 255, 0.16);
+  border-radius: 24px;
+  padding: clamp(28px, 3vw, 40px);
   box-shadow:
     0 24px 60px -20px rgba(0, 0, 0, 0.55),
     inset 0 1px 0 rgba(255, 255, 255, 0.05);
@@ -720,25 +695,28 @@ async function handleSubmit() {
 
 /* 金色边缘流光 — 用 box-shadow 脉动取代复杂的 conic-gradient 旋转，省 GPU 也更稳 */
 .login-glass--gold {
-  border-color: rgba(242, 185, 92, 0.32);
-  animation: gold-pulse 5.5s ease-in-out infinite;
+  border-color: color-mix(in srgb, var(--gold) 38%, transparent);
+  box-shadow:
+    0 30px 80px -28px rgba(2, 1, 9, 0.78),
+    0 0 36px -18px var(--gold-glow),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
 
 @keyframes gold-pulse {
   0%, 100% {
-    border-color: rgba(242, 185, 92, 0.32);
+    border-color: color-mix(in srgb, var(--gold) 38%, transparent);
     box-shadow:
       0 24px 60px -20px rgba(0, 0, 0, 0.55),
-      0 0 30px -8px rgba(242, 185, 92, 0.22),
-      0 0 60px -22px rgba(54, 216, 180, 0.18),
+      0 0 30px -8px var(--gold-glow),
+      0 0 60px -22px var(--primary-glow),
       inset 0 1px 0 rgba(255, 255, 255, 0.05);
   }
   50% {
-    border-color: rgba(242, 185, 92, 0.55);
+    border-color: color-mix(in srgb, var(--gold) 62%, transparent);
     box-shadow:
       0 24px 60px -20px rgba(0, 0, 0, 0.55),
-      0 0 44px -8px rgba(242, 185, 92, 0.42),
-      0 0 80px -22px rgba(54, 216, 180, 0.32),
+      0 0 44px -8px var(--gold-glow),
+      0 0 80px -22px var(--primary-glow),
       inset 0 1px 0 rgba(255, 255, 255, 0.12);
   }
 }
@@ -749,6 +727,13 @@ async function handleSubmit() {
   flex-direction: column;
   justify-content: space-between;
   gap: 36px;
+  max-width: 720px;
+  padding: clamp(12px, 2vw, 28px);
+  text-shadow: 0 2px 28px rgba(3, 1, 12, 0.58);
+}
+
+.login-hero .display-title {
+  white-space: pre-line;
 }
 
 .login-hero__feature-grid {
@@ -763,15 +748,16 @@ async function handleSubmit() {
   align-items: flex-start;
   gap: 14px;
   padding: 16px;
-  border: 1px solid var(--border);
+  border: 1px solid rgba(235, 226, 255, 0.13);
   border-radius: var(--radius-md);
-  background: rgba(14, 17, 22, 0.35);
+  background: linear-gradient(145deg, color-mix(in srgb, var(--primary) 5%, rgba(10, 8, 24, 0.58)), rgba(10, 8, 24, 0.58));
+  backdrop-filter: blur(12px);
   transition: border-color 200ms ease, background-color 200ms ease, transform 200ms ease;
 }
 
 .login-hero__feature:hover {
   border-color: var(--border-accent);
-  background: rgba(54, 216, 180, 0.06);
+  background: color-mix(in srgb, var(--primary) 8%, rgba(10, 8, 24, 0.72));
   transform: translateY(-2px);
 }
 
@@ -782,7 +768,7 @@ async function handleSubmit() {
   border-radius: var(--radius-sm);
   display: grid;
   place-items: center;
-  background: rgba(54, 216, 180, 0.10);
+  background: color-mix(in srgb, var(--primary) 11%, transparent);
   color: var(--primary);
   border: 1px solid var(--border-accent);
 }
@@ -805,7 +791,7 @@ async function handleSubmit() {
   position: relative;
   padding: 22px 24px 22px 56px;
   border-radius: var(--radius-md);
-  background: rgba(8, 10, 14, 0.42);
+  background: rgba(10, 8, 24, 0.54);
   border-left: 2px solid var(--gold, #f2b95c);
 }
 
@@ -887,13 +873,29 @@ async function handleSubmit() {
 @media (max-width: 1100px) {
   .login-grid {
     grid-template-columns: 1fr;
+    max-width: 760px;
+    margin: 0 auto;
+  }
+  /* 窄屏优先完成登录，再向下阅读品牌叙事；桌面端仍保持 Hero + 表单并列。 */
+  .auth-card {
+    grid-row: 1;
+  }
+  .login-hero {
+    grid-row: 2;
   }
   .login-glass {
     padding: 28px;
   }
+  .auth-card {
+    width: min(100%, 540px);
+    justify-self: center;
+  }
 }
 
 @media (max-width: 640px) {
+  .login-stage {
+    align-items: flex-start;
+  }
   .login-stage__theme-selector {
     right: 12px;
     bottom: 12px;
@@ -907,7 +909,10 @@ async function handleSubmit() {
     grid-template-columns: 1fr;
   }
   .login-stage__content {
-    padding: 24px 16px;
+    padding: 36px 16px 96px;
+  }
+  .login-hero {
+    padding: 0;
   }
 }
 
@@ -934,5 +939,109 @@ async function handleSubmit() {
   .login-stage__image {
     transition: none !important;
   }
+}
+
+/* Login is an entrance to the museum, not a sci-fi dashboard. Let the source
+   artwork carry atmosphere and keep the form tactile and quiet. */
+.login-stage {
+  background: var(--bg-0);
+}
+
+.login-stage__image {
+  filter: saturate(0.82) contrast(1.04) brightness(0.84);
+}
+
+.login-stage__video {
+  opacity: 0.05;
+  mix-blend-mode: normal;
+}
+
+.login-stage__ink {
+  opacity: 0.34;
+}
+
+.ink-drop {
+  filter: blur(96px);
+  opacity: 0.22;
+  mix-blend-mode: normal;
+  animation: none;
+}
+
+.login-stage__particles {
+  opacity: 0.28;
+}
+
+.login-stage__mask {
+  background:
+    linear-gradient(90deg, rgba(14, 11, 13, 0.64) 0%, rgba(14, 11, 13, 0.16) 48%, rgba(14, 11, 13, 0.62) 100%),
+    linear-gradient(180deg, rgba(14, 11, 13, 0.12) 0%, rgba(14, 11, 13, 0.02) 52%, rgba(14, 11, 13, 0.62) 100%);
+}
+
+.login-glass {
+  background: rgba(26, 21, 25, 0.96);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  border-color: var(--border-strong);
+  border-radius: 16px;
+  box-shadow: var(--shadow-lg);
+}
+
+.login-glass--gold {
+  border-color: color-mix(in srgb, var(--gold) 42%, var(--border));
+  box-shadow: var(--shadow-lg);
+}
+
+@media (min-width: 1101px) {
+  .auth-card {
+    align-self: center;
+  }
+}
+
+.login-hero {
+  text-shadow: 0 2px 18px rgba(3, 1, 12, 0.42);
+}
+
+.login-hero .display-title,
+.login-hero .lead,
+.login-hero__quote,
+.login-hero__feature {
+  text-shadow: 0 2px 14px rgba(5, 3, 5, 0.72);
+}
+
+.login-hero__feature {
+  border-color: rgba(244, 232, 220, 0.12);
+  border-radius: 10px;
+  background: rgba(26, 21, 25, 0.74);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+.login-hero__feature:hover {
+  background: rgba(35, 27, 32, 0.9);
+  transform: translateY(-1px);
+}
+
+.login-hero__icon {
+  background: rgba(228, 193, 143, 0.1);
+  color: var(--gold);
+  border-color: rgba(228, 193, 143, 0.26);
+}
+
+.login-hero__quote {
+  background: rgba(26, 21, 25, 0.72);
+  border-left-color: var(--gold);
+}
+
+.theme-selector-trigger,
+.theme-selector-panel {
+  background: rgba(26, 21, 25, 0.96);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  border-color: var(--border-strong);
+  box-shadow: var(--shadow-md);
+}
+
+.theme-selector-trigger {
+  border-radius: 8px;
 }
 </style>

@@ -1,0 +1,49 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8"><title>config 模块时序图</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+<style>
+body{background:#1a1a2e;color:#e0e0e0;font-family:"Microsoft YaHei",sans-serif;display:flex;justify-content:center;padding:40px 20px}
+.container{max-width:1100px;width:100%}
+h1{text-align:center;color:#81C784;font-size:1.6em;margin-bottom:30px}
+.mermaid{background:#16213e;border-radius:8px;padding:20px}
+</style>
+</head>
+<body>
+<div class="container">
+<h1>config 模块时序图</h1>
+<div class="mermaid">
+sequenceDiagram
+    participant C as 客户端
+    participant FEC as FeignCorrelationConfig
+    participant MS as MemoryService
+    participant TC as TransactionConfig
+    participant AC as AsyncExecutorConfig
+    participant AI as ai-service
+
+    C->>FEC: 请求带 X-Correlation-Id: req-007
+    FEC->>FEC: MdcContextFilter → MDC.put("correlationId","req-007")
+
+    Note over MS,TC: TransactionConfig 生效 —— @Transactional 拿 JpaTransactionManager
+    MS->>TC: @Transactional → 事务开始
+    TC-->>MS: JpaTransactionManager(MySQL)
+    MS->>MS: save(memory) · stageToOutbox
+    MS->>TC: commit 事务
+    TC-->>MS: 提交成功
+
+    Note over AC,FEC: AsyncExecutorConfig + FeignCorrelationConfig 生效
+    MS->>AC: @Async extractEntities
+    AC->>AC: 线程池有空位 → 异步线程执行
+    AC->>FEC: Feign RequestInterceptor 拦截
+    FEC->>FEC: copyMdcToHeader → 写 X-Correlation-Id 到请求头
+    AC->>AI: POST /api/v1/extract<br/>Header: X-Correlation-Id: req-007
+    AI-->>AC: 200 + 实体列表
+
+    MS-->>C: 201 Created
+    Note over C: 增强在后台继续，主响应已返回
+</div>
+</div>
+<script>mermaid.initialize({startOnLoad:true,theme:'dark'});</script>
+</body>
+</html>

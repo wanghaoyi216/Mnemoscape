@@ -81,11 +81,26 @@ public class AuthService {
 
     public AuthResponse refreshToken(String refreshToken) {
         try {
-            var claims = jwtTokenProvider.validateToken(refreshToken);
+            // P0 R1.2：用专门的 validateRefreshToken() 校验签名 + refresh 黑名单
+            // 双重门，旧 refresh token 一旦被轮换就走 Redis 黑名单拒绝再次使用。
+            var claims = jwtTokenProvider.validateRefreshToken(refreshToken, blacklist);
+            String oldRefreshJti = claims.getId();
+            long oldRefreshTtl = jwtTokenProvider.getRemainingMillis(refreshToken);
             String userId = claims.getSubject();
             User user = userRepository.findById(userId)
                     .orElseThrow(() -> new BizException(401, "User not found"));
-            return buildAuthResponse(user);
+
+            AuthResponse resp = buildAuthResponse(user);
+
+            // 关键顺序：先把"新"token 通过返回值交给客户端，再把"旧"refresh 的 jti 写黑名单。
+            // 这样即便 Redis 暂时不可达，客户端也能拿到新 token；下次再调用本接口时
+            // 旧 refresh 会过期（7 天 TTL），不会无限膨胀安全风险窗口。
+            if (oldRefreshJti != null && oldRefreshTtl > 0) {
+                blacklist.revokeRefresh(oldRefreshJti, oldRefreshTtl);
+                log.info("Refresh token rotated userId={} oldJti={} ttlMs={}",
+                        userId, oldRefreshJti, oldRefreshTtl);
+            }
+            return resp;
         } catch (BizException biz) {
             throw biz;
         } catch (Exception e) {

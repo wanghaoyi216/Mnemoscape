@@ -20,6 +20,14 @@ public class ChainWorkflowAgent extends BaseAgent {
         this.props = props;
     }
 
+    public ChainWorkflowAgent(AiUpstreamProperties props,
+                              String apiKey,
+                              String baseUrl,
+                              java.net.http.HttpClient httpClient) {
+        super(baseUrl, apiKey, httpClient);
+        this.props = props;
+    }
+
     @Override
     public String getModelName() {
         return props.getReasoningModel();

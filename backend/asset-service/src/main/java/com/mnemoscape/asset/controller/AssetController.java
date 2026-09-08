@@ -4,6 +4,7 @@ import com.mnemoscape.asset.model.StaticResource;
 import com.mnemoscape.asset.service.AssetService;
 import com.mnemoscape.asset.service.LocalResourceWatcher;
 import com.mnemoscape.common.dto.ApiResponse;
+import com.mnemoscape.common.ratelimit.RateLimit;
 import com.mnemoscape.common.web.RequestContext;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
@@ -31,6 +32,9 @@ public class AssetController {
         this.localResourceWatcher = localResourceWatcher;
     }
 
+    @RateLimit(key = "asset:upload", limit = 10, windowSeconds = 60,
+            dimension = RateLimit.Dimension.USER_OR_IP,
+            message = "上传过于频繁，请稍后再试")
     @PostMapping("/upload")
     public ApiResponse<Map<String, String>> upload(@RequestParam("file") MultipartFile file,
                                                     @RequestParam(value = "purpose", required = false) String purpose,

@@ -1,6 +1,7 @@
 package com.mnemoscape.resonance.controller;
 
 import com.mnemoscape.common.dto.ApiResponse;
+import com.mnemoscape.common.exception.BizException;
 import com.mnemoscape.common.web.RequestContext;
 import com.mnemoscape.resonance.model.entity.ChatGroup;
 import com.mnemoscape.resonance.model.entity.ChatGroupMember;
@@ -45,6 +46,9 @@ public class ChatController {
         String userId = RequestContext.requireUserId(request);
         List<ChatMessage> history;
         if (groupId != null && !groupId.isBlank()) {
+            if (chatGroupMemberRepository.findByGroupIdAndUserId(groupId, userId).isEmpty()) {
+                throw BizException.forbidden("You are not a member of this chat group");
+            }
             history = chatMessageRepository.findByGroupIdOrderByCreatedAtAsc(groupId);
         } else if (receiverId != null && !receiverId.isBlank()) {
             history = chatMessageRepository.findPrivateMessages(userId, receiverId);

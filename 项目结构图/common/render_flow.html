@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html>
+<head><meta charset='utf-8'><script src='https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.min.js'></script>
+<script>mermaid.initialize({startOnLoad:true,theme:'default'});</script>
+<style>body{margin:20px;background:#fff;}</style></head>
+<body><div class='mermaid'>
+flowchart LR
+    subgraph 请求链路层[请求进来依次穿过]
+        web[web<br/>MdcContextFilter<br/>requestId 信标]
+        sec[security<br/>JwtAuthFilter<br/>认证塞通行证]
+    end
+    subgraph 横切防护层[方法调用时拦截]
+        rl[ratelimit<br/>注解+AOP<br/>限流防刷]
+        idem[idempotency<br/>SETNX 锁<br/>防双击/防重投]
+    end
+    subgraph 数据契约层[定义结构]
+        dto[dto<br/>ApiResponse/PageResult<br/>统一响应体]
+        ev[event<br/>4 个 record<br/>跨服务消息载荷]
+    end
+    subgraph 容错与可观测层[基础设施兜底]
+        exc[exception<br/>GlobalExceptionHandler<br/>统一异常转响应]
+        ad[admin<br/>cache/codec/metrics<br/>看板降级+校验+埋点]
+    end
+    subgraph 配置层
+        cfg[config/constant<br/>OpenApi/常量]
+    end
+
+    web --> sec
+    sec --> rl
+    rl --> idem
+    idem --> dto
+    dto --> ad
+    exc -.接住所有异常.-> dto
+    ev -.异步解耦.-> idem
+</div></body></html>

@@ -96,6 +96,9 @@ public class AdminCacheConfig {
     /** Legacy cache name used by drift-state caching. */
     private static final String LEGACY_CACHE_DRIFT_STATES = "driftStates";
 
+    /** Cache name used for public pool caching. */
+    public static final String CACHE_PUBLIC_POOL = "publicPool";
+
     /**
      * Redis cache manager configured with per-cache TTLs for the six admin
      * aggregation caches. Unknown cache names return {@code null} so that
@@ -131,13 +134,13 @@ public class AdminCacheConfig {
 
     /**
      * Replacement for the auto-configured Caffeine cache manager that keeps
-     * the pre-admin {@code memories} / {@code driftStates} caches working.
+     * the pre-admin {@code memories} / {@code driftStates} / {@code publicPool} caches working.
      * Mirrors the Caffeine spec previously set in {@code application.yml}.
      */
     @Bean
     public CaffeineCacheManager legacyCaffeineCacheManager() {
         CaffeineCacheManager mgr = new CaffeineCacheManager(
-                LEGACY_CACHE_MEMORIES, LEGACY_CACHE_DRIFT_STATES);
+                LEGACY_CACHE_MEMORIES, LEGACY_CACHE_DRIFT_STATES, CACHE_PUBLIC_POOL);
         mgr.setCaffeine(Caffeine.from(CaffeineSpec.parse(LEGACY_CAFFEINE_SPEC)));
         // Keep a closed cache-name set so admin cache names cannot accidentally
         // be served from the in-process Caffeine manager.

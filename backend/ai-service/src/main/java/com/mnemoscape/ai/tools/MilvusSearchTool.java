@@ -1,6 +1,7 @@
 package com.mnemoscape.ai.tools;
 
 import com.mnemoscape.ai.client.MemoryServiceClient;
+import com.mnemoscape.ai.tools.audit.Tool;
 import com.mnemoscape.common.dto.ApiResponse;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -109,6 +110,7 @@ public class MilvusSearchTool {
 
     /** 真实查询：先从 memory-service 拉用户记忆，再按关键词打分。 */
     @SuppressWarnings("unchecked")
+    @Tool("milvusSearchTool")
     public Response search(Request req) {
         return searchForUser(req, currentUserId());
     }

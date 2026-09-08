@@ -65,7 +65,12 @@ const scrolled = ref(false)
 const isDrawerOpen = ref(false)
 const headerEl = ref<HTMLElement | null>(null)
 const themeSwitchEl = ref<HTMLElement | null>(null)
+const drawerEl = ref<HTMLElement | null>(null)
+const drawerTriggerEl = ref<HTMLButtonElement | null>(null)
 let headerObserver: ResizeObserver | null = null
+let drawerMediaQuery: MediaQueryList | null = null
+let drawerBackground: HTMLElement | null = null
+let drawerBackgroundWasInert = false
 
 function handleScroll() {
   scrolled.value = window.scrollY > 8
@@ -117,21 +122,74 @@ function handleGlobalClick(e: MouseEvent) {
   }
 }
 
-function handleKeydown(e: KeyboardEvent) {
-  if (e.key === 'Escape') {
+function restoreDrawerBackground() {
+  if (drawerBackground) drawerBackground.inert = drawerBackgroundWasInert
+  drawerBackground = null
+}
+
+function handleDrawerBreakpoint(event: MediaQueryListEvent) {
+  if (!event.matches) isDrawerOpen.value = false
+}
+
+function handleDrawerFocus(event: FocusEvent) {
+  if (isDrawerOpen.value && drawerEl.value && !drawerEl.value.contains(event.target as Node)) {
+    drawerEl.value.querySelector<HTMLButtonElement>('.drawer-sidebar__close')?.focus()
+  }
+}
+
+function handleKeydown(event: KeyboardEvent) {
+  if (event.key === 'Escape') {
+    if (isDrawerOpen.value) event.preventDefault()
     isDrawerOpen.value = false
     themeMenuOpen.value = false
     openGroupId.value = null
+    return
+  }
+  if (event.key !== 'Tab' || !isDrawerOpen.value || !drawerEl.value) return
+
+  const focusableElements = Array.from(drawerEl.value.querySelectorAll<HTMLElement>(
+    'a[href], button:not([disabled]), [tabindex="0"]',
+  ))
+  const firstElement = focusableElements[0]
+  const lastElement = focusableElements[focusableElements.length - 1]
+  const focusOutside = !drawerEl.value.contains(document.activeElement)
+  if (!firstElement || !lastElement) {
+    event.preventDefault()
+    drawerEl.value.focus()
+  } else if (event.shiftKey && (document.activeElement === firstElement || focusOutside)) {
+    event.preventDefault()
+    lastElement.focus()
+  } else if (!event.shiftKey && (document.activeElement === lastElement || focusOutside)) {
+    event.preventDefault()
+    firstElement.focus()
   }
 }
 
 watch(() => route.fullPath, () => {
+  isDrawerOpen.value = false
+  themeMenuOpen.value = false
   openGroupId.value = null
 })
 
 watch(isDrawerOpen, (open) => {
   document.documentElement.classList.toggle('nav-drawer-open', open)
-})
+  if (open) {
+    themeMenuOpen.value = false
+    openGroupId.value = null
+    drawerEl.value?.querySelector<HTMLButtonElement>('.drawer-sidebar__close')?.focus({ preventScroll: true })
+    drawerBackground = document.getElementById('app')
+    if (drawerBackground) {
+      drawerBackgroundWasInert = drawerBackground.inert
+      drawerBackground.inert = true
+    }
+  } else {
+    restoreDrawerBackground()
+    const returnTarget = drawerMediaQuery?.matches === false
+      ? navEl.value?.querySelector<HTMLButtonElement>('button')
+      : drawerTriggerEl.value
+    returnTarget?.focus({ preventScroll: true })
+  }
+}, { flush: 'post' })
 
 onMounted(() => {
   window.addEventListener('scroll', handleScroll, { passive: true })
@@ -143,13 +201,19 @@ onMounted(() => {
   }
   window.addEventListener('click', handleGlobalClick)
   window.addEventListener('keydown', handleKeydown)
+  window.addEventListener('focusin', handleDrawerFocus)
+  drawerMediaQuery = window.matchMedia('(max-width: 1260px)')
+  drawerMediaQuery.addEventListener('change', handleDrawerBreakpoint)
 })
 
 onUnmounted(() => {
   window.removeEventListener('scroll', handleScroll)
   window.removeEventListener('click', handleGlobalClick)
   window.removeEventListener('keydown', handleKeydown)
+  window.removeEventListener('focusin', handleDrawerFocus)
+  drawerMediaQuery?.removeEventListener('change', handleDrawerBreakpoint)
   document.documentElement.classList.remove('nav-drawer-open')
+  restoreDrawerBackground()
   if (headerObserver) {
     headerObserver.disconnect()
     headerObserver = null
@@ -157,6 +221,7 @@ onUnmounted(() => {
 })
 
 function handleLogout() {
+  isDrawerOpen.value = false
   auth.logout()
   router.push('/login')
 }
@@ -218,11 +283,14 @@ function switchLocale(l: Locale) {
 
       <!-- Hamburger Button for responsive drawer -->
       <button
+        ref="drawerTriggerEl"
+        type="button"
         class="hamburger-btn"
         :class="{ 'hamburger-btn--open': isDrawerOpen }"
         @click="isDrawerOpen = !isDrawerOpen"
         :aria-label="isDrawerOpen ? t('nav.closeMenu') : t('nav.menu')"
         :aria-expanded="isDrawerOpen"
+        aria-controls="mobile-navigation"
       >
         <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
           <line class="hamburger-bar hamburger-bar--top" x1="4" y1="7" x2="20" y2="7"></line>
@@ -256,6 +324,7 @@ function switchLocale(l: Locale) {
                 type="button"
                 class="theme-menu-item"
                 :class="{ 'theme-menu-item--active': currentTheme === themeItem.id }"
+                :aria-pressed="currentTheme === themeItem.id"
                 @click="changeTheme(themeItem.id)"
               >
                 <span class="theme-color-preview" :style="{ background: themeItem.color, color: themeItem.color }"></span>
@@ -272,6 +341,7 @@ function switchLocale(l: Locale) {
             type="button"
             class="locale-switch__btn"
             :class="{ 'locale-switch__btn--active': locale === l }"
+            :aria-pressed="locale === l"
             :title="t(`locale.${l}`)"
             @click="switchLocale(l)"
           >
@@ -280,14 +350,14 @@ function switchLocale(l: Locale) {
         </div>
 
         <template v-if="auth.isLoggedIn">
-          <RouterLink to="/profile" class="user-chip" :title="auth.user?.username || ''">
+          <RouterLink to="/profile" class="user-chip" :title="auth.user?.username || ''" :aria-label="t('profile.title')">
             <span class="user-chip__avatar">{{ initials }}</span>
             <span class="user-chip__meta">
               <strong>{{ auth.user?.username || t('brand.name') }}</strong>
               <small>{{ t('profile.title') }}</small>
             </span>
           </RouterLink>
-          <button class="button button--secondary" type="button" :title="t('nav.logout')" @click="handleLogout" style="display: inline-flex; align-items: center; gap: 6px;">
+          <button class="button button--secondary" type="button" :title="t('nav.logout')" :aria-label="t('nav.logout')" @click="handleLogout" style="display: inline-flex; align-items: center; gap: 6px;">
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4M16 17l5-5-5-5M21 12H9"/>
             </svg>
@@ -296,13 +366,13 @@ function switchLocale(l: Locale) {
         </template>
 
         <template v-else>
-          <RouterLink to="/login" class="button button--ghost" style="display: inline-flex; align-items: center; gap: 6px;">
+          <RouterLink to="/login" class="button button--ghost" :aria-label="t('login.submit')" style="display: inline-flex; align-items: center; gap: 6px;">
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <path d="M15 3h4a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-4M10 17l5-5-5-5M15 12H3"/>
             </svg>
             <span>{{ t('login.submit') }}</span>
           </RouterLink>
-          <RouterLink to="/register" class="button button--primary" style="display: inline-flex; align-items: center; gap: 6px;">
+          <RouterLink to="/register" class="button button--primary" :aria-label="t('register.submit')" style="display: inline-flex; align-items: center; gap: 6px;">
             <svg viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
               <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2m7.5-13a4 4 0 1 0 0-8 4 4 0 0 0 0 8m12 1v6m-3-3h6"/>
             </svg>
@@ -316,13 +386,13 @@ function switchLocale(l: Locale) {
   <!-- Mobile/Responsive Drawer Navigation -->
   <Teleport to="body">
     <Transition name="drawer-fade">
-      <div v-if="isDrawerOpen" class="drawer-backdrop" @click="isDrawerOpen = false" />
+      <div v-if="isDrawerOpen" class="drawer-backdrop" aria-hidden="true" @click="isDrawerOpen = false" />
     </Transition>
     <Transition name="drawer-slide">
-      <aside v-if="isDrawerOpen" class="drawer-sidebar" role="dialog" aria-modal="true">
+      <aside v-if="isDrawerOpen" id="mobile-navigation" ref="drawerEl" class="drawer-sidebar" role="dialog" aria-modal="true" :aria-label="t('nav.menu')" tabindex="-1">
         <div class="drawer-sidebar__header">
           <span class="drawer-sidebar__logo">{{ t('brand.name') }}</span>
-          <button class="drawer-sidebar__close" @click="isDrawerOpen = false" :aria-label="t('nav.closeMenu')">
+          <button type="button" class="drawer-sidebar__close" @click="isDrawerOpen = false" :aria-label="t('nav.closeMenu')">
             <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round">
               <line x1="6" y1="6" x2="18" y2="18"></line>
               <line x1="18" y1="6" x2="6" y2="18"></line>
@@ -353,6 +423,17 @@ function switchLocale(l: Locale) {
         </nav>
 
         <div class="drawer-sidebar__foot">
+          <div class="locale-switch" role="group" :aria-label="t('nav.locale')">
+            <button
+              v-for="localeOption in SUPPORTED_LOCALES"
+              :key="localeOption"
+              type="button"
+              class="locale-switch__btn"
+              :class="{ 'locale-switch__btn--active': locale === localeOption }"
+              :aria-pressed="locale === localeOption"
+              @click="switchLocale(localeOption)"
+            >{{ t(`locale.${localeOption}`) }}</button>
+          </div>
           <p class="drawer-sidebar__hint">{{ t('nav.drawerHint') }}</p>
           <button
             v-if="auth.isLoggedIn"
@@ -694,8 +775,8 @@ function switchLocale(l: Locale) {
   display: none;
   align-items: center;
   justify-content: center;
-  width: 34px;
-  height: 34px;
+  width: 44px;
+  height: 44px;
   border-radius: 10px;
   border: 1px solid rgba(216, 180, 254, 0.18);
   background: rgba(231, 224, 255, 0.04);
@@ -748,10 +829,7 @@ function switchLocale(l: Locale) {
 /* 响应式滑出式侧边栏 Drawer */
 .drawer-backdrop {
   position: fixed;
-  top: 0;
-  left: 0;
-  width: 100vw;
-  height: 100vh;
+  inset: 0;
   background: rgba(7, 6, 17, 0.55);
   backdrop-filter: blur(6px);
   -webkit-backdrop-filter: blur(6px);
@@ -765,12 +843,13 @@ function switchLocale(l: Locale) {
   width: 296px;
   max-width: 84vw;
   height: 100vh;
+  height: 100dvh;
   background: linear-gradient(180deg, rgba(14, 11, 30, 0.97), rgba(8, 6, 22, 0.97));
   backdrop-filter: blur(22px) saturate(150%);
   -webkit-backdrop-filter: blur(22px) saturate(150%);
   border-right: 1px solid rgba(216, 180, 254, 0.16);
   box-shadow: 18px 0 42px rgba(3, 2, 10, 0.55);
-  padding: 22px 18px;
+  padding: max(22px, env(safe-area-inset-top)) 18px max(22px, env(safe-area-inset-bottom));
   display: flex;
   flex-direction: column;
   gap: 24px;
@@ -780,6 +859,7 @@ function switchLocale(l: Locale) {
 
 .drawer-sidebar__header {
   display: flex;
+  flex-shrink: 0;
   align-items: center;
   justify-content: space-between;
   border-bottom: 1px solid rgba(216, 180, 254, 0.12);
@@ -801,8 +881,9 @@ function switchLocale(l: Locale) {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 28px;
-  height: 28px;
+  width: 44px;
+  height: 44px;
+  flex-shrink: 0;
   border-radius: 8px;
   border: 1px solid rgba(216, 180, 254, 0.18);
   background: rgba(231, 224, 255, 0.04);
@@ -822,14 +903,17 @@ function switchLocale(l: Locale) {
   flex-direction: column;
   gap: 4px;
   flex-grow: 1;
+  min-height: 0;
   overflow-y: auto;
-  padding-right: 4px;
+  overscroll-behavior: contain;
+  padding: 4px;
 }
 
 .drawer-sidebar__link {
   display: flex;
   align-items: center;
   gap: 12px;
+  min-height: 44px;
   padding: 9px 12px;
   border-radius: 10px;
   color: rgba(245, 248, 252, 0.78);
@@ -862,6 +946,7 @@ function switchLocale(l: Locale) {
   padding-top: 12px;
   display: flex;
   flex-direction: column;
+  flex-shrink: 0;
   gap: 10px;
 }
 
@@ -869,7 +954,7 @@ function switchLocale(l: Locale) {
   margin: 0;
   font-size: 0.74rem;
   letter-spacing: 0.02em;
-  color: rgba(231, 224, 255, 0.42);
+  color: var(--text-muted);
   text-align: center;
 }
 
@@ -878,6 +963,7 @@ function switchLocale(l: Locale) {
   align-items: center;
   justify-content: center;
   gap: 8px;
+  min-height: 44px;
   padding: 8px 12px;
   border-radius: 10px;
   border: 1px solid rgba(255, 109, 142, 0.25);
@@ -895,8 +981,10 @@ function switchLocale(l: Locale) {
   color: #fff;
 }
 
-:global(html.nav-drawer-open) {
+:global(html.nav-drawer-open),
+:global(html.nav-drawer-open body) {
   overflow: hidden;
+  overscroll-behavior: none;
 }
 
 /* Transitions */
@@ -961,12 +1049,19 @@ function switchLocale(l: Locale) {
   .header-actions {
     gap: 6px;
   }
-  .locale-switch {
+  .header-actions .locale-switch {
     /* 极窄屏：locale 切换隐藏 — 用户主要交互是导航和登出 */
     display: none;
   }
   .brand__copy {
     display: none;
+  }
+  .theme-switch-trigger,
+  .locale-switch__btn,
+  .header-actions :deep(.button),
+  .header-actions :deep(.user-chip) {
+    min-width: 44px;
+    min-height: 44px;
   }
 }
 
@@ -1191,5 +1286,113 @@ function switchLocale(l: Locale) {
 .theme-menu-fade-leave-to {
   opacity: 0;
   transform: translateY(6px) scale(0.96);
+}
+
+/* Quiet museum navigation: a catalogue rail, not a floating command centre. */
+.app-header {
+  border-bottom-color: rgba(244, 232, 220, 0.1);
+  background: rgba(14, 11, 13, 0.94);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+.app-header--scrolled {
+  background: rgba(14, 11, 13, 0.98);
+  border-bottom-color: rgba(214, 164, 143, 0.18);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.22);
+}
+
+.brand__mark {
+  border-radius: 10px;
+  background: var(--surface-strong);
+  border: 1px solid var(--border-strong);
+  box-shadow: none;
+}
+
+.app-nav {
+  border-radius: 10px;
+  padding: 3px;
+  background: rgba(35, 27, 32, 0.92);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+}
+
+.app-nav__link {
+  border-radius: 7px;
+  color: var(--text-muted);
+  font-weight: 500;
+}
+
+.app-nav__link:hover {
+  color: var(--text);
+  background: rgba(244, 232, 220, 0.07);
+}
+
+.app-nav__link.router-link-active,
+.app-nav__link.router-link-exact-active {
+  color: #2c211d;
+  -webkit-text-fill-color: #2c211d;
+  background: var(--gold);
+  box-shadow: inset 0 0 0 1px rgba(255, 250, 240, 0.2);
+}
+
+.locale-switch {
+  border-radius: 8px;
+  padding: 2px;
+  background: var(--surface-strong);
+}
+
+.locale-switch__btn {
+  border-radius: 6px;
+  font-weight: 500;
+}
+
+.locale-switch__btn--active {
+  background: var(--gold);
+  color: #2c211d;
+  -webkit-text-fill-color: #2c211d;
+}
+
+.hamburger-btn {
+  border-color: var(--border-strong);
+  background: var(--surface-strong);
+  box-shadow: none;
+}
+
+.hamburger-btn:hover,
+.hamburger-btn[aria-expanded="true"] {
+  background: var(--surface-elevated);
+  border-color: var(--border-accent);
+  color: var(--text);
+  box-shadow: none;
+}
+
+.drawer-backdrop {
+  background: rgba(7, 5, 7, 0.68);
+  backdrop-filter: blur(3px);
+  -webkit-backdrop-filter: blur(3px);
+}
+
+.drawer-sidebar {
+  background: var(--surface-strong);
+  backdrop-filter: none;
+  -webkit-backdrop-filter: none;
+  border-right-color: var(--border-strong);
+  box-shadow: 18px 0 36px rgba(0, 0, 0, 0.32);
+}
+
+.drawer-sidebar__logo {
+  background: none;
+  -webkit-background-clip: initial;
+  background-clip: initial;
+  -webkit-text-fill-color: currentColor;
+  color: var(--text);
+}
+
+.drawer-sidebar__link.router-link-active {
+  color: #2c211d;
+  -webkit-text-fill-color: #2c211d;
+  background: var(--gold);
+  box-shadow: none;
 }
 </style>

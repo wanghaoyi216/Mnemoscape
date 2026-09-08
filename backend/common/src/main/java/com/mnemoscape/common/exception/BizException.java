@@ -33,6 +33,10 @@ public class BizException extends RuntimeException {
         return new BizException(403, "Access denied");
     }
 
+    public static BizException forbidden(String message) {
+        return new BizException(403, message);
+    }
+
     public static BizException badRequest(String message) {
         return new BizException(400, message);
     }

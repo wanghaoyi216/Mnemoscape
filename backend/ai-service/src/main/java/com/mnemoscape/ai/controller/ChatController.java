@@ -11,6 +11,7 @@ import reactor.core.scheduler.Scheduler;
 import reactor.core.scheduler.Schedulers;
 import jakarta.annotation.PreDestroy;
 import jakarta.validation.Valid;
+import com.mnemoscape.ai.quota.UserTokenQuotaService;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.http.MediaType;
@@ -56,6 +57,7 @@ public class ChatController {
     private final ReActController reactController;
     private final DynamicWorkflowEngine workflowEngine;
     private final Scheduler aiBlockingScheduler;
+    private final com.mnemoscape.ai.quota.UserTokenQuotaService tokenQuota;
 
     /** 共享调度器：在视觉前置阻塞 / 上游首字延迟期间发 SSE 注释帧 :keepalive，
      *  防止前端浏览器 / 反向代理 / 开发服务器把"无任何字节流出"的 SSE 当死连接 reset。
@@ -84,11 +86,13 @@ public class ChatController {
             new java.util.concurrent.ThreadPoolExecutor.DiscardPolicy()); // 降级策略：队列满丢任务，plan 是可选增强，不能阻塞 servlet 线程
 
     public ChatController(ChatReasoner reasoner, ReActController reactController, DynamicWorkflowEngine workflowEngine,
-                          @org.springframework.beans.factory.annotation.Qualifier("aiBlockingScheduler") Scheduler aiBlockingScheduler) {
+                          @org.springframework.beans.factory.annotation.Qualifier("aiBlockingScheduler") Scheduler aiBlockingScheduler,
+                          com.mnemoscape.ai.quota.UserTokenQuotaService tokenQuota) {
         this.reasoner = reasoner;
         this.reactController = reactController;
         this.workflowEngine = workflowEngine;
         this.aiBlockingScheduler = aiBlockingScheduler;
+        this.tokenQuota = tokenQuota;
     }
 
     @PreDestroy
@@ -103,6 +107,11 @@ public class ChatController {
             jakarta.servlet.http.HttpServletRequest http) {
         // 通过网关 X-User-Id 头取 caller，让 reasoner 能跑强制 RAG（关键词召回当前用户记忆）
         String userId = http.getHeader("X-User-Id");
+        // R8：per-user token 配额（同步路径：直接 429 + 友好消息）
+        if (!tokenQuota.tryAcquire(userId, Math.max(1, request.getQuestion().length() / 4))) {
+            return ResponseEntity.status(429)
+                    .body(ApiResponse.error(429, "今日 AI 使用额度已用完，请明天再来"));
+        }
         String answer;
         if (request.isReAct()) {
             answer = generateReActAnswer(request, userId);
@@ -133,6 +142,19 @@ public class ChatController {
                                   jakarta.servlet.http.HttpServletRequest http) {
         String userId = http.getHeader("X-User-Id");
         SseEmitter emitter = new SseEmitter(120_000L); // 2 min
+        // R8：per-user token 配额（流式路径：失败推 error 事件 + complete，不发任何 token）
+        // 必须放在 stream(emitter,...) 调用之前，避免前端已经看到 meta 后再被掐断
+        if (!tokenQuota.tryAcquire(userId, Math.max(1, request.getQuestion().length() / 4))) {
+            try {
+                emitter.send(SseEmitter.event().name("error").data(java.util.Map.of(
+                        "code", 429,
+                        "reason", "quota_exceeded",
+                        "detail", "今日 AI 使用额度已用完，请明天再来"
+                )));
+            } catch (Exception ignored) {}
+            emitter.complete();
+            return emitter;
+        }
         stream(emitter, request, userId);
         return emitter;
     }

@@ -113,6 +113,9 @@ public class ReActController {
                 String toolName = action[0];
                 String argsJson = action[1];
 
+                Object input = safeParseArgs(argsJson);
+                emitActionStart(listener, requestId, toolName, input);
+
                 if ("final".equals(toolName)) {
                     // 解析 argsJson.answer
                     String answer = extractFinalAnswer(argsJson);
@@ -123,13 +126,13 @@ public class ReActController {
                     return;
                 }
 
-                // 普通工具：emit action_start → execute → emit observation
-                Object input = safeParseArgs(argsJson);
-                emitActionStart(listener, requestId, toolName, input);
+                // 普通工具：execute → emit observation
                 Object output;
                 try {
-                    output = toolRegistry.get(toolName)
-                            .execute(argsJson, new ToolRegistry.ReActContext(userId, requestId));
+                    // 走 ToolRegistry 统一执行口（自带 ai-tool-audit 结构化审计），
+                    // 不再用 get().execute() 裸调 —— 裸调会绕过注册表层的审计兜底。
+                    output = toolRegistry.execute(toolName, argsJson,
+                            new ToolRegistry.ReActContext(userId, requestId));
                 } catch (Exception e) {
                     output = java.util.Map.of("error", "tool execution failed",
                             "tool", toolName,

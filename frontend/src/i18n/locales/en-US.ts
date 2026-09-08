@@ -284,7 +284,7 @@ export default {
   "login":
   {
       "eyebrow": "Private memory studio",
-      "title": "Let the forgotten<br/>shimmer again.",
+      "title": "Let the forgotten\nshimmer again.",
       "lead": "Sign back in to revisit reconstructed scenes, lock fragile memories, and trace resonance between moments. Built for long-form work — one focused canvas at a time.",
       "features":
       {

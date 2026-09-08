@@ -110,7 +110,7 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,info,metrics,prometheus,loggers
+        include: health,info,metrics,prometheus,loggers,caches
   endpoint:
     health:
       show-details: when_authorized

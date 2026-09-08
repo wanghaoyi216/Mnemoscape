@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8"><title>client 模块流程图</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+<style>
+body{background:#1a1a2e;color:#e0e0e0;font-family:"Microsoft YaHei",sans-serif;display:flex;justify-content:center;padding:40px 20px}
+.container{max-width:1000px;width:100%}
+h1{text-align:center;color:#81C784;font-size:1.6em;margin-bottom:30px}
+.mermaid{background:#16213e;border-radius:8px;padding:20px}
+</style>
+</head>
+<body>
+<div class="container">
+<h1>client 模块流程图</h1>
+<div class="mermaid">
+flowchart TD
+    MS["MemoryService 业务层"] --> AG["AiServiceGateway 保护壳"]
+    MS --> ASC["AuthServiceClient 直调"]
+
+    AG --> CB{"熔断器 OPEN?"}
+    CB -->|"CLOSED 正常"| RETRY["@Retry 重试 0~2次"]
+    CB -->|"OPEN 已熔断"| FB["fallback 兜底"]
+
+    RETRY -->|"成功"| FEIGN["AiServiceClient HTTP"]
+    RETRY -->|"重试耗尽"| FB
+    FEIGN --> AI["ai-service"]
+
+    ASC --> AUTH["auth-service"]
+
+    FB --> F1["extractEntities → 503 跳过"]
+    FB --> F2["reconstruct → null"]
+    FB --> F3["indexVector → 503 + outbox兜底"]
+    FB --> F4["deleteVector → 503 待补删"]
+
+    style AG fill:#E65100,color:#fff
+    style ASC fill:#546E7A,color:#fff
+    style CB fill:#1565C0,color:#fff
+    style FB fill:#C62828,color:#fff
+    style F3 fill:#6A1B9A,color:#fff
+</div>
+</div>
+<script>mermaid.initialize({startOnLoad:true,theme:'dark'});</script>
+</body>
+</html>

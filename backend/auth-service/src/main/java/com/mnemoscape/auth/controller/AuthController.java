@@ -40,6 +40,9 @@ public class AuthController {
         return ResponseEntity.ok(ApiResponse.success(authService.login(request)));
     }
 
+    @RateLimit(key = "auth:refresh", limit = 20, windowSeconds = 60,
+            dimension = RateLimit.Dimension.USER_OR_IP,
+            message = "Token 刷新过于频繁，请稍后再试")
     @PostMapping("/refresh")
     public ResponseEntity<ApiResponse<AuthResponse>> refresh(
             @RequestHeader(value = "Authorization", required = false) String bearer) {

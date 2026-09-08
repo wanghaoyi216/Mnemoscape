@@ -56,6 +56,16 @@ const routes = [
     meta: { requiresAuth: true },
   },
   {
+    // R20 — InstancedMesh 3D memory viewer
+    // (legacy /memories/:id with pentagram was 12 FPS at 50k
+    // particles; this view uses ONE InstancedMesh per (emotion, layer)
+    // → 24 constant draw calls, 55+ FPS).
+    path: '/memories/3d',
+    name: 'Memory3dViewer',
+    component: () => import('../views/Memory3dViewer.vue'),
+    meta: { requiresAuth: true },
+  },
+  {
     path: '/memories/:id',
     name: 'MemoryDetail',
     component: () => import('../views/MemoryDetailView.vue'),

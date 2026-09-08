@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8"><title>security 模块流程图</title>
+<script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+<style>
+body{background:#1a1a2e;color:#e0e0e0;font-family:"Microsoft YaHei",sans-serif;display:flex;justify-content:center;padding:40px 20px}
+.container{max-width:1000px;width:100%}
+h1{text-align:center;color:#81C784;font-size:1.6em;margin-bottom:30px}
+.mermaid{background:#16213e;border-radius:8px;padding:20px}
+</style>
+</head>
+<body>
+<div class="container">
+<h1>security 模块流程图</h1>
+<div class="mermaid">
+flowchart TD
+    A["HTTP 请求到达"] --> B{"URL 匹配规则"}
+    B -->|"/api/**"| C["apiFilterChain"]
+    B -->|"/actuator/**"| D["actuatorFilterChain"]
+
+    C --> C1["JwtAuthFilter 解析Token"]
+    C1 --> C2{"Token 有效?"}
+    C2 -->|"有效"| C3["AuthFilter 权限检查"]
+    C2 -->|"无效"| C4["401 Unauthorized"]
+
+    C3 --> C5["Controller 业务处理"]
+    C5 --> C6["200 响应"]
+
+    D --> D1["全部 permitAll"]
+    D1 --> D2["Controller 直接处理"]
+    D2 --> C6
+
+    style C fill:#1565C0,color:#fff
+    style D fill:#6A1B9A,color:#fff
+    style C1 fill:#E65100,color:#fff
+    style C4 fill:#C62828,color:#fff
+    style C6 fill:#2E7D32,color:#fff
+</div>
+</div>
+<script>mermaid.initialize({startOnLoad:true,theme:'dark'});</script>
+</body>
+</html>

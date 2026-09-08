@@ -1,13 +1,56 @@
 import { defineConfig, loadEnv } from 'vite'
 import vue from '@vitejs/plugin-vue'
+import { VitePWA } from 'vite-plugin-pwa'
+import { pwaManifest } from './src/pwa/manifest'
 
 export default defineConfig(({ mode }) => {
   // Load environment variables from the current directory
   const env = loadEnv(mode, process.cwd(), '')
   const backendHost = env.VITE_BACKEND_HOST || 'localhost'
+  const isDev = mode === 'development'
 
   return {
-    plugins: [vue()],
+    plugins: [
+      vue(),
+      // R31: PWA — manifest + service worker (injectManifest mode so we can
+      // write the SW in TypeScript with full Workbox strategies). Disabled
+      // in dev to avoid stale-cache headaches during hot reload.
+      VitePWA({
+        registerType: 'autoUpdate',
+        injectRegister: isDev ? null : 'auto',
+        strategies: 'injectManifest',
+        srcDir: 'src/pwa',
+        filename: 'service-worker.ts',
+        manifest: pwaManifest,
+        injectManifest: {
+          // Webpack-style import.meta.url is fine for Workbox precacheAndRoute.
+          globPatterns: ['**/*.{js,css,html,svg,ico,png,woff2,webp}'],
+          globIgnores: [
+            'media/**',
+            'assets/vendor-{map,map-3d,three,charts,mermaid,graph}-*.js',
+          ],
+          maximumFileSizeToCacheInBytes: 5 * 1024 * 1024,
+        },
+        devOptions: {
+          enabled: isDev,
+          type: 'module',
+          navigateFallback: 'index.html',
+        },
+        // Don't precache huge library chunks (deck.gl, three, maplibre) — they
+        // get cached at runtime via the SWR/NetworkFirst routes.
+        workbox: {
+          navigateFallback: '/index.html',
+          globPatterns: ['**/*.{js,css,html,svg,ico,png,woff2}'],
+        },
+      }),
+    ],
+    css: {
+      preprocessorOptions: {
+        scss: {
+          api: 'modern-compiler',
+        },
+      },
+    },
     server: {
       port: 5173,
       proxy: {
@@ -39,7 +82,7 @@ export default defineConfig(({ mode }) => {
           manualChunks(id) {
             if (!id.includes('node_modules')) return undefined
 
-            if (/[\\/]node_modules[\\/](vue|vue-router|pinia|vue-i18n)[\\/]/.test(id)) {
+            if (/[\\/]node_modules[\\/](vue|vue-router|pinia|vue-i18n|workbox-)[\\/]/.test(id)) {
               return 'vendor-vue'
             }
             if (/[\\/]node_modules[\\/](three|@tweenjs)[\\/]/.test(id)) {
@@ -63,7 +106,7 @@ export default defineConfig(({ mode }) => {
             if (/[\\/]node_modules[\\/](cytoscape|dagre|elkjs)[\\/]/.test(id)) {
               return 'vendor-graph'
             }
-            if (/[\\/]node_modules[\\/](axios|howler)[\\/]/.test(id)) {
+            if (/[\\/]node_modules[\\/](axios|howler|workbox-)[\\/]/.test(id)) {
               return 'vendor-runtime'
             }
             return undefined

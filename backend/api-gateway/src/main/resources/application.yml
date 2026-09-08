@@ -214,10 +214,22 @@ mnemoscape:
     refresh-token-expiration: 604800000
 
 management:
+  # 分布式追踪试点：Micrometer Tracing（桥接 OpenTelemetry）。
+  # traceId 自动写入 MDC（reactive 环境写入 reactor context/slf4j），与
+  # RequestCorrelationFilter 的 X-Correlation-Id 并存互不影响。
+  tracing:
+    sampling:
+      probability: 1.0 # 试点期全采样，量大后调低
+  otlp:
+    tracing:
+      # OTLP HTTP exporter；容器内部署时通过环境变量覆盖为 http://jaeger:4318/v1/traces
+      endpoint: ${OTEL_EXPORTER_OTLP_ENDPOINT:http://localhost:4318/v1/traces}
   endpoints:
     web:
       exposure:
-        include: health,info,metrics,prometheus,gateway
+        # R32: 必须显式暴露 health / info / prometheus / metrics。
+        # 网关还额外暴露 gateway（路由表 / 路由谓词面板）便于排障。
+        include: health,info,prometheus,metrics,gateway
   endpoint:
     health:
       show-details: when_authorized

@@ -126,6 +126,7 @@ async function fetchAuditLogs() {
 }
 
 let auditTimer: any = null
+let visibilityHandler: (() => void) | null = null
 
 onMounted(() => {
   void fetch()
@@ -157,18 +158,20 @@ onMounted(() => {
   }
   schedule()
   // 错误恢复 / 隐藏 → 重新调度
-  document.addEventListener('visibilitychange', () => {
+  visibilityHandler = () => {
     if (!document.hidden) {
       consecutiveErrors = 0
       currentInterval = baseInterval
       schedule()
       void fetchAuditLogs()
     }
-  })
+  }
+  document.addEventListener('visibilitychange', visibilityHandler)
 })
 
 onUnmounted(() => {
   if (auditTimer) clearInterval(auditTimer)
+  if (visibilityHandler) document.removeEventListener('visibilitychange', visibilityHandler)
 })
 </script>
 

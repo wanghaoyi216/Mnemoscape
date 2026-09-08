@@ -1,10 +1,13 @@
 package com.mnemoscape.auth.security;
 
 import com.mnemoscape.common.security.JwtAuthFilter;
+import com.mnemoscape.common.security.JwtBlacklist;
 import com.mnemoscape.common.security.JwtTokenProvider;
+import com.mnemoscape.common.security.SilentRefreshHandler;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.core.annotation.Order;
 import org.springframework.http.HttpMethod;
 import org.springframework.security.authorization.AuthorityAuthorizationManager;
 import org.springframework.security.authorization.AuthorizationDecision;
@@ -22,6 +25,29 @@ import org.springframework.web.cors.UrlBasedCorsConfigurationSource;
 
 import java.util.List;
 
+/**
+ * R21 SecurityConfig —— Authorization Server / Resource Server 端点编排。
+ *
+ * <p>本服务同时承担两个角色：
+ * <ul>
+ *   <li><b>Authorization Server</b> —— 由 {@link AuthorizationServerConfig} 提供
+ *       {@code /oauth2/authorize}、{@code /oauth2/token}、{@code /oauth2/jwks}、
+ *       {@code /oauth2/revoke}、{@code /userinfo} 等 OAuth2/OIDC 端点。</li>
+ *   <li><b>Resource Server</b> —— 自身的 /api/v1/admin/** 等业务接口继续使用
+ *       {@link JwtTokenProvider} 校验 Bearer token（与 R14 兼容）；新接入的
+ *       服务（如 memory-service、ai-service）则改用 Spring Security 的
+ *       {@code spring-security-oauth2-resource-server} + JwtDecoder 走 JWKS 校验。</li>
+ * </ul>
+ *
+ * <p><b>代码量：</b>R14 时期 SecurityConfig 145 行（含 cors / bcrypt / permitAll
+ * 列表 / filter 装配），本版本合并 OAuth2 编排后约 130 行 —— 但 R21 把"手写
+ * JwtSigner"（即 common.JwtTokenProvider 在 OAuth2 端点的使用）整体抹掉了，
+ * Authorization Server 端点本身不依赖任何 jjwt 代码。
+ *
+ * <p><b>R14 → R21 兼容：</b>{@link R21RevocationHookConfiguration} 负责把
+ * {@code /oauth2/revoke} 与 refresh-token 旋转事件桥接到现有的
+ * {@link TokenBlacklistService} / {@link RefreshTokenStore}。
+ */
 @Configuration
 @EnableWebSecurity
 public class SecurityConfig {
@@ -45,10 +71,19 @@ public class SecurityConfig {
         return new BCryptPasswordEncoder();
     }
 
+    /**
+     * 默认 SecurityFilterChain —— 业务接口（/api/v1/admin/**、/api/v1/auth/login 等）。
+     *
+     * <p>OAuth2 端点（/oauth2/**、/userinfo、/.well-known/**）由
+     * {@link AuthorizationServerConfig#authorizationServerSecurityFilterChain(HttpSecurity)}
+     * 单独处理（{@code @Order(HIGHEST_PRECEDENCE)}），这里只关心业务接口。
+     */
     @Bean
-    public SecurityFilterChain filterChain(HttpSecurity http,
-                                            JwtTokenProvider jwtTokenProvider,
-                                            RedisJwtBlacklist blacklist) throws Exception {
+    @Order(2)
+    public SecurityFilterChain businessApiFilterChain(HttpSecurity http,
+                                                      JwtTokenProvider jwtTokenProvider,
+                                                      JwtBlacklist blacklist,
+                                                      SilentRefreshHandler silentRefreshHandler) throws Exception {
         http
             .cors(cors -> cors.configurationSource(corsConfigurationSource()))
             .csrf(csrf -> csrf.disable())
@@ -92,7 +127,9 @@ public class SecurityConfig {
                 .requestMatchers("/api/v1/admin/**").hasRole("ADMIN")
                 .anyRequest().authenticated()
             )
-            .addFilterBefore(new JwtAuthFilter(jwtTokenProvider, blacklist),
+            // R14：把 silentRefreshHandler 注入 JwtAuthFilter，access 过期时会自动
+            // 尝试用 X-Refresh-Token 旋转并把新 token 写回 response header。
+            .addFilterBefore(new JwtAuthFilter(jwtTokenProvider, blacklist, silentRefreshHandler),
                     UsernamePasswordAuthenticationFilter.class);
 
         return http.build();

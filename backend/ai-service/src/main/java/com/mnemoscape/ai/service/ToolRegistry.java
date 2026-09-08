@@ -6,13 +6,19 @@ import com.mnemoscape.ai.client.MemoryServiceClient;
 import com.mnemoscape.ai.client.ResonanceServiceClient;
 import com.mnemoscape.ai.tools.MilvusSearchTool;
 import com.mnemoscape.common.dto.ApiResponse;
+import net.logstash.logback.argument.StructuredArguments;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Component;
 
 import jakarta.annotation.PostConstruct;
+import java.nio.charset.StandardCharsets;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.time.Instant;
 import java.util.ArrayList;
+import java.util.HexFormat;
 import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Locale;
@@ -42,6 +48,13 @@ import java.util.concurrent.ConcurrentMap;
 public class ToolRegistry {
 
     private static final Logger log = LoggerFactory.getLogger(ToolRegistry.class);
+
+    /**
+     * 审计 logger —— 与 {@link com.mnemoscape.ai.tools.audit.ToolAuditAspect} 用同一个
+     * logger 名 {@code ai-tool-audit}（logback 的 AI_TOOL_AUDIT appender，additivity=false），
+     * 确保经本注册表的工具调用与注解路径的审计落同一文件 / 同一 ELK 索引。
+     */
+    private static final Logger AUDIT = LoggerFactory.getLogger("ai-tool-audit");
 
     /* ---------------- 公共类型：工具契约 + 执行上下文 ---------------- */
 
@@ -157,6 +170,85 @@ public class ToolRegistry {
 
     public java.util.Set<String> names() {
         return java.util.Collections.unmodifiableSet(tools.keySet());
+    }
+
+    /* ---------------- 统一执行口（带审计） ---------------- */
+
+    /**
+     * 工具统一执行入口：查找 + 执行 + 结构化审计，一条龙。
+     *
+     * <p><b>为什么这里要补审计</b>：{@link com.mnemoscape.ai.tools.audit.ToolAuditAspect}
+     * 靠 Spring AOP 拦截 {@code @Tool} 注解方法，但本注册表里的工具实现是匿名内部类
+     * / lambda（捕获的是未代理目标对象），且大多根本没有 @Tool 注解 —— 切面对它们
+     * 全部失效。此前只有 emotionAnalysisTool 底层 bean 的注解方法能触发切面审计，
+     * 其余经 ReAct 主路径的工具调用完全不留痕。所有调用方应改走本方法而不是
+     * {@link #get(String)} + {@code Tool#execute} 裸调。
+     *
+     * <p><b>已知重复审计</b>：emotionAnalysisTool 底层 bean 的 @Tool 方法仍会被切面
+     * 记一次，经本方法再记一次 → 同一次调用产生两条审计记录。审计场景宁多勿缺，
+     * 接受该重复；可用 {@code source} 字段区分两条记录来源。
+     *
+     * <p>字段与切面同格式（logger ai-tool-audit + StructuredArguments kv）：
+     * toolName / userId / argsHash / resultHash / status / latencyMs /
+     * timestamp / ts / errorClass / requestId / source。
+     * 与切面一致不打 args/result 原值（入参含用户 prompt 切片，PII 风险），只记指纹；
+     * userId 与既有代码一致取 ctx.userId（网关 X-User-Id 注入），拿不到记 anonymous。
+     *
+     * @throws ToolNotFoundException      工具未注册（与 get 语义一致，向上抛）
+     * @throws ToolArgsParseException     argsJson 解析失败（工具内部抛出，向上抛）
+     */
+    public Object execute(String toolName, String argsJson, ReActContext ctx) {
+        long startNanos = System.nanoTime();
+        String userId = (ctx != null && ctx.userId != null && !ctx.userId.isBlank())
+                ? ctx.userId : "anonymous";
+        String argsHash = sha256(argsJson);
+
+        Object result;
+        // 预置 failure 兜底：若 try 内抛出非 RuntimeException（如 Error），
+        // catch 不命中，finally 读取时也保证字段已初始化（definite assignment）
+        String status = "failure";
+        String resultHash = "exception";
+        String errorClass = null;
+        try {
+            result = get(toolName).execute(argsJson, ctx);
+            status = "success";
+            resultHash = sha256(result == null ? null : String.valueOf(result));
+            return result;
+        } catch (RuntimeException e) {
+            // 审计不能吞业务异常：记 failure 后原样上抛，语义与 ToolAuditAspect 一致
+            status = "failure";
+            resultHash = "exception";
+            errorClass = e.getClass().getSimpleName();
+            throw e;
+        } finally {
+            long latencyMs = (System.nanoTime() - startNanos) / 1_000_000L;
+            AUDIT.info("ai-tool-call",
+                    StructuredArguments.kv("toolName", toolName),
+                    StructuredArguments.kv("userId", userId),
+                    StructuredArguments.kv("argsHash", argsHash),
+                    StructuredArguments.kv("resultHash", resultHash),
+                    StructuredArguments.kv("status", status),
+                    StructuredArguments.kv("timestamp", Instant.now().toString()),
+                    StructuredArguments.kv("ts", System.currentTimeMillis()),
+                    StructuredArguments.kv("latencyMs", latencyMs),
+                    StructuredArguments.kv("errorClass", errorClass),
+                    StructuredArguments.kv("requestId", ctx == null ? null : ctx.requestId),
+                    StructuredArguments.kv("source", "tool-registry")
+            );
+        }
+    }
+
+    /** 取 SHA-256 十六进制并截断到 16 字符，格式与 ToolAuditAspect 保持一致。 */
+    private static String sha256(String input) {
+        if (input == null) return "null";
+        try {
+            MessageDigest md = MessageDigest.getInstance("SHA-256");
+            byte[] digest = md.digest(input.getBytes(StandardCharsets.UTF_8));
+            return HexFormat.of().formatHex(digest).substring(0, 16);
+        } catch (NoSuchAlgorithmException e) {
+            // SHA-256 在任何合规 JDK 都存在；理论上不可能触发
+            return "hash-error";
+        }
     }
 
     /* ---------------- 6 个内置实现 ---------------- */

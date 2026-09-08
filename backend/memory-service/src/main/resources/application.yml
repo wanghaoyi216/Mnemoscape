@@ -141,7 +141,10 @@ management:
   endpoints:
     web:
       exposure:
-        include: health,info,metrics,prometheus,caches,loggers
+        # R32: 必须显式暴露 health / info / prometheus / metrics。
+        # memory-service 还额外暴露 caches（管理员面板调缓存命中率）
+        # 和 loggers（动态调日志级别排查）。
+        include: health,info,prometheus,metrics,caches,loggers
   endpoint:
     health:
       show-details: when_authorized
@@ -165,8 +168,12 @@ logging:
 feign:
   client:
     config:
-      # 默认保留较宽（ai-service 的重建 / 向量索引走 @Async 包裹，慢不阻塞主线程）。
+      # default 收紧到 30s：非 @Async 路径（如 admin Feign）不应挂 2 分钟。
+      # ai-service 的重建/向量索引走 @Async，慢不阻塞主线程，单独给 ai-service 宽超时。
       default:
+        connectTimeout: 5000
+        readTimeout: 30000
+      ai-service:
         connectTimeout: 5000
         readTimeout: 120000
       # auth-service 的 FRIENDS 权限探针在「读记忆」的同步校验路径上 —— auth 变慢

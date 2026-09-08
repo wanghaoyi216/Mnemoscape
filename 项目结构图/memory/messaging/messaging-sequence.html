@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <title>messaging 模块时序图</title>
+    <script src="https://cdn.jsdelivr.net/npm/mermaid/dist/mermaid.min.js"></script>
+    <style>
+        body { background: #1a1a2e; color: #e0e0e0; font-family: "Microsoft YaHei", sans-serif; display: flex; justify-content: center; padding: 40px 20px; }
+        .container { max-width: 1200px; width: 100%; }
+        h1 { text-align: center; color: #81C784; font-size: 1.6em; margin-bottom: 30px; }
+        .mermaid { background: #16213e; border-radius: 8px; padding: 20px; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>messaging 模块时序图</h1>
+        <div class="mermaid">
+sequenceDiagram
+    participant MS as MemoryService
+    participant EP as EventPublisher
+    participant RT as RabbitTemplate
+    participant MQ as RabbitMQ
+    participant OEP as OutboxEventPublisher
+    participant DB as outbox_event表
+    participant Sched as OutboxRetryScheduler
+
+    Note over MS,Sched: 场景1: MQ正常 - happy path
+    MS->>EP: publishMemoryIndexed(event)
+    EP->>RT: convertAndSend(exchange, routingKey, payload)
+    RT->>MQ: 发布消息
+    MQ-->>RT: ack确认
+    RT-->>EP: 成功
+    EP-->>MS: return true
+    Note over MS: 用户看到创建成功
+
+    Note over MS,Sched: 场景2: MQ挂了 - 走outbox兜底
+    MS->>EP: publishMemoryIndexed(event)
+    EP->>RT: convertAndSend()
+    RT-->>EP: AmqpException 连接拒绝
+    EP->>EP: catch AmqpException
+    EP->>OEP: stageBestEffort(routingKey, payload)
+    Note over OEP: REQUIRES_NEW 开独立事务
+    OEP->>DB: save() 状态PENDING
+    DB-->>OEP: 返回eventId
+    OEP-->>EP: eventId
+    EP-->>MS: return false(主流程不阻断)
+    Note over MS: 用户仍然看到创建成功
+
+    Note over MS,Sched: 30秒后 - Scheduler定时重发
+    Sched->>DB: findReady(PENDING, now)
+    DB-->>Sched: 一批OutboxEvent记录
+    Sched->>Sched: 通过classCache还原类型
+    Sched->>Sched: 通过ObjectMapper还原对象
+    Sched->>RT: convertAndSend()
+
+    alt 重发成功
+        RT->>MQ: 发布消息
+        MQ-->>RT: ack确认
+        Sched->>DB: setStatus(PUBLISHED)
+        Note over DB: cleanup稍后删除此记录
+    else 重发仍然失败
+        RT-->>Sched: Exception
+        Sched->>Sched: attempts+1
+        Sched->>Sched: 计算退避 5x2的N次方秒
+        Sched->>DB: 更新nextAttemptAt和attempts
+        Note over Sched: attempts>=10则标记FAILED
+    end
+        </div>
+    </div>
+    <script>mermaid.initialize({startOnLoad:true,theme:'dark'});</script>
+</body>
+</html>

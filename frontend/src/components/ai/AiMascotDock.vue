@@ -59,6 +59,29 @@ interface ToolCall {
   expanded?: boolean
 }
 
+export interface WorkflowStepItem {
+  id: number
+  name: string
+  description?: string
+  parallel?: boolean
+  status: 'PENDING' | 'RUNNING' | 'COMPLETED' | 'FAILED'
+  result?: string
+}
+
+export interface SubagentItem {
+  stepId: number
+  agentName: string
+  task: string
+  result?: string
+  status: 'running' | 'completed' | 'failed'
+}
+
+export interface AcceptanceVerdict {
+  checked: boolean
+  matched: boolean
+  reason: string
+}
+
 interface Attachment {
   kind: 'image' | 'audio' | 'video'
   src: string
@@ -78,6 +101,9 @@ interface ChatMessage {
   streaming?: boolean
   toolCalls?: ToolCall[]
   plan?: PlanStep[]
+  workflowSteps?: WorkflowStepItem[]
+  subagents?: SubagentItem[]
+  acceptance?: AcceptanceVerdict
   attachments?: Attachment[]
   /** AI 上游（NVIDIA / MiniMax）拒绝调用时的标记 — UI 据此渲染明显的错误卡片，
    *  不会再用模板拼接冒充正常回答（Bugfix 2.5）。 */
@@ -654,6 +680,72 @@ async function streamFromBackend(reply: ChatMessage, question: string, images?: 
               reply.planSource = u.source || 'llm'
             }
           } catch { /* ignore parse */ }
+        } else if (evt === 'workflow_start') {
+          try {
+            const steps = JSON.parse(payload)
+            if (Array.isArray(steps)) {
+              reply.workflowSteps = steps.map((s: any) => ({
+                id: s.id,
+                name: s.name,
+                description: s.description,
+                parallel: Boolean(s.parallel),
+                status: (s.status || 'PENDING') as any,
+                result: s.result || '',
+              }))
+            }
+          } catch {}
+        } else if (evt === 'workflow_step_start') {
+          const stepId = parseInt(payload, 10)
+          if (reply.workflowSteps && !isNaN(stepId)) {
+            const st = reply.workflowSteps.find((s) => s.id === stepId)
+            if (st) st.status = 'RUNNING'
+          }
+        } else if (evt === 'subagent_start') {
+          try {
+            const sub = JSON.parse(payload)
+            reply.subagents = reply.subagents || []
+            reply.subagents.push({
+              stepId: sub.stepId,
+              agentName: sub.agentName || 'SubAgent',
+              task: sub.task || '',
+              status: 'running',
+            })
+            if (reply.workflowSteps) {
+              const st = reply.workflowSteps.find((s) => s.id === sub.stepId)
+              if (st) st.status = 'RUNNING'
+            }
+          } catch {}
+        } else if (evt === 'subagent_end') {
+          try {
+            const sub = JSON.parse(payload)
+            if (reply.subagents) {
+              const item = reply.subagents.find((s) => s.stepId === sub.stepId && s.agentName === sub.agentName)
+              if (item) {
+                item.status = 'completed'
+                item.result = sub.result
+              }
+            }
+            if (reply.workflowSteps) {
+              const st = reply.workflowSteps.find((s) => s.id === sub.stepId)
+              if (st) {
+                st.status = 'COMPLETED'
+                st.result = sub.result || ''
+              }
+            }
+          } catch {}
+        } else if (evt === 'acceptance_start') {
+          reply.acceptance = { checked: false, matched: false, reason: '正在进行质量自省与契合度校验...' }
+        } else if (evt === 'acceptance_end') {
+          try {
+            const acc = JSON.parse(payload)
+            reply.acceptance = {
+              checked: true,
+              matched: Boolean(acc.matched),
+              reason: acc.reason || (acc.matched ? '通过' : '未完全匹配'),
+            }
+          } catch {
+            reply.acceptance = { checked: true, matched: true, reason: '校验完成' }
+          }
         } else if (evt === 'tool_start') {
           try {
             const tc = JSON.parse(payload)
@@ -1213,6 +1305,59 @@ shallowRef([images.goldenAfternoon.src, images.memoryCorona.src, images.resonanc
                 <span v-else>✦</span>
               </div>
               <div class="ai-msg__bubble">
+                <!-- Dynamic Multi-Agent Workflow Pipeline -->
+                <div v-if="m.workflowSteps && m.workflowSteps.length" class="ai-workflow-mesh">
+                  <div class="ai-workflow-mesh__header">
+                    <div class="ai-workflow-mesh__title-group">
+                      <span class="ai-workflow-mesh__pulse-dot"></span>
+                      <span class="ai-workflow-mesh__tag">MULTI-AGENT MESH</span>
+                    </div>
+                    <span class="ai-workflow-mesh__count">{{ m.workflowSteps.length }} 步骤编排</span>
+                  </div>
+                  <div class="ai-workflow-mesh__steps">
+                    <div
+                      v-for="(step, sIdx) in m.workflowSteps"
+                      :key="step.id"
+                      class="ai-mesh-step"
+                      :class="[`ai-mesh-step--${step.status.toLowerCase()}`, sIdx < m.workflowSteps.length - 1 ? 'ai-mesh-step--has-connector' : '']"
+                    >
+                      <div class="ai-mesh-step__node">
+                        <div class="ai-mesh-step__badge">
+                          <span v-if="step.status === 'COMPLETED'">✓</span>
+                          <span v-else-if="step.status === 'RUNNING'" class="ai-mesh-spin">●</span>
+                          <span v-else>{{ step.id }}</span>
+                        </div>
+                        <div v-if="sIdx < m.workflowSteps.length - 1" class="ai-mesh-step__connector" :class="{ 'ai-mesh-step__connector--completed': step.status === 'COMPLETED', 'ai-mesh-step__connector--active': step.status === 'RUNNING' }"></div>
+                      </div>
+                      <div class="ai-mesh-step__info">
+                        <div class="ai-mesh-step__title-row">
+                          <span class="ai-mesh-step__name">{{ step.name }}</span>
+                          <span class="ai-mesh-step__chip" :class="`ai-mesh-step__chip--${step.status.toLowerCase()}`">
+                            <span v-if="step.status === 'RUNNING'" class="ai-mesh-step__chip-pulse"></span>
+                            {{ step.status }}
+                          </span>
+                        </div>
+                        <span v-if="step.description" class="ai-mesh-step__desc">{{ step.description }}</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Active Subagent Chips -->
+                <div v-if="m.subagents && m.subagents.length" class="ai-subagent-chips">
+                  <div
+                    v-for="(sub, sIdx) in m.subagents"
+                    :key="sIdx"
+                    class="ai-subagent-chip"
+                    :class="`ai-subagent-chip--${sub.status}`"
+                  >
+                    <span class="ai-subagent-chip__pulse"></span>
+                    <span class="ai-subagent-chip__name">{{ sub.agentName }}</span>
+                    <span class="ai-subagent-chip__status">{{ sub.status.toUpperCase() }}</span>
+                    <span class="ai-subagent-chip__task">{{ sub.task }}</span>
+                  </div>
+                </div>
+
                 <!-- Plan list -->
                 <ul v-if="m.plan && m.plan.length" class="ai-plan">
                   <li v-for="step in m.plan" :key="step.id" :class="`ai-plan__item ai-plan__item--${step.status}`">
@@ -1220,6 +1365,18 @@ shallowRef([images.goldenAfternoon.src, images.memoryCorona.src, images.resonanc
                     <span class="ai-plan__label">{{ step.label }}</span>
                   </li>
                 </ul>
+
+                <!-- Acceptance Agent Self-Reflection Verdict -->
+                <div v-if="m.acceptance" class="ai-acceptance-box" :class="{ 'ai-acceptance-box--pass': m.acceptance.matched, 'ai-acceptance-box--fail': m.acceptance.checked && !m.acceptance.matched, 'ai-acceptance-box--checking': !m.acceptance.checked }">
+                  <div class="ai-acceptance-header">
+                    <span class="ai-acceptance-icon">{{ m.acceptance.matched ? '🛡️' : (m.acceptance.checked ? '⚠️' : '🔍') }}</span>
+                    <span class="ai-acceptance-title">质量验收智能体</span>
+                    <span class="ai-acceptance-badge" :class="m.acceptance.matched ? 'ai-acceptance-badge--pass' : (m.acceptance.checked ? 'ai-acceptance-badge--fail' : 'ai-acceptance-badge--checking')">
+                      {{ m.acceptance.matched ? 'VERIFIED' : (m.acceptance.checked ? 'FLAGGED' : 'INSPECTING') }}
+                    </span>
+                  </div>
+                  <div class="ai-acceptance-text">{{ m.acceptance.reason }}</div>
+                </div>
 
                 <!-- Tool calls -->
                 <div v-if="m.toolCalls && m.toolCalls.length" class="ai-toolstack">
@@ -1231,13 +1388,15 @@ shallowRef([images.goldenAfternoon.src, images.memoryCorona.src, images.resonanc
                   >
                     <button class="ai-tool__row" type="button" @click="toggleToolExpansion(m, call.id)">
                       <span class="ai-tool__gear" :class="{ 'ai-tool__gear--spin': call.status === 'running' }">
-                        <svg viewBox="0 0 24 24" width="12" height="12" fill="none">
-                          <path d="M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8z" stroke="currentColor" stroke-width="1.6" />
-                          <path d="M19 12a7 7 0 0 0-.1-1.2l2-1.5-2-3.4-2.4.8a7 7 0 0 0-2-1.2L14 3h-4l-.5 2.5a7 7 0 0 0-2 1.2l-2.4-.8-2 3.4 2 1.5A7 7 0 0 0 5 12c0 .4 0 .8.1 1.2l-2 1.5 2 3.4 2.4-.8c.6.5 1.3.9 2 1.2L10 21h4l.5-2.5c.7-.3 1.4-.7 2-1.2l2.4.8 2-3.4-2-1.5c.1-.4.1-.8.1-1.2z" stroke="currentColor" stroke-width="1.2" />
+                        <svg viewBox="0 0 24 24" width="13" height="13" fill="none">
+                          <path d="M12 8a4 4 0 1 0 0 8 4 4 0 0 0 0-8z" stroke="currentColor" stroke-width="1.8" />
+                          <path d="M19 12a7 7 0 0 0-.1-1.2l2-1.5-2-3.4-2.4.8a7 7 0 0 0-2-1.2L14 3h-4l-.5 2.5a7 7 0 0 0-2 1.2l-2.4-.8-2 3.4 2 1.5A7 7 0 0 0 5 12c0 .4 0 .8.1 1.2l-2 1.5 2 3.4 2.4-.8c.6.5 1.3.9 2 1.2L10 21h4l.5-2.5c.7-.3 1.4-.7 2-1.2l2.4.8 2-3.4-2-1.5c.1-.4.1-.8.1-1.2z" stroke="currentColor" stroke-width="1.3" />
                         </svg>
                       </span>
                       <span class="ai-tool__text">[{{ call.label }}]</span>
+                      <span class="ai-tool__status-chip" :class="`ai-tool__status-chip--${call.status}`">{{ call.status.toUpperCase() }}</span>
                       <span class="ai-tool__name">{{ call.name }}</span>
+                      <span class="ai-tool__toggle-hint">{{ call.expanded ? '▲' : '▼' }}</span>
                     </button>
                     <pre v-if="call.expanded" class="ai-tool__detail">{{ JSON.stringify({ input: call.input, output: call.output ?? null }, null, 2) }}</pre>
                   </div>
@@ -1406,10 +1565,12 @@ shallowRef([images.goldenAfternoon.src, images.memoryCorona.src, images.resonanc
   </div>
 </template>
 
-<style scoped>
+<style lang="scss" scoped>
+@use '../../assets/styles/tokens.scss' as *;
+
 .ai-dock {
   position: fixed;
-  z-index: 9000;
+  z-index: var(--z-mascot, 9000);
   display: flex;
   align-items: flex-end;
   gap: 16px;
@@ -1421,10 +1582,9 @@ shallowRef([images.goldenAfternoon.src, images.memoryCorona.src, images.resonanc
 }
 .ai-dock > * { pointer-events: auto; }
 
-/* ============ 炫彩流光球（呼吸 + 多色 conic 旋转 + 粒子轨道） ============
- * 旧版本是单一 radial(青→紫→深) 渐变，看起来纯紫；现在改用 conic-gradient
- * 让 8 段彩虹色绕中心慢转 + 一层柔和高光，整体呈"星云 / 极光"质感。
- * 上面盖一层 ribbons (mix-blend-mode: screen) 与 9 颗轨道粒子。 */
+/* ============ 炫彩流光球（呼吸 + 多色 conic 旋转 + 3D粒子轨道） ============
+ * 多色 conic-gradient 8 段彩虹色绕中心慢转 + 柔和高光，星云极光质感。
+ * 叠加 ribbons (mix-blend-mode: screen) 与 9 颗轨道粒子，支持多状态动效。 */
 .ai-orb {
   position: relative;
   width: 72px;
@@ -1432,9 +1592,8 @@ shallowRef([images.goldenAfternoon.src, images.memoryCorona.src, images.resonanc
   border-radius: 50%;
   border: none;
   cursor: pointer;
-  /* 用 conic + radial 两层叠加：conic 提供彩虹流转，radial 提供中央高光 */
   background:
-    radial-gradient(circle at 32% 28%, rgba(255,255,255,0.85) 0%, rgba(255,255,255,0) 28%),
+    radial-gradient(circle at 32% 28%, rgba(255,255,255,0.92) 0%, rgba(255,255,255,0) 30%),
     conic-gradient(from var(--orb-rot, 0deg),
       #5ee5d9 0deg,
       #58c4ff 45deg,
@@ -1446,33 +1605,58 @@ shallowRef([images.goldenAfternoon.src, images.memoryCorona.src, images.resonanc
       #58c4ff 315deg,
       #5ee5d9 360deg);
   background-blend-mode: screen, normal;
-  /* 外晕从"紫色 50px"换成中性"青+金"双层，避免核心被紫色外晕回染 */
   box-shadow:
     0 14px 40px rgba(94, 229, 217, 0.42),
-    0 0 0 1px rgba(255, 255, 255, 0.18) inset,
+    0 0 0 1px rgba(255, 255, 255, 0.22) inset,
     0 0 36px rgba(94, 229, 217, 0.32),
     0 0 60px rgba(255, 215, 106, 0.18);
-  animation: orbBreath 4s ease-in-out infinite, orbColorSpin 9s linear infinite;
+  animation: orbFloat 4s ease-in-out infinite, orbBreath 3.5s ease-in-out infinite, orbColorSpin 9s linear infinite;
   display: grid;
   place-items: center;
-  /* 让 conic 用 CSS 变量驱动旋转，比直接 transform 更稳（不影响子元素布局） */
   --orb-rot: 0deg;
+  transition: transform var(--duration-base) var(--spring-bounce), box-shadow var(--duration-base) var(--spring-smooth);
 }
-.ai-orb:hover { transform: translateY(-3px) scale(1.04); }
+.ai-orb:hover {
+  transform: translateY(-4px) scale(1.06);
+  box-shadow:
+    0 20px 52px rgba(94, 229, 217, 0.58),
+    0 0 0 1.5px rgba(255, 255, 255, 0.32) inset,
+    0 0 48px rgba(94, 229, 217, 0.48),
+    0 0 76px rgba(255, 215, 106, 0.28);
+}
+.ai-orb:active {
+  transform: translateY(-1px) scale(0.98);
+}
+
+.ai-dock--open .ai-orb {
+  box-shadow:
+    0 18px 50px rgba(94, 229, 217, 0.52),
+    0 0 0 1.5px rgba(255, 255, 255, 0.35) inset,
+    0 0 42px rgba(94, 229, 217, 0.42);
+}
+
+@keyframes orbFloat {
+  0%, 100% {
+    transform: translateY(0px);
+  }
+  50% {
+    transform: translateY(-6px);
+  }
+}
 
 @keyframes orbBreath {
   0%, 100% {
     box-shadow:
       0 14px 40px rgba(94,229,217,0.42),
-      0 0 0 1px rgba(255,255,255,0.18) inset,
-      0 0 36px rgba(94,229,217,0.32),
-      0 0 60px rgba(255,215,106,0.18);
+      0 0 0 1px rgba(255,255,255,0.2) inset,
+      0 0 32px rgba(94,229,217,0.3),
+      0 0 54px rgba(255,215,106,0.16);
   }
   50% {
     box-shadow:
-      0 18px 56px rgba(94,229,217,0.6),
-      0 0 0 1px rgba(255,255,255,0.28) inset,
-      0 0 56px rgba(94,229,217,0.5),
+      0 20px 58px rgba(94,229,217,0.65),
+      0 0 0 1.5px rgba(255,255,255,0.32) inset,
+      0 0 52px rgba(94,229,217,0.52),
       0 0 88px rgba(255,215,106,0.32);
   }
 }
@@ -1488,10 +1672,8 @@ shallowRef([images.goldenAfternoon.src, images.memoryCorona.src, images.resonanc
 
 .ai-orb__core {
   position: absolute;
-  /* inset 从 18px → 26px，缩小白色高光占比，把更多 conic 彩虹露出来 */
   inset: 26px;
   border-radius: 50%;
-  /* 高光本身改为冷白色 + overlay 混合，让它对下层是"提亮"而不是"覆盖" */
   background: radial-gradient(circle at 35% 30%, rgba(255,255,255,0.95) 0%, rgba(190,225,255,0.4) 45%, transparent 75%);
   filter: blur(3px);
   opacity: 0.35;
@@ -1601,21 +1783,22 @@ shallowRef([images.goldenAfternoon.src, images.memoryCorona.src, images.resonanc
   white-space: nowrap;
 }
 
-/* ============ 面板 ============ */
+/* ============ 毛玻璃滑动面板 (Apple HIG Glassmorphism) ============ */
 .ai-panel {
   position: relative;
-  width: min(440px, calc(100vw - 60px));
-  max-height: 70vh;
-  border-radius: 20px;
-  border: 1px solid rgba(255,255,255,0.12);
-  background: rgba(8, 10, 14, 0.72);
-  backdrop-filter: blur(28px) saturate(160%);
-  -webkit-backdrop-filter: blur(28px) saturate(160%);
-  box-shadow: 0 24px 80px rgba(0,0,0,0.5), 0 0 0 1px rgba(54, 216, 180, 0.16) inset;
+  width: min(450px, calc(100vw - 60px));
+  max-height: 72vh;
+  border-radius: var(--radius-xl, 24px);
+  border: 1px solid var(--glass-border, rgba(255,255,255,0.12));
+  background: var(--glass-surface-ultra, rgba(8, 10, 14, 0.74));
+  backdrop-filter: blur(24px) saturate(180%);
+  -webkit-backdrop-filter: blur(24px) saturate(180%);
+  box-shadow: var(--elevation-5), var(--glass-inner-highlight), 0 0 32px rgba(54, 216, 180, 0.12);
   overflow: hidden;
   display: flex;
   flex-direction: column;
   color: #e8eaf0;
+  transition: transform var(--duration-base) var(--spring-smooth), opacity var(--duration-base) var(--spring-smooth), max-height var(--duration-slow) var(--spring-smooth);
 }
 .ai-panel--minimized { max-height: 88px; }
 
@@ -2118,55 +2301,215 @@ shallowRef([images.goldenAfternoon.src, images.memoryCorona.src, images.resonanc
 }
 @keyframes caret { from { opacity: 1; } to { opacity: 0.2; } }
 
-/* Plan list */
-.ai-plan {
-  margin: 0 0 10px;
-  padding: 10px 12px;
-  list-style: none;
-  background: rgba(8,12,16,0.55);
-  border-radius: 10px;
-  border: 1px dashed rgba(255,255,255,0.1);
-  display: flex; flex-direction: column; gap: 6px;
+/* Dynamic Multi-Agent Workflow Pipeline & Mesh */
+.ai-workflow-mesh {
+  margin: 0 0 12px;
+  padding: 12px 14px;
+  background: var(--glass-bg-card, rgba(4, 10, 22, 0.72));
+  backdrop-filter: blur(16px) saturate(160%);
+  -webkit-backdrop-filter: blur(16px) saturate(160%);
+  border-radius: var(--radius-md, 12px);
+  border: 1px solid var(--glass-border-hover, rgba(0, 242, 254, 0.28));
+  box-shadow: var(--elevation-2), var(--glass-inner-glow);
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
 }
-.ai-plan__item {
-  display: inline-flex; align-items: center; gap: 8px;
-  font-size: 0.82rem; color: rgba(255,255,255,0.78);
-}
-.ai-plan__icon { font-family: var(--font-mono); width: 16px; text-align: center; opacity: 0.85; }
-.ai-plan__item--done { color: #b6f077; }
-.ai-plan__item--done .ai-plan__label { text-decoration: line-through; opacity: 0.85; }
-.ai-plan__item--running { color: #5ee5d9; }
-.ai-plan__item--running .ai-plan__icon { animation: running 1s linear infinite; display: inline-block; }
-@keyframes running { from { transform: rotate(0); } to { transform: rotate(360deg); } }
-
-/* Tool calls */
-.ai-toolstack { display: flex; flex-direction: column; gap: 4px; margin: 0 0 8px; }
-.ai-tool { background: rgba(5,8,11,0.45); border-radius: 8px; border: 1px solid rgba(255,255,255,0.05); }
-.ai-tool__row {
-  display: flex; align-items: center; gap: 8px;
-  width: 100%;
-  padding: 6px 10px;
-  background: transparent; border: none; cursor: pointer;
-  color: rgba(180,200,220,0.78);
-  font-size: 0.74rem;
-  text-align: left;
+.ai-workflow-mesh__header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.72rem;
   font-family: var(--font-mono);
+  padding-bottom: 4px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
 }
-.ai-tool__row:hover { background: rgba(255,255,255,0.04); }
-.ai-tool__gear { display: inline-grid; place-items: center; opacity: 0.85; }
-.ai-tool__gear--spin svg { animation: running 1s linear infinite; }
-.ai-tool__text { flex: 1; }
-.ai-tool__name { opacity: 0.6; font-size: 0.7rem; }
-.ai-tool--done .ai-tool__text { color: rgba(120,200,180,0.92); }
-.ai-tool__detail {
-  margin: 0;
+.ai-workflow-mesh__title-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+.ai-workflow-mesh__pulse-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--primary, #00f2fe);
+  box-shadow: 0 0 8px var(--primary, #00f2fe);
+  animation: pulse 1.4s infinite;
+}
+.ai-workflow-mesh__tag {
+  color: var(--primary, #36d8b4);
+  font-weight: 800;
+  letter-spacing: 0.08em;
+}
+.ai-workflow-mesh__count {
+  color: var(--text-muted, #8b95a1);
+  font-size: 0.68rem;
+}
+.ai-workflow-mesh__steps {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  position: relative;
+}
+.ai-mesh-step {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
   padding: 8px 10px;
-  font-size: 0.7rem;
-  background: rgba(0,0,0,0.4);
-  color: #cdd5e0;
-  white-space: pre-wrap;
-  border-top: 1px solid rgba(255,255,255,0.05);
+  border-radius: var(--radius-sm, 8px);
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid transparent;
+  font-size: 0.8rem;
+  transition: all var(--duration-fast, 150ms) var(--spring-smooth);
+  position: relative;
+}
+.ai-mesh-step:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+.ai-mesh-step--running {
+  background: rgba(0, 242, 254, 0.08);
+  border-color: rgba(0, 242, 254, 0.32);
+  box-shadow: 0 0 16px rgba(0, 242, 254, 0.12);
+}
+.ai-mesh-step--completed {
+  background: rgba(74, 222, 128, 0.06);
+  border-color: rgba(74, 222, 128, 0.22);
+}
+.ai-mesh-step--failed {
+  background: rgba(248, 113, 113, 0.08);
+  border-color: rgba(248, 113, 113, 0.32);
+}
+
+.ai-mesh-step__node {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  position: relative;
+  flex-shrink: 0;
+}
+.ai-mesh-step__badge {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  display: flex;
+  align-items: center;
+  justify-content: center;
   font-family: var(--font-mono);
+  font-size: 0.68rem;
+  font-weight: bold;
+  color: var(--text-soft);
+  z-index: 2;
+  transition: all var(--duration-base, 240ms) var(--spring-bounce);
+}
+.ai-mesh-step--completed .ai-mesh-step__badge {
+  background: var(--success, #4ade80);
+  border-color: var(--success, #4ade80);
+  color: #031408;
+  box-shadow: 0 0 10px rgba(74, 222, 128, 0.45);
+}
+.ai-mesh-step--running .ai-mesh-step__badge {
+  background: var(--primary, #36d8b4);
+  border-color: var(--primary, #36d8b4);
+  color: #031016;
+  box-shadow: 0 0 12px rgba(54, 216, 180, 0.6);
+}
+.ai-mesh-step--failed .ai-mesh-step__badge {
+  background: var(--danger, #f87171);
+  border-color: var(--danger, #f87171);
+  color: #200505;
+  box-shadow: 0 0 10px rgba(248, 113, 113, 0.45);
+}
+
+/* Step Progress Vertical Connector Line */
+.ai-mesh-step__connector {
+  position: absolute;
+  top: 24px;
+  left: 50%;
+  width: 2px;
+  height: calc(100% + 4px);
+  transform: translateX(-50%);
+  background: rgba(255, 255, 255, 0.10);
+  z-index: 1;
+  transition: background var(--duration-base, 240ms) var(--spring-smooth);
+}
+.ai-mesh-step__connector--completed {
+  background: linear-gradient(180deg, var(--success, #4ade80), rgba(74, 222, 128, 0.35));
+}
+.ai-mesh-step__connector--active {
+  background: linear-gradient(180deg, var(--primary, #36d8b4), rgba(0, 242, 254, 0.25));
+  box-shadow: 0 0 8px rgba(0, 242, 254, 0.35);
+}
+
+.ai-mesh-spin {
+  display: inline-block;
+  animation: pulse 0.8s infinite;
+  color: #031016;
+}
+.ai-mesh-step__info {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  flex: 1;
+  min-width: 0;
+}
+.ai-mesh-step__title-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.ai-mesh-step__name {
+  font-weight: 700;
+  color: #fff;
+  font-size: 0.82rem;
+  letter-spacing: 0.01em;
+}
+.ai-mesh-step__chip {
+  font-size: 0.62rem;
+  font-family: var(--font-mono);
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  letter-spacing: 0.04em;
+}
+.ai-mesh-step__chip--pending {
+  background: var(--status-pending-bg, rgba(148, 163, 184, 0.12));
+  color: var(--status-pending, #94a3b8);
+  border: 1px solid rgba(148, 163, 184, 0.25);
+}
+.ai-mesh-step__chip--running {
+  background: var(--status-running-bg, rgba(0, 242, 254, 0.15));
+  color: var(--status-running, #00f2fe);
+  border: 1px solid rgba(0, 242, 254, 0.45);
+  box-shadow: 0 0 10px rgba(0, 242, 254, 0.25);
+}
+.ai-mesh-step__chip--completed {
+  background: var(--status-completed-bg, rgba(74, 222, 128, 0.14));
+  color: var(--status-completed, #4ade80);
+  border: 1px solid rgba(74, 222, 128, 0.4);
+}
+.ai-mesh-step__chip--failed {
+  background: var(--status-failed-bg, rgba(248, 113, 113, 0.14));
+  color: var(--status-failed, #f87171);
+  border: 1px solid rgba(248, 113, 113, 0.4);
+}
+.ai-mesh-step__chip-pulse {
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: currentColor;
+  animation: pulse 1s infinite;
+}
+.ai-mesh-step__desc {
+  font-size: 0.72rem;
+  color: var(--text-muted, rgba(255, 255, 255, 0.6));
+  line-height: 1.4;
 }
 
 /* Multimodal attachments */
@@ -2502,15 +2845,20 @@ shallowRef([images.goldenAfternoon.src, images.memoryCorona.src, images.resonanc
   min-width: 0;
 }
 
-/* ============ 进出场动效 ============ */
-.dock-panel-enter-active, .dock-panel-leave-active {
-  transition: opacity 220ms ease, transform 280ms cubic-bezier(0.16, 1, 0.3, 1);
+/* ============ 进出场动效 (Apple Spring Transitions) ============ */
+.dock-panel-enter-active {
+  transition: opacity 300ms var(--spring-smooth), transform 340ms var(--spring-bounce);
+}
+.dock-panel-leave-active {
+  transition: opacity 220ms var(--ease-apple), transform 240ms var(--ease-apple);
 }
 .dock-panel-enter-from {
-  opacity: 0; transform: translateY(12px) scale(0.96);
+  opacity: 0;
+  transform: translateY(16px) scale(0.94);
 }
 .dock-panel-leave-to {
-  opacity: 0; transform: translateY(12px) scale(0.96);
+  opacity: 0;
+  transform: translateY(12px) scale(0.96);
 }
 
 /* ============ 响应式 ============ */

@@ -24,8 +24,11 @@ public class AiUpstreamException extends RuntimeException {
         /** 调用超时 */
         TIMEOUT,
         /** 本地令牌桶限流命中（{@link com.mnemoscape.ai.service.AiCacheService#acquireOrThrow}），
-         *  避免把 429 打到 NVIDIA 上 */
+         *  避免 429 打到 NVIDIA 上 */
         RATE_LIMITED,
+        /** 单用户每日 Token 配额耗尽（{@code AiCacheService#checkAndDeductUserTokens}）——
+         *  业务性成本治理而非上游故障，同样复用 429 + 结构化错误通道 */
+        DAILY_QUOTA_EXCEEDED,
         /** 其他未分类的失败 */
         UNKNOWN;
     }
@@ -48,7 +51,7 @@ public class AiUpstreamException extends RuntimeException {
     public int httpStatus() {
         return switch (reason) {
             case MISSING_KEY, AUTHENTICATION -> 502;
-            case RATE_LIMITED -> 429;
+            case RATE_LIMITED, DAILY_QUOTA_EXCEEDED -> 429;
             default -> 503;
         };
     }

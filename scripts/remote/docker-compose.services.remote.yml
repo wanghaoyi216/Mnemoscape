@@ -27,8 +27,11 @@ services:
     ports:
       - "8080:8080"
     environment:
+      # 强制 nacos profile：否则容器跑 default，scripts/remote/nacos/*.yaml 成死配置
+      SPRING_PROFILES_ACTIVE: nacos
       NACOS_HOST: nacos
-      JWT_SECRET: "bW5lbW9zY2FwZS1zZWNyZXQta2V5LWZvci1qd3Qtc2lnbmluZy1hbmQtdmVyaWZpY2F0aW9u"
+      # 强制注入：JWT_SECRET 未设置时 compose 直接报错拒绝启动（禁止明文密钥进 git）
+      JWT_SECRET: "${JWT_SECRET:?JWT_SECRET is required - copy scripts/remote/.env.example to .env and set it}"
     depends_on:
       nacos:
         condition: service_healthy
@@ -43,11 +46,19 @@ services:
     ports:
       - "8081:8081"
     environment:
+      # 强制 nacos profile：否则容器跑 default，scripts/remote/nacos/*.yaml 成死配置
+      SPRING_PROFILES_ACTIVE: nacos
       NACOS_HOST: nacos
       MYSQL_HOST: mysql
       MYSQL_USER: root
       MYSQL_PASSWORD: root123
-      JWT_SECRET: "bW5lbW9zY2FwZS1zZWNyZXQta2V5LWZvci1qd3Qtc2lnbmluZy1hbmQtdmVyaWZpY2F0aW9u"
+      # 强制注入：JWT_SECRET 未设置时 compose 直接报错拒绝启动（禁止明文密钥进 git）
+      JWT_SECRET: "${JWT_SECRET:?JWT_SECRET is required - copy scripts/remote/.env.example to .env and set it}"
+      # R8 修复（split-brain）：auth-service 签发密钥的属性名是 mnemoscape.jwt.secret
+      # （relaxed binding 只认 MNEMOSCAPE_JWT_SECRET 形式），上面的 JWT_SECRET 对它
+      # 是死变量——若只注入 JWT_SECRET，签发端用 ENC 解出的密钥、网关验签端用
+      # .env 注入的密钥，两边不一致导致全链路 401。此行把同一密钥映射到签发端。
+      MNEMOSCAPE_JWT_SECRET: "${JWT_SECRET:?JWT_SECRET is required - copy scripts/remote/.env.example to .env and set it}"
     depends_on:
       mysql:
         condition: service_healthy
@@ -64,6 +75,8 @@ services:
     ports:
       - "8082:8082"
     environment:
+      # 强制 nacos profile：否则容器跑 default，scripts/remote/nacos/*.yaml 成死配置
+      SPRING_PROFILES_ACTIVE: nacos
       NACOS_HOST: nacos
       MYSQL_HOST: mysql
       MYSQL_USER: root
@@ -95,6 +108,8 @@ services:
     ports:
       - "8083:8083"
     environment:
+      # 强制 nacos profile：否则容器跑 default，scripts/remote/nacos/*.yaml 成死配置
+      SPRING_PROFILES_ACTIVE: nacos
       NACOS_HOST: nacos
       NVIDIA_API_KEY: ${NVIDIA_API_KEY}
     depends_on:
@@ -111,6 +126,8 @@ services:
     ports:
       - "8084:8084"
     environment:
+      # 强制 nacos profile：否则容器跑 default，scripts/remote/nacos/*.yaml 成死配置
+      SPRING_PROFILES_ACTIVE: nacos
       NACOS_HOST: nacos
       MYSQL_HOST: mysql
       MYSQL_USER: root
@@ -131,6 +148,8 @@ services:
     ports:
       - "8085:8085"
     environment:
+      # 强制 nacos profile：否则容器跑 default，scripts/remote/nacos/*.yaml 成死配置
+      SPRING_PROFILES_ACTIVE: nacos
       NACOS_HOST: nacos
       MINIO_ENDPOINT: http://minio:9000
       MINIO_ACCESS_KEY: minioadmin

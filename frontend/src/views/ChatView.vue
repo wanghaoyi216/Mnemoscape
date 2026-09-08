@@ -373,7 +373,7 @@ function formatBytes(bytes: number) {
     <div class="chat-outer-shell">
       
       <!-- LEFT SIDEBAR -->
-      <aside class="chat-sidebar">
+      <aside :class="['chat-sidebar', activeContact ? 'mobile-hidden' : '']">
         <header class="chat-sidebar__header">
           <div class="user-chip" style="padding:0; border:none; background:none;">
             <div class="user-chip__avatar" style="width:38px; height:38px;">
@@ -587,12 +587,20 @@ function formatBytes(bytes: number) {
       </aside>
  
       <!-- RIGHT CHAT AREA -->
-      <section class="chat-body" :style="{ background: activeWallpaper.startsWith('http') ? `linear-gradient(180deg, rgba(8,10,14,0.65) 0%, rgba(8,10,14,0.9) 100%), url(${activeWallpaper}) center/cover no-repeat` : activeWallpaper }">
+      <section :class="['chat-body', !activeContact ? 'mobile-hidden' : '']" :style="{ background: activeWallpaper.startsWith('http') ? `linear-gradient(180deg, rgba(8,10,14,0.65) 0%, rgba(8,10,14,0.9) 100%), url(${activeWallpaper}) center/cover no-repeat` : activeWallpaper }">
         
         <template v-if="activeContact">
           <!-- Chat Header -->
           <header class="chat-body__header">
             <div class="chat-header-info">
+              <button
+                type="button"
+                class="chat-back-btn"
+                @click="activeContact = null"
+                title="返回"
+              >
+                ←
+              </button>
               <span class="chat-header-avatar">
                 <span v-if="activeContact.isGroup">👥</span>
                 <span v-else>{{ activeContact.username.charAt(0).toUpperCase() }}</span>
@@ -1533,5 +1541,59 @@ function formatBytes(bytes: number) {
 @keyframes sticker-bounce {
   0%, 100% { transform: translateY(0) scale(1); }
   50% { transform: translateY(-7px) scale(1.04); }
+}
+
+.chat-back-btn {
+  display: none;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid var(--border);
+  color: var(--text);
+  border-radius: var(--radius-sm);
+  width: 32px;
+  height: 32px;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  font-size: 1.1rem;
+  transition: all 0.2s ease;
+}
+
+.chat-back-btn:hover {
+  background: rgba(255, 255, 255, 0.16);
+  border-color: var(--primary);
+}
+
+@media (max-width: 768px) {
+  .chat-outer-shell {
+    flex-direction: column;
+    min-height: calc(100vh - 120px);
+  }
+  .chat-sidebar {
+    width: 100%;
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+  }
+  .chat-sidebar.mobile-hidden {
+    display: none;
+  }
+  .chat-body.mobile-hidden {
+    display: none;
+  }
+  .chat-body {
+    width: 100%;
+    min-height: 480px;
+  }
+  .chat-back-btn {
+    display: inline-flex;
+  }
+  .message-bubble-wrapper {
+    max-width: 90%;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .message-bubble__sticker .sticker-glyph {
+    animation: none;
+  }
 }
 </style>

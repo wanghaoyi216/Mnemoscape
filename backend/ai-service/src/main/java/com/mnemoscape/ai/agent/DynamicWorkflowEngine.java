@@ -31,6 +31,22 @@ public class DynamicWorkflowEngine {
     private final MilvusSearchTool milvusTool;
     private final ObjectMapper json = new ObjectMapper();
 
+    /**
+     * 高并发背压隔离线程池：core=4, max=16, queue=100, CallerRunsPolicy 天然背压防止 OOM。
+     */
+    private final reactor.core.scheduler.Scheduler workflowScheduler = reactor.core.scheduler.Schedulers.fromExecutor(
+            new java.util.concurrent.ThreadPoolExecutor(
+                    4, 16, 60L, java.util.concurrent.TimeUnit.SECONDS,
+                    new java.util.concurrent.LinkedBlockingQueue<>(100),
+                    r -> {
+                        Thread t = new Thread(r, "workflow-agent-worker");
+                        t.setDaemon(true);
+                        return t;
+                    },
+                    new java.util.concurrent.ThreadPoolExecutor.CallerRunsPolicy()
+            )
+    );
+
     public DynamicWorkflowEngine(ChainWorkflowAgent chainAgent,
                                  EnhancedAgent enhancedAgent,
                                  AcceptanceAgent acceptanceAgent,
@@ -159,10 +175,40 @@ public class DynamicWorkflowEngine {
                         + "Final Response: " + finalAnswer;
                 
                 String validationJson;
+                boolean matched = true;
+                String rejectReason = "";
                 try {
                     validationJson = acceptanceAgent.execute(validationPrompt, 0.1, 1024);
+                    if (validationJson != null && validationJson.contains("\"matched\": false")) {
+                        matched = false;
+                        try {
+                            var node = json.readTree(validationJson);
+                            rejectReason = node.path("reason").asText("");
+                        } catch (Exception ignored) {}
+                    }
                 } catch (Exception e) {
                     validationJson = "{\"matched\": true, \"reason\": \"验收智能体暂时不可用，默认通过。\"}";
+                }
+
+                // 闭环自省机制 (Self-Correction Loop)：如果未匹配且存在原因，执行 1 次 ReAct 反思重润色
+                if (!matched && !rejectReason.isBlank()) {
+                    log.info("[WorkflowEngine] Acceptance rejected response with reason: {}. Triggering self-correction loop.", rejectReason);
+                    ReActEvent correctionThought = createEvent("thought", "验收智能体反馈（" + rejectReason + "），正在触发 ReAct 自省闭环机制补充润色...", requestId);
+                    events.add(correctionThought);
+
+                    String correctionPrompt = "Previous Answer was rejected because: " + rejectReason + "\n\n"
+                            + "Please refine and enhance the answer to properly address the User Question.\n"
+                            + "Workflow Outputs:\n" + resultsSummary.toString() + "\n"
+                            + "User Question: " + request.getQuestion();
+                    try {
+                        String refinedAnswer = enhancedAgent.execute(correctionPrompt);
+                        if (refinedAnswer != null && !refinedAnswer.isBlank()) {
+                            events.add(createEvent("token", "\n\n【自省修正】\n" + refinedAnswer, requestId));
+                            validationJson = "{\"matched\": true, \"reason\": \"经 ReAct 自省修正后通过验收\"}";
+                        }
+                    } catch (Exception e) {
+                        log.warn("[WorkflowEngine] Self-correction turn failed", e);
+                    }
                 }
                 
                 ReActEvent acceptEnd = createEvent("acceptance_end", validationJson, requestId);
@@ -170,12 +216,12 @@ public class DynamicWorkflowEngine {
 
                 events.add(createEvent("done", "workflow-complete", requestId));
                 return Mono.just(events);
-            }).subscribeOn(Schedulers.boundedElastic());
+            }).subscribeOn(workflowScheduler);
 
             return Flux.just(thoughtGen, wfStartEvent)
                     .concatWith(blockExecutions)
                     .concatWith(postProcess.flatMapMany(Flux::fromIterable));
-        }).subscribeOn(Schedulers.boundedElastic());
+        }).subscribeOn(workflowScheduler);
     }
 
     /**

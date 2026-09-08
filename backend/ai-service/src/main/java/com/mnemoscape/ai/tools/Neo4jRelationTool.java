@@ -1,5 +1,6 @@
 package com.mnemoscape.ai.tools;
 
+import com.mnemoscape.ai.tools.audit.Tool;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 import org.springframework.ai.model.function.FunctionCallback;
@@ -85,6 +86,7 @@ public class Neo4jRelationTool {
                 .build();
     }
 
+    @Tool("neo4jRelationTool")
     public Response lookup(Request req) {
         Response resp = new Response();
         if (req == null || req.memoryId == null || req.memoryId.isBlank()) {

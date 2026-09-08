@@ -15,6 +15,8 @@ import java.nio.ByteBuffer;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.time.Duration;
+import java.time.LocalDate;
+import java.time.format.DateTimeFormatter;
 import java.util.Base64;
 import java.util.List;
 import java.util.Objects;
@@ -55,6 +57,8 @@ public class AiCacheService {
     private static final String SEARCH_INDEX_PREFIX = "ai:search:idx:";
     /** 限流计数 key 前缀：{@code ai:rl:{bucket}:{epochMinute}} */
     private static final String RATELIMIT_PREFIX = "ai:rl:";
+    /** Per-user 每日 Token 配额 key 前缀：{@code ai:token_quota:{userId}:{yyyyMMdd}} */
+    private static final String TOKEN_QUOTA_PREFIX = "ai:token_quota:";
 
     /** Embedding 限流桶名（与具体 model 解耦，因为 embedding 走的是统一 endpoint）。 */
     public static final String BUCKET_EMBED = "embed";
@@ -216,6 +220,55 @@ public class AiCacheService {
         if (BUCKET_EMBED.equals(bucket)) return props.getRateLimit().getEmbedRpm();
         if (BUCKET_VISION.equals(bucket)) return props.getRateLimit().getVisionRpm();
         return props.getRateLimit().getDefaultRpm();
+    }
+
+    // ============================================================ Per-user 每日 Token 配额
+
+    /**
+     * 每用户每日 Token 配额记账（移植自墨问 per-user LLM Token 配额思路）。
+     *
+     * <p><b>与 {@link #acquireOrThrow(String)} 的区别</b>：那个是"全局 RPM"令牌桶，
+     * 防上游 NVIDIA 429；这个按"单用户 / 自然日 / token 总量"做成本治理 ——
+     * Redis INCRBY 按 {@code userId + 自然日窗口} 原子预扣，key 形如
+     * {@code ai:token_quota:{userId}:{yyyyMMdd}}，当日首次写入设置 25h 过期
+     * （跨零点后旧 key 留 1h 余量，避免跨日边界误判）。超过
+     * {@code mnemoscape.ai.quota.daily-token-limit} 时抛
+     * {@link AiUpstreamException}（{@code DAILY_QUOTA_EXCEEDED}），由调用方走
+     * 既有的错误通道（同步路径 → HTTP 429 结构化 JSON；SSE 路径 → error 帧）。
+     *
+     * <p>失败哲学与本类一致：userId 为空跳过、Redis 不可用/抖动 fail-open 放行，
+     * 绝不让配额检查本身把对话打挂。
+     *
+     * @param userId          调用方用户 id（网关 X-User-Id 头）；null/blank 直接放行
+     * @param estimatedTokens 本次请求预估消耗的 token 数（question.length()/4 口径）
+     */
+    public void checkAndDeductUserTokens(String userId, int estimatedTokens) {
+        if (!props.getQuota().isEnabled()) return;
+        if (userId == null || userId.isBlank()) return; // 拿不到用户身份 → 跳过配额
+        StringRedisTemplate redis = redisProvider.getIfAvailable();
+        if (redis == null) return; // Redis 不可用 → 直接放行
+        int est = Math.max(1, estimatedTokens);
+        String day = LocalDate.now().format(DateTimeFormatter.ofPattern("yyyyMMdd"));
+        String key = TOKEN_QUOTA_PREFIX + safe(userId) + ":" + day;
+        try {
+            Long used = redis.opsForValue().increment(key, est);
+            if (used != null && used == est) {
+                // 当日首次记账 → 设 25h 过期（跨自然日的余量窗口）
+                redis.expire(key, Duration.ofHours(25));
+            }
+            long limit = props.getQuota().getDailyTokenLimit();
+            if (used != null && used > limit) {
+                log.warn("[AiCache] daily token quota exceeded: userId={} used={}/{}",
+                        userId, used, limit);
+                throw new AiUpstreamException(AiUpstreamException.Reason.DAILY_QUOTA_EXCEEDED,
+                        "今日 AI 使用额度已用完，请明天再来");
+            }
+        } catch (AiUpstreamException e) {
+            throw e;
+        } catch (Exception e) {
+            // Redis 抖动 → 静默放行（fail-open）
+            log.debug("[AiCache] user token quota check failed (silent allow): {}", e.toString());
+        }
     }
 
     // ============================================================ key 构造 / 序列化

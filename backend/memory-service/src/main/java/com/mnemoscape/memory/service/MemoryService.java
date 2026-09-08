@@ -701,6 +701,7 @@ public class MemoryService {
     })
     public Memory updateMemory(String memoryId, UpdateMemoryRequest request, String userId) {
         Memory memory = getMemory(memoryId, userId);
+        checkOwner(memory, userId);
         String title = normalizeNonBlank(request.getTitle(), "Title");
         if (title != null) memory.setTitle(title);
 
@@ -761,6 +762,7 @@ public class MemoryService {
     })
     public void deleteMemory(String memoryId, String userId) {
         Memory memory = getMemory(memoryId, userId);
+        checkOwner(memory, userId);
         memoryRepository.delete(memory);
         // best-effort 清理向量库残留，避免删除后 AI 检索仍召回旧记忆。
         try {
@@ -777,6 +779,7 @@ public class MemoryService {
     })
     public Memory lockMemory(String memoryId, String userId) {
         Memory memory = getMemory(memoryId, userId);
+        checkOwner(memory, userId);
         memory.setIsLocked(true);
         memory = memoryRepository.save(memory);
         createVersion(memory, MemoryVersion.ChangeType.LOCK, "Memory locked");
@@ -790,6 +793,7 @@ public class MemoryService {
     })
     public Memory unlockMemory(String memoryId, String userId) {
         Memory memory = getMemory(memoryId, userId);
+        checkOwner(memory, userId);
         memory.setIsLocked(false);
         driftCalculator.calculateAndApply(memory);
         memory = memoryRepository.save(memory);
@@ -814,6 +818,7 @@ public class MemoryService {
     })
     public Memory restoreVersion(String memoryId, int versionNumber, String userId) {
         Memory memory = getMemory(memoryId, userId);
+        checkOwner(memory, userId);
         List<MemoryVersion> versions = versionRepository.findByMemoryIdOrderByVersionNumberDesc(memoryId);
         MemoryVersion targetVersion = versions.stream()
                 .filter(v -> v.getVersionNumber() == versionNumber)
@@ -895,6 +900,12 @@ public class MemoryService {
             // 版本快照是回滚兜底,失败不阻断主流程,但会丢失历史版本(监控会抓 ERROR 日志)
         } catch (Exception e) {
             log.error("Failed to create version for memory {}", memory.getId(), e);
+        }
+    }
+
+    private void checkOwner(Memory memory, String userId) {
+        if (memory.getUserId() == null || !memory.getUserId().equals(userId)) {
+            throw BizException.forbidden();
         }
     }
 
